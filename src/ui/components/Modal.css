@@ -1,0 +1,96 @@
+.modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000; /* above the hand/board */
+  background: rgba(20, 4, 8, 0.66);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.modal__panel {
+  width: 100%;
+  background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
+  border: 3px solid var(--parch-edge);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  padding: clamp(14px, 3vw, 22px);
+  max-height: 92vh;
+  overflow: auto;
+  color: var(--parch-text);
+}
+
+.modal__title {
+  /* game-modal titles: just a touch larger than body text (~+2px) */
+  margin: 0 0 12px;
+  font-size: clamp(20px, 3.4vw, 24px);
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.5px;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+/* prominent title for the main-menu start dialog */
+.modal__title--large {
+  font-size: clamp(26px, 5.4vw, 34px);
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* narrower full-width buttons inside modals (10px inset each side) */
+.modal__body .woodbtn--full {
+  width: calc(100% - 20px);
+  align-self: center;
+}
+
+/* Mobile landscape (short screens): compact so everything (incl. buttons) fits */
+@media (max-height: 480px) {
+  .modal__panel {
+    padding: 10px 14px;
+    max-height: 95vh;
+    border-width: 2px;
+  }
+  .modal__title {
+    margin-bottom: 8px;
+  }
+  .modal__body {
+    gap: 12px;
+  }
+  .modal__body .woodbtn--full {
+    width: calc(100% - 40px);
+    align-self: center;
+  }
+  .confirm__cards svg,
+  .showdown__cards svg {
+    width: 34px !important;
+    height: 48px !important;
+  }
+  .showdown__row {
+    padding: 6px 8px !important;
+  }
+}
+
+/* Desktop: larger, more presence */
+@media (min-width: 1024px) {
+  .modal__panel {
+    padding: 28px 32px;
+  }
+  .modal__title {
+    font-size: 30px;
+  }
+  /* The showdown row can hold two 5-card hands PLUS the "獲得 🪙" badge on the
+     winning side. At 520px the winning row overflowed by a hair and the 5th
+     card wrapped; widen just this dialog on desktop so both rows stay single-row.
+     (!important beats Modal's inline max-width; scoped to this panel only.) */
+  .modal__panel--showdown {
+    max-width: 600px !important;
+  }
+}

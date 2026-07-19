@@ -1,0 +1,133 @@
+.lobby {
+  width: min(92vw, 460px);
+  max-height: 94vh; /* never taller than the viewport */
+  overflow-y: auto; /* safety net if content still doesn't fit */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: clamp(18px, 4vw, 30px);
+  background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
+  border: 3px solid var(--parch-edge);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  color: var(--parch-text);
+  text-align: center;
+}
+
+.lobby__title {
+  margin: 0;
+  font-size: clamp(22px, 5vw, 30px);
+  font-weight: 900;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+
+.lobby__seats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 4vw, 28px);
+}
+.lobby__seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.lobby__seat--off {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+  animation: lobby-pulse 1.4s ease-in-out infinite;
+}
+@keyframes lobby-pulse {
+  0%, 100% { opacity: 0.32; }
+  50% { opacity: 0.55; }
+}
+.lobby__seat-label {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--parch-muted);
+}
+.lobby__vs {
+  font-size: 20px;
+  font-weight: 900;
+  color: #a5391f;
+}
+
+.lobby__code-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px dashed var(--parch-edge);
+}
+.lobby__code-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--parch-muted);
+  letter-spacing: 2px;
+}
+.lobby__code {
+  font-size: clamp(40px, 12vw, 60px);
+  font-weight: 900;
+  letter-spacing: 10px;
+  line-height: 1;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  /* the letter-spacing pushes text right; nudge back so it looks centred */
+  padding-left: 10px;
+}
+
+.lobby__msg {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--parch-text);
+  max-width: 340px;
+}
+.lobby__msg--ok {
+  color: #1f9d57;
+  font-weight: 800;
+}
+
+/* Short screens (phone landscape): compact so the whole card fits without
+   clipping. Mirrors the modal's max-height:480 treatment. */
+@media (max-height: 480px) {
+  .lobby {
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  .lobby__title {
+    font-size: 20px;
+  }
+  .lobby__seats {
+    gap: 16px;
+  }
+  /* shrink the avatar frames (they carry inline width/height from the size prop) */
+  .lobby__seat .pavatar,
+  .lobby__seat .pavatar img {
+    width: 48px !important;
+    height: 48px !important;
+  }
+  .lobby__seat-label {
+    font-size: 12px;
+  }
+  .lobby__code-box {
+    padding: 8px 12px;
+    gap: 4px;
+  }
+  .lobby__code {
+    font-size: 40px;
+    letter-spacing: 6px;
+    padding-left: 6px;
+  }
+  .lobby__msg {
+    font-size: 13px;
+  }
+}

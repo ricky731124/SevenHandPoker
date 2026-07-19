@@ -1,0 +1,397 @@
+/* Bounded-fluid board: width is set inline (min(100vw, WCAP)); the parent
+   .stage centres it, so on desktop the table sits in the middle with red felt
+   on both sides instead of stretching edge-to-edge. On phones width == 100vw,
+   so the board fills the viewport exactly as before. */
+.game {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* equal left/right reserve zones so the centre is balanced */
+  --reserve: clamp(90px, 14vw, 146px);
+}
+
+/* ---- Round wooden buttons (menu / sort) ---- */
+.topbar__menu,
+.sortbtn {
+  border: 3px solid var(--wood-edge);
+  border-radius: 50%;
+  background:
+    radial-gradient(115% 78% at 50% -14%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 48%),
+    var(--wood-tex);
+  background-size: cover;
+  background-position: center;
+  color: var(--wood-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -2px 5px rgba(109, 63, 28, 0.3),
+    0 2px 0 var(--wood-edge),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
+.topbar__menu {
+  position: absolute;
+  top: clamp(8px, 2vh, 16px);
+  left: clamp(8px, 2vw, 16px);
+  width: clamp(44px, 8vh, 58px);
+  height: clamp(44px, 8vh, 58px);
+  z-index: 50;
+}
+
+/* ---- Avatars (corners) ---- */
+.game__foe-avatar {
+  position: absolute;
+  top: clamp(6px, 1.5vh, 14px);
+  right: clamp(8px, 2vw, 20px);
+  z-index: 40;
+}
+/* opponent speech bubble ("N 張") under their avatar */
+.foe-bubble {
+  position: absolute;
+  top: clamp(74px, calc(0.22 * var(--stage-h, 100vh)), 150px);
+  right: clamp(10px, 2.2vw, 26px);
+  z-index: 41;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-weight: 800;
+  font-size: clamp(13px, 2.2vw, 17px);
+  padding: 5px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.foe-bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 16px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 7px solid rgba(0, 0, 0, 0.72);
+}
+.game__me-avatar {
+  position: absolute;
+  bottom: clamp(6px, 1.5vh, 14px);
+  left: clamp(8px, 2vw, 20px);
+  z-index: 40;
+}
+.avatar-wrap {
+  border-radius: 50%;
+  transition: box-shadow 0.25s ease;
+  padding: 3px;
+}
+.avatar-wrap--active {
+  box-shadow: 0 0 0 4px var(--gold-2), 0 0 22px 4px rgba(246, 201, 69, 0.85);
+  animation: avatar-pulse 1.3s ease-in-out infinite;
+}
+@keyframes avatar-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px var(--gold-2), 0 0 14px 2px rgba(246, 201, 69, 0.6); }
+  50% { box-shadow: 0 0 0 5px var(--gold-1), 0 0 30px 8px rgba(246, 201, 69, 1); }
+}
+
+/* ---- Opponent hand (top) ---- */
+.game__ohand {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* left = board reserve, right = wider (clears submit) so both hands align */
+  padding: 4px var(--reserve-r) 0 var(--reserve);
+}
+.ohand { position: relative; }
+.ohand__slot { position: absolute; top: 0; }
+
+/* ---- Middle band ---- */
+.game__mid {
+  position: relative;
+  z-index: 3;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* deck left · band centre · sort right */
+  min-height: 0;
+}
+.game__deck,
+.game__sort {
+  flex: 0 0 auto;
+  width: var(--reserve); /* equal side zones -> band truly centred */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Fixed grid: seven fixed-width cells spread across a narrowed band. Adding
+   cards to a pile never changes cell size, so the board never reflows/jitters. */
+.game__band {
+  flex: 0 0 auto;
+  margin: 0 auto;
+  display: grid;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ---- Slot ---- */
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(3px, 1vh, 9px); /* small clearance around the coin */
+}
+.slot__coin { position: relative; z-index: 30; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+
+.pile { position: relative; display: flex; align-items: center; justify-content: center; }
+.pile--empty {
+  border: 2px dashed rgba(255, 216, 130, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 216, 130, 0.06);
+}
+.pile__card { position: absolute; top: 0; }
+.pile--openable { cursor: zoom-in; }
+.pile__lens {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  padding: 1px 3px;
+  z-index: 20;
+}
+/* small count badge on a multi-card stacked pile */
+.pile__count {
+  position: absolute;
+  bottom: -7px;
+  left: -7px;
+  z-index: 21;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  border-radius: 999px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 3px;
+}
+.pile__count--up {
+  bottom: auto;
+  top: -7px;
+}
+
+.slot__drop {
+  position: relative;
+  border: 2.5px dashed var(--gold-2);
+  background: rgba(246, 201, 69, 0.14);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse 1.2s ease-in-out infinite;
+  padding: 0;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(246, 201, 69, 0.5); }
+  50% { box-shadow: 0 0 14px 2px rgba(246, 201, 69, 0.75); }
+}
+.slot__hint {
+  position: absolute;
+  bottom: -15px;
+  font-size: 10px;
+  color: var(--gold-1);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- Deck ---- */
+.deck { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; }
+.deck__stack { position: relative; }
+.deck__layer { position: absolute; }
+.deck__count {
+  position: relative;
+  top: -6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gold-1);
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 1px 8px;
+}
+
+/* ---- Sort buttons (round, diagonal, icon-only) ---- */
+/* two round buttons: field lower-left, direction upper-right (clearly apart) */
+.sortbtns {
+  position: relative;
+  width: 100%;
+  height: clamp(106px, calc(0.21 * var(--stage-h, 100vh)), 154px);
+  margin-top: clamp(52px, calc(0.20 * var(--stage-h, 100vh)), 150px);
+  transform: translate(-10px, 15px); /* nudge the pair left & down */
+}
+.sortbtn {
+  position: absolute;
+  width: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
+  height: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
+}
+.sortbtn:nth-child(1) { left: 0; bottom: 0; }            /* field: lower-left */
+.sortbtn:nth-child(2) { right: 0; top: 0; }              /* direction: upper-right */
+
+/* ---- System prompt: black translucent pill centered on the coin row ---- */
+.game__status {
+  position: absolute;
+  left: 50%;
+  top: 50.1%;
+  transform: translate(-50%, -50%);
+  z-index: 9;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.44);
+  color: rgba(255, 255, 255, 0.82);
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-size: clamp(14px, 2.3vw, 18px);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.game__action {
+  position: absolute;
+  right: clamp(4px, 1vw, 18px);
+  bottom: clamp(10px, 2.6vh, 26px);
+  z-index: 30;
+}
+/* submit: comfortably tappable, tight text (no wasted whitespace) */
+.game__action .woodbtn {
+  padding: 13px 18px;
+}
+.game__action .woodbtn__label {
+  font-size: clamp(15px, 2.1vw, 19px);
+  letter-spacing: -0.5px;
+}
+
+/* ---- My hand (bottom) — kept clear of the corner avatar / submit ---- */
+.game__hand {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 0 var(--reserve-r) clamp(4px, 1vh, 12px) var(--reserve);
+}
+.hand { position: relative; }
+.hand__slot { position: absolute; bottom: 0; }
+.hand__card { cursor: pointer; border-radius: var(--card-radius); }
+.hand__card--sel { filter: drop-shadow(0 0 9px var(--gold-2)) drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45)); }
+
+/* ---- Opponent-disconnected overlay ---- */
+.net-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 4, 8, 0.72);
+  backdrop-filter: blur(3px);
+}
+.net-overlay__card {
+  background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
+  border: 3px solid var(--parch-edge);
+  border-radius: var(--r-lg);
+  padding: clamp(18px, 4vw, 30px) clamp(24px, 6vw, 44px);
+  text-align: center;
+  color: var(--parch-text);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+.net-overlay__title {
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 900;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+.net-overlay__msg {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--parch-muted);
+}
+.net-overlay__time {
+  margin-top: 12px;
+  font-size: clamp(30px, 8vw, 44px);
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+
+/* ---- Coin toss ---- */
+.cointoss { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+.cointoss__title { font-size: clamp(24px, 6vw, 34px); font-weight: 900; }
+.cointoss__coin { position: relative; width: 148px; height: 148px; }
+.cointoss__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  background: radial-gradient(circle at 37% 28%, #fff8d6, #ffdd70 40%, #e9a91f 74%, #b7791a);
+  border: 6px solid #a9791a;
+  box-shadow:
+    0 0 0 3px #74500f,
+    inset 0 0 0 7px rgba(255, 240, 180, 0.55),
+    inset 0 -12px 22px rgba(120, 80, 15, 0.5),
+    inset 0 9px 18px rgba(255, 255, 255, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 0 38px rgba(246, 201, 69, 0.8);
+}
+.cointoss__face::after {
+  content: '';
+  position: absolute;
+  top: 12%;
+  left: 18%;
+  width: 40%;
+  height: 26%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  filter: blur(4px);
+  transform: rotate(-24deg);
+}
+.cointoss__face--back { transform: rotateY(180deg); }
+.cointoss__result { font-size: clamp(26px, 7vw, 36px); font-weight: 900; }
+
+/* ---- Confirm / showdown / magnifier ---- */
+.confirm__cards, .showdown__cards { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+.confirm__type { text-align: center; font-size: 19px; }
+/* dual yes/no buttons: consistent, roomy spacing */
+.confirm__actions { display: flex; gap: 26px; justify-content: center; }
+.showdown__row { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.12); }
+.showdown__row--win { background: rgba(75, 208, 122, 0.22); border: 1px solid var(--win); }
+.showdown__meta { display: flex; flex-direction: column; min-width: 66px; }
+.showdown__label { font-size: 13px; color: var(--parch-muted); }
+.showdown__hand { font-size: 18px; font-weight: 800; }
+.showdown__won {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: #b07d0c;
+  font-weight: 900;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+.showdown__vs { text-align: center; font-size: 20px; font-weight: 900; }
+.showdown__result { text-align: center; font-size: 20px; font-weight: 800; padding: 8px; border-radius: 10px; }
+.showdown__result--win { color: #1f9d57; }
+.showdown__result--lose { color: #c02b2b; }
+/* win/lose header: emoji + text on one line, same size */
+.end__head { display: inline-flex; align-items: center; gap: 12px; font-weight: 900; }
+.end__head-ico { font-size: 1em; line-height: 1; }
+.end__head--win { color: #1f9d57; }
+.end__head--lose { color: #c02b2b; }

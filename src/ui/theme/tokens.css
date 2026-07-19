@@ -1,0 +1,79 @@
+/* ============================================================
+   Seven Hand Poker — Design Tokens
+   Single source of truth for colors, type, spacing, effects.
+   Swap this file (or override :root) to re-skin the whole app.
+   ============================================================ */
+:root {
+  /* --- Brand / table (red velvet, MSN homage) --- */
+  --felt-deep: #5e0f1a;
+  --felt-base: #7a1420;
+  --felt-mid: #96202f;
+  --felt-glow: #b8324a;
+  --felt-line: rgba(255, 210, 190, 0.16); /* curved seam lines on the table */
+
+  /* --- Gold (coins, accents, borders) --- */
+  --gold-1: #ffe89a;
+  --gold-2: #f6c945;
+  --gold-3: #d79a24;
+  --gold-4: #9c6a12;
+
+  /* --- Neutrals / text --- */
+  --cream: #fff6e6;
+  --ink: #2a0e12;
+  --ink-soft: #4a1d24;
+  --muted: rgba(255, 246, 230, 0.62);
+
+  /* --- Semantic --- */
+  --win: #4bd07a;
+  --lose: #ff6b6b;
+  --disabled: #6b6b6b;
+
+  /* --- Card --- */
+  --card-face: #fbfbf6;
+  --card-red: #d1263b;
+  --card-black: #21242b;
+  --card-back-1: #1f4fb0; /* blue card back */
+  --card-back-2: #123a86;
+  --card-radius: 8px;
+
+  /* --- Surfaces (modals / panels) --- */
+  --panel-bg: linear-gradient(160deg, #8a1a2a, #5e0f1a);
+  --panel-border: rgba(255, 220, 150, 0.35);
+  --scrim: rgba(20, 4, 8, 0.62);
+
+  /* --- Wood (buttons) — warm Q-style plank --- */
+  --wood-1: #f0cf94;
+  --wood-2: #dcab63;
+  --wood-3: #c68a41;
+  --wood-edge: #6d3f1c;
+  --wood-text: #5a2a0c;
+  /* Button wood texture; overridden at runtime to the public wood.png image. */
+  --wood-tex: linear-gradient(180deg, #f2d59c, #cf9d54);
+
+  /* --- Parchment (panels / modals) --- */
+  --parch-1: #f7ead0;
+  --parch-2: #ecd4a6;
+  --parch-edge: #8a5424;
+  --parch-text: #4d2e13;
+  --parch-muted: #8a6a42;
+
+  /* --- Type --- */
+  --font-display: 'Huninn', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Huninn', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+
+  /* --- Radii / spacing --- */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --space: 8px;
+
+  /* --- Effects --- */
+  --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-gold: 0 0 18px rgba(246, 201, 69, 0.45);
+
+  /* Metallic gold text fill (for headings / button labels) */
+  --text-gold-gradient: linear-gradient(180deg, #fff3c4 0%, #f6c945 42%, #d79a24 60%, #ffe89a 100%);
+  /* Gold border gradient for buttons/panels */
+  --border-gold-gradient: linear-gradient(180deg, #ffe89a, #d79a24 55%, #9c6a12);
+}

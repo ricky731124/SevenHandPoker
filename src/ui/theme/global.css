@@ -1,0 +1,115 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--cream);
+  background: var(--felt-deep);
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+}
+
+/* Dark accent for text on parchment panels */
+.accent {
+  color: #a5391f;
+  font-weight: 800;
+}
+
+/* Metallic gold text utility */
+.gold-text {
+  background: var(--text-gold-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+/* Screen container: everything lives on a full-viewport stage */
+.stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rotate hint for portrait phones */
+.rotate-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--felt-deep);
+  color: var(--cream);
+  text-align: center;
+  padding: 24px;
+}
+
+.rotate-hint__icon {
+  font-size: 56px;
+  animation: rotate-tilt 1.6s ease-in-out infinite;
+}
+
+@keyframes rotate-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+
+/* Show rotate hint only on small portrait screens (phones) */
+@media (max-width: 900px) and (orientation: portrait) {
+  .rotate-hint { display: flex; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-2);
+  outline-offset: 2px;
+}
+
+/* Fixed character avatars (cat / bird) */
+.pavatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.25));
+  border: 2px solid var(--gold-3);
+  box-shadow: var(--shadow-1);
+}
+.pavatar--bare {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.pavatar__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
