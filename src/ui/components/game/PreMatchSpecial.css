@@ -1,0 +1,61 @@
+.prematch {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 12px;
+}
+.prematch__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(96vw, 700px);
+  max-height: 94vh;
+  padding: clamp(10px, 2vh, 20px) clamp(16px, 3vw, 30px);
+  border-radius: var(--r-lg, 18px);
+  background: var(--parch-tex, linear-gradient(180deg, var(--parch-1), var(--parch-2)));
+  border: 3px solid var(--parch-edge);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.prematch__title {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 5vw, 36px);
+  font-weight: 900;
+}
+.prematch__sub {
+  color: var(--parch-text);
+  font-size: clamp(12px, 2.2vw, 15px);
+  font-weight: 700;
+  text-align: center;
+  opacity: 0.85;
+}
+/* Title + subtitle + confirm stay fixed; the loadout area scrolls if the screen
+   is too short, so the confirm button is never clipped. */
+.prematch__panel .prematch__title,
+.prematch__panel .prematch__sub,
+.prematch__panel .woodbtn {
+  flex: 0 0 auto;
+}
+/* Confirm: a touch larger than the default sm, but still auto-width (never a
+   full row) so it stays centered and can't overlap the left-hand loadout slots. */
+.prematch__panel .woodbtn {
+  padding: 11px 34px;
+  margin-top: 2px;
+}
+.prematch__panel .woodbtn__label {
+  font-size: 19px;
+}
+.prematch .pz-loadout-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Compact on short landscape screens. */
+@media (max-height: 480px) {
+  .prematch__title {
+    font-size: clamp(20px, 4.4vw, 28px);
+  }
+}

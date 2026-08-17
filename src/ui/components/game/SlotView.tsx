@@ -14,6 +14,8 @@ interface Props {
   onMagnify: (side: PlayerId, slot: number) => void
   cardW: number
   coinSize: number
+  /** tutorial: pulse this slot's revealed pile + lens to say "tap the 🔍 here" */
+  highlight?: boolean
 }
 
 function Pile({
@@ -61,14 +63,14 @@ function Pile({
   )
 }
 
-export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize }: Props) {
+export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false }: Props) {
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const opened = slot.owner !== null
   const topCards = slot[foe]
   const bottomCards = slot[me]
 
   return (
-    <div className="slot">
+    <div className={`slot${highlight ? ' slot--maglight' : ''}`}>
       {/* Top: opponent side — a single glowing frame drop target when placing */}
       {placeable ? (
         <button

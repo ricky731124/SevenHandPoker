@@ -1,0 +1,153 @@
+/* ---- Leaderboard (#7) — four boards, wood-plank rows, metal frames ---- */
+
+/* Scroll list grows; the "my rank" bar is pinned below it (never scrolls). The
+   scrollbar is hidden (still scrolls by wheel/drag/touch) so a desktop classic
+   scrollbar never narrows the rows — keeping their width equal to the pinned
+   self-bar's on every platform (mobile already uses overlay scrollbars). */
+.panel--lb .panel__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge */
+}
+.panel--lb .panel__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.lb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.lb-row {
+  box-sizing: border-box;
+  height: 54px; /* fixed — element sizes change, row height must not */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  /* Warm wood plank (runtime swaps --wood-tex to wood.png). `cover` fills the
+     whole row from one image so the plank never tiles / shows a seam. */
+  background: var(--wood-tex, linear-gradient(180deg, #f2d59c, #cf9d54));
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid var(--wood-edge);
+  box-shadow: 0 2px 0 rgba(109, 63, 28, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+
+.lb-rank {
+  flex: 0 0 38px;
+  text-align: center;
+  font-weight: 900;
+  font-size: 19px;
+}
+.lb-medal {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.lb-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 800;
+  font-size: 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-score {
+  flex: 0 0 auto;
+  font-weight: 900;
+  font-size: 18px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(90, 42, 12, 0.16);
+  white-space: nowrap;
+}
+
+/* --- Medal frames (top 3): 3px metal border + polished inner line + glow.
+   box-sizing:border-box keeps the row height fixed despite the thicker border. --- */
+.lb-row--gold {
+  border: 3px solid #f6c945;
+  box-shadow: inset 0 0 0 2px #fff3c4, inset 0 0 12px rgba(255, 232, 154, 0.65), 0 0 20px rgba(246, 201, 69, 0.9);
+}
+.lb-row--silver {
+  border: 3px solid #dfe6ee;
+  box-shadow: inset 0 0 0 2px #ffffff, inset 0 0 12px rgba(220, 230, 244, 0.7), 0 0 18px rgba(196, 212, 230, 0.85);
+}
+.lb-row--bronze {
+  border: 3px solid #e08e4a;
+  box-shadow: inset 0 0 0 2px #ffd9b0, inset 0 0 12px rgba(240, 190, 140, 0.6), 0 0 18px rgba(210, 130, 70, 0.8);
+}
+
+/* --- Frozen "my rank" bar, pinned at the panel bottom. Matches the rows: same
+   width (margin-right offsets the scroll list's scrollbar padding so the right
+   edges line up), same border/shadow, same-size score chip flush to the same
+   right position. Lighter parchment fill so it still reads as "you". --- */
+.lb-selfbar {
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin-right: 6px; /* = .panel__scroll padding-right, so widths match the rows */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, #fbe7c0, #e8c78a);
+  border: 2px solid var(--wood-edge);
+  box-shadow: 0 2px 0 rgba(109, 63, 28, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+.lb-selfbar__label {
+  flex: 0 0 auto;
+  font-weight: 900;
+  font-size: 17px;
+  opacity: 0.85;
+}
+.lb-selfbar__rank {
+  flex: 0 0 auto;
+  min-width: 28px;
+  margin-right: 6px; /* extra breathing room between the number and the avatar */
+  text-align: center;
+  font-weight: 900;
+  font-size: 26px;
+}
+.lb-selfbar__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+  font-size: 19px;
+}
+/* Identical to .lb-score so the trailing number matches the rows and lines up. */
+.lb-selfbar__score {
+  flex: 0 0 auto;
+  font-weight: 900;
+  font-size: 18px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(90, 42, 12, 0.16);
+  white-space: nowrap;
+}
+.lb-selfbar__note {
+  flex: 1 1 auto;
+  text-align: center;
+  font-weight: 800;
+  font-size: 15px;
+}

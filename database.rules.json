@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$roomId.matches(/^[0-9]{3}$/)"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "usernames": {
+      ".read": true,
+      "$name": {
+        ".write": "auth != null && newData.val() === auth.uid && (!data.exists() || data.val() === auth.uid)"
+      }
+    },
+    "leaderboard": {
+      ".read": true,
+      "$board": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['displayName', 'score'])"
+        }
+      }
+    },
+    "presence": {
+      ".read": "auth != null",
+      "$uid": {
+        "$conn": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}

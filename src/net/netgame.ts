@@ -13,8 +13,12 @@ import {
 } from './room'
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
-import { useGameStore, type HostSnapshot } from '../state/gameStore'
+import { usePlatformStore } from '../state/platformStore'
+import { useGameStore, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
+import { applySuit, applySwap, markSpecialUsed, peekNextDraw } from '../game/state'
+import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
+import type { Card } from '../game/cards'
 
 /**
  * Phase-2/3 orchestrator: bridges the RTDB room and the local gameStore.
@@ -30,6 +34,22 @@ const gameRef = (code: string) => P(code, 'game')
 const intentRef = (code: string) => P(code, 'intent')
 const liveRef = (code: string, role: Role) => P(code, `live/${role}`)
 const rematchRef = (code: string, role: Role) => P(code, `rematch/${role}`)
+const readyRef = (code: string, role: Role) => P(code, `ready/${role}`)
+const fxRef = (code: string) => P(code, 'fx')
+const infoRef = (code: string, role: Role) => P(code, `info/${role}`)
+const pauseRef = (code: string) => P(code, 'pause')
+const emoteRef = (code: string) => P(code, 'emote')
+const NO_PAUSE: PauseState = { active: false }
+
+/** RTDB rejects `undefined`; a normal card's `kind` is undefined → strip it. */
+function cleanCards(cards: Card[]): Card[] {
+  return cards.map((c) => (c.kind ? { id: c.id, suit: c.suit, rank: c.rank, kind: c.kind } : { id: c.id, suit: c.suit, rank: c.rank }))
+}
+
+/** Read the local player's saved loadout to seed the pre-match pick (B). */
+function myLoadout(): SpecialCardId[] {
+  return (usePlatformStore.getState().profile?.equipped.specialCards ?? []) as SpecialCardId[]
+}
 
 function writeGame(code: string, view: SyncGame) {
   void dbSet(gameRef(code), view)
@@ -75,6 +95,9 @@ function makeThrottledLive(code: string, role: Role) {
 export interface AttachOpts {
   reconnect?: boolean
   hostSnapshot?: HostSnapshot
+  /** reconnect: room config from the fetched room (guest has no local snapshot) */
+  special?: boolean
+  timeLimit?: number
 }
 
 let active: { code: string; detach: () => void } | null = null
@@ -98,12 +121,19 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     send: () => {},
     sendLive: makeThrottledLive(code, 'host'),
     sendRematch: () => void dbSet(rematchRef(code, 'host'), true),
+    sendReady: () => void dbSet(readyRef(code, 'host'), true),
+    sendFx: (msg: string) => void dbSet(fxRef(code), { msg, id: Date.now() }),
+    sendPause: (p: PauseState) => void dbSet(pauseRef(code), p),
+    sendEmote: (e: EmoteMsg) => void dbSet(emoteRef(code), e),
     teardown: teardownFor(code, 'host'),
   }
+  const room0 = useNetStore.getState().room
+  const special = room0?.roomType === 'special'
+  const timeLimit = room0?.timeLimit ?? 50
   if (opts?.reconnect && opts.hostSnapshot) {
     g.restoreOnlineHost(online, opts.hostSnapshot)
   } else if (!(g.online?.role === 'host' && g.online.code === code && g.engine)) {
-    g.startOnlineHost(online)
+    g.startOnlineHost(online, special, timeLimit, myLoadout())
   }
   const s0 = useGameStore.getState()
   if (s0.engine) {
@@ -135,7 +165,54 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       if (e.phase === 'place' && e.pendingPick?.by === 'p1') gs.placeAt(intent.slot)
     } else if (intent.type === 'continue') {
       gs.hostGuestContinue()
+    } else if (intent.type === 'special') {
+      // Guest activates a special; host arbitrates. Only during the guest's own
+      // pick turn, before submitting, and only once.
+      if (!(e.phase === 'pick' && e.turn === 'p2') || e.specialUsed.p2) return
+      const def = getSpecialCard(intent.card)
+      if (!def) return
+      if (def.needsTarget) {
+        const next = def.suit
+          ? applySuit(e, 'p2', intent.targetId ?? '', def.suit)
+          : applySwap(e, 'p2', intent.targetId ?? '')
+        if (next === e) return // illegal target
+        useGameStore.setState({ engine: next }) // → subscription writes the guest view
+        useGameStore.getState().flashStatus('對方似乎使用了特殊牌') // host is the foe
+      } else {
+        // peek/spy: compute the guest's private result + push to its info channel.
+        const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
+        void dbSet(infoRef(code, 'guest'), {
+          kind: intent.card === 'peek' ? 'peek' : 'spy',
+          cards: cleanCards(cards),
+          id: Date.now(),
+        })
+        useGameStore.setState({ engine: markSpecialUsed(e, 'p2') })
+        useGameStore.getState().flashStatus(intent.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
+      }
     }
+  })
+
+  // pre-match pick barrier (special room): advance to the coin once BOTH ready.
+  const unsubReady = onValue(P(code, 'ready'), (snap) => {
+    const r = (snap.val() as { host?: boolean; guest?: boolean } | null) ?? {}
+    if (r.host && r.guest) useGameStore.getState().setLoadoutReady()
+  })
+
+  // shared pause state (Stage C).
+  const unsubPause = onValue(pauseRef(code), (snap) => {
+    useGameStore.getState().applyPause((snap.val() as PauseState | null) ?? NO_PAUSE)
+  })
+
+  // sticker (貼圖) broadcast — show the opponent's; ignore my own echo.
+  // Skip the initial snapshot so a leftover sticker in the node isn't replayed on attach.
+  let emoteInit = true
+  const unsubEmote = onValue(emoteRef(code), (snap) => {
+    if (emoteInit) {
+      emoteInit = false
+      return
+    }
+    const e = snap.val() as EmoteMsg | null
+    if (e && e.id) useGameStore.getState().applyEmote(e)
   })
 
   // guest's live selection (情報戰)
@@ -151,6 +228,11 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       void remove(P(code, 'rematch'))
       void dbSet(liveRef(code, 'host'), null)
       void dbSet(liveRef(code, 'guest'), null)
+      void remove(P(code, 'ready')) // fresh B barrier for the next match
+      void dbSet(fxRef(code), null)
+      void dbSet(emoteRef(code), null) // don't replay last sticker into the next match
+      void dbSet(infoRef(code, 'guest'), null)
+      void dbSet(pauseRef(code), null) // reset pauses for the next match
       useGameStore.getState().rematchStart()
     }
   })
@@ -160,11 +242,19 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     unsubIntent()
     unsubLive()
     unsubRematch()
+    unsubReady()
+    unsubPause()
+    unsubEmote()
   }
 }
 
 function _attachGuest(code: string, opts?: AttachOpts): () => void {
   const g = useGameStore.getState()
+  const room0 = useNetStore.getState().room
+  // On reconnect the room subscription may not have populated yet, so prefer the
+  // config passed from tryReconnect's room fetch (else fall back to the store).
+  const special = opts?.special ?? room0?.roomType === 'special'
+  const timeLimit = opts?.timeLimit ?? room0?.timeLimit ?? 50
   if (!(g.online?.role === 'guest' && g.online.code === code)) {
     g.startOnlineGuest(
       {
@@ -172,9 +262,16 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
         send: (intent) => void dbSet(intentRef(code), intent),
         sendLive: makeThrottledLive(code, 'guest'),
         sendRematch: () => void dbSet(rematchRef(code, 'guest'), true),
+        sendReady: () => void dbSet(readyRef(code, 'guest'), true),
+        sendFx: () => {}, // guest never pushes fx; the host is authoritative
+        sendPause: (p: PauseState) => void dbSet(pauseRef(code), p),
+        sendEmote: (e: EmoteMsg) => void dbSet(emoteRef(code), e),
         teardown: teardownFor(code, 'guest'),
       },
       !!opts?.reconnect,
+      special,
+      timeLimit,
+      myLoadout(),
     )
   }
   const unsubGame = onValue(gameRef(code), (snap) => {
@@ -190,15 +287,70 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
     const r = (snap.val() as { host?: boolean; guest?: boolean } | null) ?? {}
     useGameStore.getState().setFoeWantsRematch(!!r.host)
   })
+  // pre-match pick barrier: advance to the coin once BOTH ready.
+  const unsubReady = onValue(P(code, 'ready'), (snap) => {
+    const r = (snap.val() as { host?: boolean; guest?: boolean } | null) ?? {}
+    if (r.host && r.guest) useGameStore.getState().setLoadoutReady()
+  })
+  // shared pause state (Stage C).
+  const unsubPause = onValue(pauseRef(code), (snap) => {
+    useGameStore.getState().applyPause((snap.val() as PauseState | null) ?? NO_PAUSE)
+  })
+  // sticker (貼圖) broadcast — show the opponent's; ignore my own echo.
+  // Skip the initial snapshot so a leftover sticker isn't replayed on attach/reconnect.
+  let emoteInit = true
+  const unsubEmote = onValue(emoteRef(code), (snap) => {
+    if (emoteInit) {
+      emoteInit = false
+      return
+    }
+    const e = snap.val() as EmoteMsg | null
+    if (e && e.id) useGameStore.getState().applyEmote(e)
+  })
+  // host → guest special-card notices ("似乎使用了" / "正在查看你的手牌").
+  // Skip the initial snapshot (stale/none); fire on each subsequent write.
+  let fxInit = true
+  const unsubFx = onValue(fxRef(code), (snap) => {
+    if (fxInit) {
+      fxInit = false
+      return
+    }
+    const fx = snap.val() as { msg?: string } | null
+    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg)
+  })
+  // host → guest private peek/spy result.
+  let infoInit = true
+  const unsubInfo = onValue(infoRef(code, 'guest'), (snap) => {
+    if (infoInit) {
+      infoInit = false
+      return
+    }
+    const info = snap.val() as { kind?: 'peek' | 'spy'; cards?: Card[] } | null
+    if (info?.kind && Array.isArray(info.cards)) {
+      useGameStore.getState().showSpecialInfo({ kind: info.kind, cards: info.cards })
+    }
+  })
   return () => {
     unsubGame()
     unsubLive()
     unsubRematch()
+    unsubReady()
+    unsubPause()
+    unsubEmote()
+    unsubFx()
+    unsubInfo()
   }
 }
 
 function snapOf(s: ReturnType<typeof useGameStore.getState>): HostSnapshot {
-  return { engine: s.engine!, coinFirstPicker: s.coinFirstPicker, foeSelForGuest: s.foeSelForGuest }
+  return {
+    engine: s.engine!,
+    coinFirstPicker: s.coinFirstPicker,
+    foeSelForGuest: s.foeSelForGuest,
+    special: s.special,
+    loadout: s.loadout,
+    timeLimit: s.timeLimit,
+  }
 }
 
 /** Start (or no-op if already running) the online game for this room. */
@@ -242,7 +394,12 @@ export async function tryReconnect(): Promise<boolean> {
       }
     }
     useNetStore.getState().reconnect(code, role)
-    attachOnline(code, role, { reconnect: true, hostSnapshot })
+    attachOnline(code, role, {
+      reconnect: true,
+      hostSnapshot,
+      special: room.roomType === 'special',
+      timeLimit: room.timeLimit ?? 50,
+    })
     useAppStore.getState().launchGame({ mode: role, roomId: code })
     return true
   } catch {

@@ -1,6 +1,6 @@
-import type { Card } from './cards'
-import { makeDeck } from './cards'
-import { compareHands, evaluate } from './evaluate'
+import type { Card, Suit } from './cards'
+import { isSpecial, makeBlank, makeDeck, makeJoker } from './cards'
+import { compareValue, evaluate } from './evaluate'
 import { mulberry32, shuffle } from './rng'
 
 export type PlayerId = 'p1' | 'p2'
@@ -12,18 +12,28 @@ export const INITIAL_HAND = 10
 export const MAX_PICK = 5
 export const DRAW_SCHEDULE = [3, 3, 3, 3, 2, 2] as const // per placement, 6 draws
 
+/** A slot's coin owner. `'both'` = the two piles tied (joker collision, SPEC §2.3) → each side gets the coin. */
+export type SlotOwner = PlayerId | 'both' | null
+
 export interface Slot {
   p1: Card[] // bottom side (p1's pile, placed by p2)
   p2: Card[] // top side (p2's pile, placed by p1)
-  owner: PlayerId | null
+  owner: SlotOwner
 }
 
 export interface Showdown {
   slot: number
-  winner: PlayerId
+  winner: PlayerId | 'both' // 'both' = tie, both sides win the coin
   p1Name: string
   p2Name: string
+  /** if a side's pile held a joker, the concrete card it became (for the reveal) */
+  p1WildAs?: Card
+  p2WildAs?: Card
 }
+
+/** True if `player` holds the coin for this slot (including a shared tie). */
+export const ownsSlot = (slot: Slot, player: PlayerId): boolean =>
+  slot.owner === player || slot.owner === 'both'
 
 export interface GameState {
   seed: number
@@ -41,19 +51,39 @@ export interface GameState {
   firstPicker: PlayerId
   winner: PlayerId | null
   winReason: WinReason | null
+  /**
+   * Who wins a same-type simultaneous win or a board-full coin tie (SPEC §2.3).
+   * Only reachable via a joker tie. Single-player → the computer (p2); online → the host (p1).
+   */
+  tieBreakWinner: PlayerId
+  /**
+   * Special-card (ability) activation budget: each player may activate exactly
+   * one carried card per match (SPEC §15). `true` once they've spent it. The
+   * *which-cards-carried* loadout lives outside the engine (gameStore); the
+   * engine only tracks the one-shot budget and applies the concrete effects.
+   */
+  specialUsed: Record<PlayerId, boolean>
 }
 
 export const otherPlayer = (p: PlayerId): PlayerId => (p === 'p1' ? 'p2' : 'p1')
 
-export function createGame(seed: number, firstPicker: PlayerId): GameState {
+/**
+ * @param tieBreakWinner who wins a same-type simultaneous win / board-full coin
+ * tie. Single-player defaults to the computer (p2); online passes the host (p1).
+ */
+export function createGame(seed: number, firstPicker: PlayerId, tieBreakWinner: PlayerId = 'p2'): GameState {
   const rng = mulberry32(seed)
   const deck = shuffle(makeDeck(), rng)
   const hands: Record<PlayerId, Card[]> = { p1: [], p2: [] }
-  // Deal 10 each, alternating (p1, p2, p1, p2, ...) for determinism.
+  // Deal 10 each from the 52-deck, alternating (p1, p2, ...) for determinism.
   for (let i = 0; i < INITIAL_HAND; i++) {
     hands.p1.push(deck.shift()!)
     hands.p2.push(deck.shift()!)
   }
+  // Each player also gets 1 off-deck blank + 1 off-deck joker → 12-card start
+  // (SPEC §2.2). These don't come from (or return to) the 52-deck.
+  hands.p1.push(makeBlank('p1'), makeJoker('p1'))
+  hands.p2.push(makeBlank('p2'), makeJoker('p2'))
   const slots: Slot[] = Array.from({ length: SLOT_COUNT }, () => ({ p1: [], p2: [], owner: null }))
   return {
     seed,
@@ -70,6 +100,8 @@ export function createGame(seed: number, firstPicker: PlayerId): GameState {
     firstPicker,
     winner: null,
     winReason: null,
+    tieBreakWinner,
+    specialUsed: { p1: false, p2: false },
   }
 }
 
@@ -83,26 +115,48 @@ export function emptySlotsFor(state: GameState, player: PlayerId): number[] {
 }
 
 export function countCoins(state: GameState, player: PlayerId): number {
-  return state.slots.filter((s) => s.owner === player).length
+  return state.slots.filter((s) => ownsSlot(s, player)).length
 }
 
-/** Returns winner if a win condition is met, else null. */
-export function checkWin(state: GameState): { winner: PlayerId; reason: WinReason } | null {
-  for (const p of ['p1', 'p2'] as PlayerId[]) {
-    if (countCoins(state, p) >= 4) return { winner: p, reason: 'coins4' }
-  }
-  // 3-in-a-row
+/** True if `player` has 3 adjacent slots (shared/tied slots count for both). */
+function hasLine(state: GameState, player: PlayerId): boolean {
   for (let i = 0; i <= SLOT_COUNT - 3; i++) {
-    const o = state.slots[i].owner
-    if (o && state.slots[i + 1].owner === o && state.slots[i + 2].owner === o) {
-      return { winner: o, reason: 'line3' }
+    if (ownsSlot(state.slots[i], player) && ownsSlot(state.slots[i + 1], player) && ownsSlot(state.slots[i + 2], player)) {
+      return true
     }
   }
-  // board full
+  return false
+}
+
+/**
+ * Returns winner if a win condition is met, else null. A joker tie shares a slot
+ * (both sides own it), so both players can hit a win condition on the same
+ * showdown; §2.3 resolves it: 四幣 > 三連, then same-type / board-full coin ties
+ * go to `state.tieBreakWinner` (single → computer p2, online → host p1).
+ */
+export function checkWin(state: GameState): { winner: PlayerId; reason: WinReason } | null {
+  const c1 = countCoins(state, 'p1')
+  const c2 = countCoins(state, 'p2')
+  const p1Coins4 = c1 >= 4
+  const p2Coins4 = c2 >= 4
+  const p1Win = p1Coins4 || hasLine(state, 'p1')
+  const p2Win = p2Coins4 || hasLine(state, 'p2')
+  const tb = state.tieBreakWinner
+
+  if (p1Win && p2Win) {
+    // 四幣 > 三連: whoever holds the 4-coin win outranks a line-only win.
+    if (p1Coins4 !== p2Coins4) return { winner: p1Coins4 ? 'p1' : 'p2', reason: 'coins4' }
+    // Same win type → mode tiebreak.
+    return { winner: tb, reason: p1Coins4 ? 'coins4' : 'line3' }
+  }
+  if (p1Win) return { winner: 'p1', reason: p1Coins4 ? 'coins4' : 'line3' }
+  if (p2Win) return { winner: 'p2', reason: p2Coins4 ? 'coins4' : 'line3' }
+
+  // Board full with no win condition met → decide by coin count; an equal count
+  // is only possible via a shared tie slot, resolved by the mode tiebreak.
   if (state.slots.every((s) => s.owner !== null)) {
-    const c1 = countCoins(state, 'p1')
-    const c2 = countCoins(state, 'p2')
     if (c1 !== c2) return { winner: c1 > c2 ? 'p1' : 'p2', reason: 'boardFull' }
+    return { winner: tb, reason: 'boardFull' }
   }
   return null
 }
@@ -170,10 +224,20 @@ export function applyPlace(state: GameState, player: PlayerId, slotIndex: number
   // Showdown if both sides present.
   const slot = slots[slotIndex]
   if (slot.p1.length > 0 && slot.p2.length > 0 && slot.owner === null) {
-    const cmp = compareHands(slot.p1, slot.p2)
-    const winner: PlayerId = cmp >= 0 ? 'p1' : 'p2'
+    const v1 = evaluate(slot.p1)
+    const v2 = evaluate(slot.p2)
+    const cmp = compareValue(v1, v2)
+    // A joker can copy an in-play card → exact tie possible → both own the slot (§2.3).
+    const winner: PlayerId | 'both' = cmp > 0 ? 'p1' : cmp < 0 ? 'p2' : 'both'
     slot.owner = winner
-    next.lastShowdown = { slot: slotIndex, winner, p1Name: evaluate(slot.p1).name, p2Name: evaluate(slot.p2).name }
+    next.lastShowdown = {
+      slot: slotIndex,
+      winner,
+      p1Name: v1.name,
+      p2Name: v2.name,
+      p1WildAs: v1.wildAs,
+      p2WildAs: v2.wildAs,
+    }
     next.phase = 'showdown'
   }
 
@@ -224,4 +288,98 @@ function drawFor(state: GameState, player: PlayerId): GameState {
     hands: { ...state.hands, [player]: [...state.hands[player], ...drawn] },
     drawsDone: { ...state.drawsDone, [player]: k + 1 },
   }
+}
+
+// ---- Special cards (SPEC §15). Each is a pure effect on the engine; the one-
+// shot budget is state.specialUsed[player]. Callers must gate on canUseSpecial. ----
+
+/** A card that a special effect may target: a normal (52-deck) card only. The
+ *  off-deck blank/joker can never be swapped, re-suited, or discarded (§2.1). */
+export const isTargetable = (c: Card): boolean => !isSpecial(c)
+
+/** Valid targets for a suit-change card: normal hand cards not already that suit. */
+export function suitTargets(state: GameState, player: PlayerId, suit: Suit): Card[] {
+  return state.hands[player].filter((c) => isTargetable(c) && c.suit !== suit)
+}
+
+/** Valid `clubs` targets: normal, non-club hand cards. (Back-compat helper.) */
+export function clubsTargets(state: GameState, player: PlayerId): Card[] {
+  return suitTargets(state, player, 'C')
+}
+
+/** Valid `swap` targets: any normal hand card (blank/joker excluded). */
+export function swapTargets(state: GameState, player: PlayerId): Card[] {
+  return state.hands[player].filter(isTargetable)
+}
+
+/** The cards `player` will draw on their NEXT draw (peek). Read-only. */
+export function peekNextDraw(state: GameState, player: PlayerId): Card[] {
+  const k = state.drawsDone[player]
+  if (k >= DRAW_SCHEDULE.length) return []
+  const n = Math.min(DRAW_SCHEDULE[k], state.deck.length)
+  return state.deck.slice(0, n)
+}
+
+/** Mark the one-shot special budget as spent (peek/spy have no board effect). */
+export function markSpecialUsed(state: GameState, player: PlayerId): GameState {
+  return { ...state, specialUsed: { ...state.specialUsed, [player]: true } }
+}
+
+/**
+ * 偷天換日 (swap): discard one hand card back into the deck and draw a random
+ * undealt card in its place — a net one-card exchange. We draw first, then
+ * reinsert the discard at a random spot, so you can never draw the same card
+ * straight back. `rng` defaults to Math.random (pass a seeded one in tests).
+ */
+export function applySwap(
+  state: GameState,
+  player: PlayerId,
+  cardId: string,
+  rng: () => number = Math.random,
+): GameState {
+  const hand = state.hands[player]
+  const idx = hand.findIndex((c) => c.id === cardId)
+  if (idx < 0) return state
+  const card = hand[idx]
+  if (!isTargetable(card) || state.deck.length === 0) return state
+  const deck = state.deck.slice()
+  const drawn = deck.splice(Math.floor(rng() * deck.length), 1)[0]
+  deck.splice(Math.floor(rng() * (deck.length + 1)), 0, card) // discard re-enters the pool
+  const nextHand = hand.slice()
+  nextHand[idx] = drawn
+  return {
+    ...state,
+    deck,
+    hands: { ...state.hands, [player]: nextHand },
+    specialUsed: { ...state.specialUsed, [player]: true },
+  }
+}
+
+/**
+ * Suit-bloom cards (踏雪尋梅 / 鑽石永恆 / 正中紅心 / 黑桃鴨): re-suit one hand
+ * card to `suit`, keeping its rank and id. If that produces a card identical to
+ * one already in play, the eventual showdown ties via the existing `'both'` path
+ * (§2.3) — no new mechanism needed. The off-deck blank/joker can't be re-suited.
+ */
+export function applySuit(state: GameState, player: PlayerId, cardId: string, suit: Suit): GameState {
+  const hand = state.hands[player]
+  const idx = hand.findIndex((c) => c.id === cardId)
+  if (idx < 0) return state
+  const card = hand[idx]
+  if (!isTargetable(card) || card.suit === suit) return state
+  const nextHand = hand.slice()
+  // Keep id + rank; remember the original suit so the showdown can reveal the
+  // change (e.g. ♣A→♠A). Only one special per match, so a card is never
+  // re-suited twice — the first original suit is the one that matters.
+  nextHand[idx] = { ...card, suit, resuitFrom: card.resuitFrom ?? card.suit }
+  return {
+    ...state,
+    hands: { ...state.hands, [player]: nextHand },
+    specialUsed: { ...state.specialUsed, [player]: true },
+  }
+}
+
+/** 踏雪尋梅: re-suit a card to clubs. (Back-compat wrapper over applySuit.) */
+export function applyClubs(state: GameState, player: PlayerId, cardId: string): GameState {
+  return applySuit(state, player, cardId, 'C')
 }

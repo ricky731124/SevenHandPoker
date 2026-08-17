@@ -42,6 +42,44 @@ function SuitShape({ suit, cx, cy, s, color }: { suit: Suit; cx: number; cy: num
 /** A face-up playing card: large rank + one large suit, single orientation. */
 export default function Card({ card, w = 58 }: { card: TCard; w?: number }) {
   const h = Math.round(w * 1.4)
+
+  // Off-deck specials (SPEC §2.2). Backs are identical to normal cards; only the
+  // face differs so the owner can read them.
+  if (card.kind === 'blank') {
+    // Completely blank — just the card, nothing on it.
+    return (
+      <svg width={w} height={h} viewBox="0 0 60 84" style={{ display: 'block' }}>
+        <rect x="1.5" y="1.5" width="57" height="81" rx="8" fill="#fcfcf7" stroke="rgba(0,0,0,0.28)" strokeWidth="1.2" />
+      </svg>
+    )
+  }
+  if (card.kind === 'joker') {
+    // A joker is the deck's jester — just a three-belled cap, sized and placed to
+    // fill the same box as a normal card's suit (bottom ≈ y74, so it lines up
+    // with the suit on neighbouring cards). Small 鬼 in the corner like a rank.
+    return (
+      <svg width={w} height={h} viewBox="0 0 60 84" style={{ display: 'block' }}>
+        <rect x="1.5" y="1.5" width="57" height="81" rx="8" fill="#fcfcf7" stroke="rgba(0,0,0,0.28)" strokeWidth="1.2" />
+        <text x="7" y="26" fontSize="24" fontWeight="900" fill="#7a3fb0" fontFamily="var(--font-display)">
+          鬼
+        </text>
+        {/* bells */}
+        <g stroke="#a97a10" strokeWidth="0.8">
+          <circle cx="16" cy="42" r="3.4" fill="#ffd94f" />
+          <circle cx="30" cy="36" r="3.4" fill="#ffd94f" />
+          <circle cx="44" cy="42" r="3.4" fill="#ffd94f" />
+        </g>
+        {/* jester cap (three lobes) + headband, bottom aligned to the suit box */}
+        <g stroke="#4a2170" strokeWidth="1" strokeLinejoin="round">
+          <path d="M30 71 C 22 69, 14 61, 16 44 C 21 53, 27 63, 30 71 Z" fill="#7a3fb0" />
+          <path d="M30 71 C 38 69, 46 61, 44 44 C 39 53, 33 63, 30 71 Z" fill="#2f76c9" />
+          <path d="M30 71 C 27 60, 28 46, 30 38 C 32 46, 33 60, 30 71 Z" fill="#c0392b" />
+          <rect x="15" y="66" width="30" height="7" rx="3.5" fill="#e6b325" stroke="#a97a10" />
+        </g>
+      </svg>
+    )
+  }
+
   const red = SUIT_IS_RED[card.suit]
   const color = red ? RED : BLACK
   const label = rankLabel(card.rank)

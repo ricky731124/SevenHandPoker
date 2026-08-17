@@ -1,0 +1,157 @@
+.vs {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 2vh, 18px);
+  overflow: hidden;
+  font-family: var(--font-comic);
+  cursor: pointer;
+  /* deep, textured blue (left) vs felt-red (right) — center glow + vignette */
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 50% 130%, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0) 58%),
+    linear-gradient(101deg, #2c63a8 0%, #1c447e 49.4%, #a1233a 50.6%, #781524 100%);
+}
+
+/* Radial speed lines, subtle, slowly rotating. */
+.vs__rays {
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 44%,
+    rgba(255, 255, 255, 0.1) 0deg 2deg,
+    rgba(255, 255, 255, 0) 2deg 7deg
+  );
+  animation: vs-spin 20s linear infinite;
+}
+@keyframes vs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Halftone dots, faint, faded toward the center. */
+.vs__halftone {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.28) 26%, transparent 27%);
+  background-size: 13px 13px;
+  -webkit-mask-image: radial-gradient(circle at 50% 44%, transparent 40%, #000 74%);
+  mask-image: radial-gradient(circle at 50% 44%, transparent 40%, #000 74%);
+  opacity: 0.35;
+}
+
+/* BATTLE — US comic font, gradient fill with a dark 2nd layer + 3D shadow. */
+.vs__titlewrap {
+  position: relative;
+  z-index: 2;
+}
+.vs__title {
+  position: relative;
+  font-family: var(--font-comic);
+  font-weight: 400; /* Bangers is a single display weight */
+  font-size: clamp(52px, 14vw, 116px);
+  letter-spacing: 3px;
+  line-height: 1;
+  background: linear-gradient(#fff3b0 0%, #ffd23e 40%, #ff9a17 74%, #ffcf49 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.vs__title::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  -webkit-text-stroke: 7px #201317;
+  color: #201317;
+  paint-order: stroke fill;
+  /* dark second layer offset down-right + drop shadow = comic depth */
+  text-shadow: 3px 4px 0 #201317, 5px 8px 0 #6d2f0e, 0 14px 16px rgba(0, 0, 0, 0.55);
+}
+
+/* Players charge in; the clash sits between them. */
+.vs__row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* Trimmed so the two fixed-width name fields below never overflow the row. */
+  gap: clamp(20px, 9vw, 110px);
+}
+.vs__side {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.vs__side .pavatar {
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+}
+.vs__name {
+  /* FIXED, equal width for both sides (sized for the 7-中文 / 15-英文 max) so the
+     two BATTLE portraits+names stay symmetric about the centre regardless of name
+     length; the text is centred inside and the avatar is centred over it. */
+  width: min(280px, 44vw);
+  box-sizing: border-box;
+  text-align: center;
+  padding: 4px 16px;
+  border-radius: 999px;
+  background: rgba(20, 4, 8, 0.8);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(18px, 4.4vw, 28px);
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* White explosion between the avatars (the collision point). The anchor holds
+   the centering; the inner .vs__clash is animated (framer owns its transform). */
+.vs__clash-anchor {
+  position: absolute;
+  left: 50%;
+  top: 65px; /* ≈ avatar center (avatar size 130) */
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+}
+.vs__clash {
+  width: clamp(84px, 19vw, 132px);
+  height: clamp(84px, 19vw, 132px);
+  background: #fff;
+  filter: drop-shadow(0 0 14px rgba(255, 214, 62, 0.9)) drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  clip-path: polygon(
+    100% 50%, 80.4% 59.9%, 90.5% 79.4%, 68.8% 75.9%, 65.5% 97.6%, 50% 82%,
+    34.5% 97.6%, 31.2% 75.9%, 9.5% 79.4%, 19.6% 59.9%, 0% 50%, 19.6% 40.1%,
+    9.5% 20.6%, 31.2% 24.1%, 34.5% 2.4%, 50% 18%, 65.5% 2.4%, 68.8% 24.1%,
+    90.5% 20.6%, 80.4% 40.1%
+  );
+}
+
+.vs__hint {
+  position: absolute;
+  z-index: 2;
+  bottom: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}

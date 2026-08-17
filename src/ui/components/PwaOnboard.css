@@ -1,0 +1,148 @@
+/* In-app-browser gate + add-to-home guide. Rendered via a portal to <body> so
+   the portrait force-rotate on #root never tilts them. */
+
+.iabgate {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px 24px;
+  background: var(--felt-deep);
+  color: var(--cream);
+  text-align: center;
+}
+.iabgate__icon {
+  font-size: 52px;
+}
+.iabgate__title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold-2);
+}
+.iabgate__body {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--cream);
+  max-width: 22em;
+}
+.iabgate__steps {
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.9;
+  max-width: 20em;
+  color: var(--cream);
+}
+.iabgate__muted {
+  font-size: 13px;
+  color: var(--muted);
+}
+.iabgate__copy {
+  margin-top: 4px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--felt-deep);
+  background: var(--gold-2);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.iabgate__copy:active {
+  transform: scale(0.97);
+}
+
+/* ---- Add-to-home guide (push = prominent, soft = thin bar) ---------------- */
+
+.a2hs {
+  position: fixed;
+  z-index: 99999;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 6, 8, 0.96);
+  color: var(--cream);
+  border: 1px solid var(--gold-3);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.a2hs--push {
+  bottom: 20px;
+  width: min(92vw, 420px);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+.a2hs--soft {
+  top: 12px;
+  width: min(94vw, 460px);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.a2hs__title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold-2);
+}
+.a2hs__text {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.a2hs__soft-text {
+  flex: 1;
+  line-height: 1.5;
+}
+.a2hs__btn {
+  align-self: center;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--felt-deep);
+  background: var(--gold-2);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.a2hs__btn:active {
+  transform: scale(0.97);
+}
+.a2hs__close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.a2hs__share {
+  font-size: 20px;
+  vertical-align: -3px;
+}
+
+/* Downward bouncing arrow that points at the iOS Safari share button. */
+.a2hs__arrow {
+  position: fixed;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  z-index: 99999;
+  font-size: 30px;
+  color: var(--gold-2);
+  animation: a2hs-bounce 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes a2hs-bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(7px); }
+}

@@ -2,11 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5183", "--strictPort"],
-      "port": 5183,
-      "autoPort": false
+      "name": "shp-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5183", "--strictPort"],
+      "port": 5183
     }
   ]
 }

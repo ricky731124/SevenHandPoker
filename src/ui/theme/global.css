@@ -53,35 +53,25 @@ body {
   justify-content: center;
 }
 
-/* Rotate hint for portrait phones */
-.rotate-hint {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  background: var(--felt-deep);
-  color: var(--cream);
-  text-align: center;
-  padding: 24px;
-}
-
-.rotate-hint__icon {
-  font-size: 56px;
-  animation: rotate-tilt 1.6s ease-in-out infinite;
-}
-
-@keyframes rotate-tilt {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-90deg); }
-}
-
-/* Show rotate hint only on small portrait screens (phones) */
-@media (max-width: 900px) and (orientation: portrait) {
-  .rotate-hint { display: flex; }
+/*
+ * Force-landscape on portrait phones. Instead of a blocking "please rotate"
+ * wall, we render the whole app sideways (rotated 90°) so the player naturally
+ * turns the phone — and it works even when the OS rotation-lock is ON (turning
+ * the phone then lines the content up upright). Installed Android PWAs are
+ * locked to landscape by the manifest, so this media query never fires there;
+ * on iOS (Apple ignores manifest orientation) and in any browser tab, it does.
+ */
+@media (max-width: 900px) and (orientation: portrait) and (pointer: coarse) {
+  #root {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 100vh;
+    height: 100vw;
+    transform-origin: center center;
+    transform: translate(-50%, -50%) rotate(90deg);
+    overflow: hidden;
+  }
 }
 
 :focus-visible {

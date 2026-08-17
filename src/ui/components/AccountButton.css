@@ -1,0 +1,308 @@
+/* Account bar: top-left of the menu, over the felt/hero. */
+.acctbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px; /* 名稱/頭像 與 公告鈕 之間;把公告鈕再往下推一點 */
+  max-width: 60vw;
+}
+/* 登出 sits in the opposite corner from the identity pill */
+.acctbar-right {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Register / login / logout buttons: same HEIGHT as the main-menu buttons,
+   width stays auto (compact). Mirrors .menu__buttons .woodbtn sizing. */
+.acctbar .woodbtn,
+.acctbar-right .woodbtn {
+  padding-top: clamp(8px, 1.5vh, 12px);
+  padding-bottom: clamp(8px, 1.5vh, 12px);
+  padding-left: 18px;
+  padding-right: 18px;
+}
+.acctbar .woodbtn__label,
+.acctbar-right .woodbtn__label {
+  font-size: clamp(15px, 2.3vw, 22px);
+}
+@media (min-width: 1024px) {
+  .acctbar .woodbtn,
+  .acctbar-right .woodbtn {
+    padding-top: 15px;
+    padding-bottom: 15px;
+  }
+  .acctbar .woodbtn__label,
+  .acctbar-right .woodbtn__label {
+    font-size: 26px;
+  }
+}
+
+/* 遊戲介紹 「?」 — horizontal wood oval, matches the 商城 button height. */
+.acctbar-qbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5em; /* barely wider than tall → a near-circle with a slight oval */
+  padding: clamp(8px, 1.5vh, 12px) 12px;
+  border-radius: 999px;
+  border: 3px solid var(--wood-edge);
+  background: var(--wood-tex);
+  background-size: cover;
+  background-position: center;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(16px, 2.4vw, 24px);
+  line-height: 1;
+  cursor: pointer;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.5),
+    0 2.5px 0 var(--wood-edge),
+    0 5px 9px rgba(0, 0, 0, 0.38);
+}
+.acctbar-qbtn:active {
+  transform: translateY(1px);
+}
+@media (min-width: 1024px) {
+  .acctbar-qbtn {
+    padding-top: 15px;
+    padding-bottom: 15px;
+    font-size: 26px;
+  }
+}
+
+/* Logged-in identity pill — SAME wood texture as the buttons (design system). */
+.acctbar__me {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  padding: 3px 26px 3px 5px;
+  border: 3px solid var(--wood-edge);
+  border-radius: 999px;
+  background:
+    radial-gradient(115% 78% at 50% -14%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 48%),
+    radial-gradient(140% 150% at 50% 46%, rgba(0, 0, 0, 0) 52%, rgba(90, 45, 12, 0.32) 100%),
+    var(--wood-tex);
+  background-size: cover, cover, cover;
+  background-position: center;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -3px 6px rgba(109, 63, 28, 0.3),
+    0 2.5px 0 var(--wood-edge),
+    0 5px 9px rgba(0, 0, 0, 0.38);
+  font-family: var(--font-display);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.acctbar__me:active {
+  transform: translateY(1px);
+}
+.acctbar__avatar {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  object-fit: contain;
+  transform: scale(1.3);
+  background: radial-gradient(circle at 50% 40%, #fff, var(--parch-2));
+  border: 2.5px solid var(--wood-edge);
+}
+.acctbar__name {
+  font-weight: 800;
+  font-size: 27px;
+  color: var(--wood-text);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  font-family: var(--font-display);
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acctbar__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.acctbar__gems {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 23px;
+  color: var(--wood-text);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  font-family: var(--font-display);
+}
+
+/* ---- Auth form (register / login) ---- */
+.acct-note {
+  margin: 0;
+  color: var(--parch-text);
+  font-size: 14px;
+  line-height: 1.55;
+  font-family: var(--font-body);
+}
+.acct-note--tiny {
+  font-size: 12px;
+  color: var(--parch-muted);
+}
+.acct-field {
+  display: block;
+}
+.acct-field > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--parch-text);
+  font-weight: 800;
+  font-size: 13px;
+  font-family: var(--font-display);
+}
+.acct-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 2px solid var(--parch-edge);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--parch-text);
+  font-size: 16px; /* ≥16px stops iOS zoom-on-focus */
+  font-family: var(--font-display);
+}
+.acct-input::placeholder {
+  color: rgba(77, 46, 19, 0.4);
+}
+.acct-input:focus {
+  outline: none;
+  border-color: var(--wood-edge);
+  background: rgba(255, 255, 255, 0.85);
+}
+.acct-avail {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-body);
+}
+.acct-avail--ok {
+  color: #2e7d32;
+}
+.acct-avail--taken,
+.acct-avail--invalid {
+  color: #b3261e;
+}
+.acct-avail--checking {
+  color: var(--parch-muted);
+}
+.acct-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-body);
+}
+
+/* 返回 (left) + 確定/登入 (right) on one row, small gap between. */
+.acct-btnrow {
+  display: flex;
+  gap: 12px;
+}
+.acct-btnrow .woodbtn {
+  flex: 1;
+}
+
+/* Compact the auth modal on short landscape screens so nothing is clipped. */
+.modal__panel--auth .modal__body {
+  gap: 10px;
+}
+@media (max-height: 480px) {
+  .modal__panel--auth .modal__body {
+    gap: 7px;
+  }
+  .acct-input {
+    padding: 6px 10px;
+  }
+  .acct-note {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
+
+/* ---- 公告彈窗 ---- */
+.announce {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-family: var(--font-body);
+  color: var(--parch-text);
+  /* 高度給足(不擠),未來更新記錄變長超過才自動捲動 */
+  max-height: min(76vh, 640px);
+  overflow-y: auto;
+  padding: 2px;
+}
+.announce__sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.announce__head {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 20px;
+  color: var(--wood-text);
+  text-align: center;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--parch-edge);
+}
+.announce__entry {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.announce__entry + .announce__entry {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--parch-edge);
+}
+.announce__date {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--parch-muted);
+}
+.announce__list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.announce__thanks {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  text-align: left;
+}
+/* 公告鈕的 📢 emoji icon */
+.acct-announce-ico {
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+/* Join-confirm popup (deep-link + code entry) */
+.joinconfirm { text-align: center; }
+.joinconfirm__who { margin: 0 0 4px; font-size: 16px; color: var(--parch-text); }
+.joinconfirm__meta { margin: 0 0 10px; font-weight: 800; font-size: 18px; color: var(--wood-text); font-family: var(--font-display); }

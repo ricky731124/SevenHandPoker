@@ -1,0 +1,25 @@
+.spx-tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+.spx-tray__hint,
+.spx-info__hint {
+  margin: 0 0 8px;
+  text-align: center;
+  color: var(--parch-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.spx-info__cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.spx-info__empty {
+  color: var(--parch-muted);
+  font-weight: 700;
+}

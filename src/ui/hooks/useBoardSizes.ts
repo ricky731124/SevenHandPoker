@@ -45,7 +45,10 @@ function calc(): BoardSizes {
   const avatar = Math.round(clamp(50, vh * 0.17, 108))
   // left clears the avatar (incl. its margin) + a little; right must also clear
   // the wider submit button.
-  const reserve = Math.round(clamp(80, avatar + 26, 150))
+  // The avatar is centred inside the fixed ~110px name field, so it sits a little
+  // inward of the field's pinned edge; +36 clears that (plus the active-turn halo)
+  // so the avatar never overlaps the hand.
+  const reserve = Math.round(clamp(88, avatar + 40, 158))
   const rightReserve = Math.round(Math.max(reserve, clamp(110, ew * 0.145, 156)))
   const handMax = Math.round(ew - reserve - rightReserve - 6)
 

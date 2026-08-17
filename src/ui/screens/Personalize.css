@@ -1,0 +1,282 @@
+/* Full-screen backdrop: clicking outside the panel returns to the menu. */
+.pz-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel--wide {
+  width: min(96vw, 900px);
+  /* Fixed height so switching tabs never resizes the panel (使用者:別跳). */
+  height: min(92vh, 680px);
+}
+
+/* Shop 「?」 — a clear, tappable round wood button. */
+.shop-qbtn {
+  width: 48px;
+  height: 32px;
+  border-radius: 999px; /* horizontal oval — easier to tap than a tiny circle */
+  border: 2px solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  font-weight: 900;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--wood-edge);
+}
+.shop-qbtn:active {
+  transform: translateY(1px);
+}
+.panel--wide .panel__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Top bar: ← back icon + evenly-spread tabs. */
+.pz__topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.pz-back {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--wood-edge), 0 4px 7px rgba(0, 0, 0, 0.32);
+}
+.pz-back:active {
+  transform: translateY(1px);
+}
+
+.pz__tabs {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.pz__tab {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: var(--r-sm);
+  border: 2px solid var(--parch-edge);
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--parch-text);
+  font-weight: 800;
+  font-family: var(--font-display);
+  cursor: pointer;
+  font-size: clamp(14px, 2vw, 18px);
+  white-space: nowrap;
+}
+.pz__tab--on {
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  border-color: var(--wood-edge);
+}
+.pz__tab--locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Achievements list: desktop 1-per-row; short (landscape-phone) viewport 2-per-row. */
+.pz-ach-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: -8px; /* tighten the gap under the frozen 已解鎖/已展示 header */
+}
+.pz-ach-row {
+  padding: 10px 16px;
+}
+@media (max-height: 540px) {
+  .pz-ach-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .pz-ach-row {
+    padding: 7px 11px;
+  }
+}
+
+.pz-hint {
+  text-align: center;
+  color: var(--parch-text);
+  font-size: 14px;
+  width: 100%;
+  margin: 0;
+}
+.pz-hint--left {
+  text-align: left;
+}
+
+/* ---- Loadout: header (label + tip), then preset deck (left) + cards (right) ---- */
+.pz-loadout-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.pz-loadout__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  row-gap: 2px;
+  flex-wrap: wrap;
+}
+.pz-loadout {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
+}
+.pz-loadout__slots {
+  flex: 0 0 auto;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pz-loadout__label {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+}
+.pz-loslot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pz-loslot__pos {
+  flex: 0 0 auto;
+  width: 26px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--parch-muted);
+  font-family: var(--font-display);
+  line-height: 1.1;
+}
+.pz-loslot__empty {
+  width: 50px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--parch-edge);
+  border-radius: 10px;
+  color: var(--parch-muted);
+  font-weight: 800;
+  font-family: var(--font-display);
+  background: rgba(255, 255, 255, 0.2);
+}
+.pz-loadout__tip {
+  font-size: 12px;
+  color: var(--parch-muted);
+}
+.pz-loadout__pick {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 18px; /* wider so adjacent cards aren't easy to mis-tap */
+  align-content: flex-start;
+  justify-content: flex-start;
+}
+
+/* ---- Avatars: LEFT-aligned (room to grow as more unlock) ---- */
+.pz-avatars {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 5px 6px; /* room so a selected tile's outline isn't clipped at the edges */
+}
+.pz-av {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Center the stack so the reserved 未解鎖 space splits top+bottom rather than
+     leaving one big empty gap under an owned tile. */
+  justify-content: center;
+  gap: 3px;
+  /* Reserve just enough for the locked layout (avatar + name + 未解鎖) so tiles
+     stay uniform whether or not the line shows → toggling 顯示全部 never jumps. */
+  min-height: 112px;
+  padding: 7px 14px;
+  border-radius: var(--r-md);
+  border: 2px solid var(--parch-edge);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--parch-text);
+  cursor: pointer;
+  font-family: var(--font-display);
+}
+.pz-av--on {
+  border-color: var(--wood-2);
+  outline: 3px solid var(--wood-2);
+  outline-offset: 1px;
+  background: rgba(255, 255, 255, 0.8);
+}
+.pz-av--locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+.pz-av__name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wood-text);
+}
+.pz-av__lock {
+  font-size: 11px;
+  color: var(--parch-muted);
+}
+
+/* Detail popup (double-click a card) */
+.pz-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.pz-detail__art {
+  width: 84px;
+  height: 100px;
+  border-radius: 10px;
+  border: 2px solid var(--accent);
+  overflow: hidden;
+  display: block;
+}
+.pz-detail__short {
+  font-weight: 800;
+  margin: 0;
+}
+.pz-detail__desc {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--parch-text);
+}
+.pz-detail__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--parch-muted);
+}
+
+.pz-soon {
+  text-align: center;
+  color: var(--parch-muted);
+  padding: 30px 0;
+  width: 100%;
+}

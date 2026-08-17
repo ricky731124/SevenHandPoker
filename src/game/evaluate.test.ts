@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Card, Rank, Suit } from './cards'
-import { CATEGORY, compareHands, evaluate } from './evaluate'
+import { makeBlank, makeJoker } from './cards'
+import { CATEGORY, compareHands, compareValue, evaluate } from './evaluate'
 
 // Parse shorthand like "SA" "H10" "D2" "CK" -> Card
 function c(s: string): Card {
@@ -10,6 +11,8 @@ function c(s: string): Card {
   return { id: `${suit}${rank}`, suit, rank }
 }
 const h = (...ss: string[]) => ss.map(c)
+const blank = () => makeBlank('t')
+const joker = () => makeJoker('t')
 
 describe('category detection by pile size', () => {
   it('single card = high card', () => {
@@ -83,5 +86,62 @@ describe('comparisons', () => {
   })
   it('full house beats flush', () => {
     expect(compareHands(h('SA', 'HA', 'DA', 'CK', 'SK'), h('S2', 'S5', 'S9', 'SJ', 'SK'))).toBeGreaterThan(0)
+  })
+})
+
+describe('blank card (SPEC §2.2 / §3.2)', () => {
+  it('is ignored in evaluation — [K,K,blank] is just a pair of K', () => {
+    const v = evaluate([...h('SK', 'HK'), blank()])
+    expect(v.category).toBe(CATEGORY.PAIR)
+    expect(v.rankSeq).toEqual([13, 13]) // blank contributes no rank
+  })
+  it('does not create a hand — [K,K,blank] ties [K,K] with matching suits', () => {
+    expect(compareValue(evaluate([...h('SK', 'HK'), blank()]), evaluate(h('SK', 'HK')))).toBe(0)
+  })
+  it('never turns four cards into a 5-card straight/flush', () => {
+    // 4 to a straight flush + a blank is NOT a straight flush (only 4 real cards)
+    const v = evaluate([...h('S3', 'S4', 'S5', 'S6'), blank()])
+    expect(v.category).toBeLessThan(CATEGORY.STRAIGHT)
+  })
+  it('a lone blank pile loses to any real card', () => {
+    expect(compareValue(evaluate([blank()]), evaluate(h('C2')))).toBeLessThan(0)
+    expect(evaluate([blank()]).category).toBe(CATEGORY.EMPTY)
+  })
+  it('two lone-blank piles tie (both empty)', () => {
+    expect(compareValue(evaluate([blank()]), evaluate([blank()]))).toBe(0)
+  })
+})
+
+describe('joker / wild (SPEC §2.2 / §3.2)', () => {
+  it('a lone joker becomes ♠A (highest single card)', () => {
+    const v = evaluate([joker()])
+    expect(v.category).toBe(CATEGORY.HIGH_CARD)
+    expect(v.wildAs).toMatchObject({ suit: 'S', rank: 14 })
+  })
+  it('completes trips: [K,K,joker] → three of a kind', () => {
+    expect(evaluate([...h('SK', 'HK'), joker()]).category).toBe(CATEGORY.THREE_KIND)
+  })
+  it('completes a straight flush: [♦3,4,5,6,joker] → becomes ♦7', () => {
+    const v = evaluate([...h('D3', 'D4', 'D5', 'D6'), joker()])
+    expect(v.category).toBe(CATEGORY.STRAIGHT_FLUSH)
+    expect(v.wildAs).toMatchObject({ suit: 'D', rank: 7 })
+  })
+  it('maximises category — [K,K,joker] beats plain [A,A]', () => {
+    expect(compareValue(evaluate([...h('SK', 'HK'), joker()]), evaluate(h('SA', 'HA')))).toBeGreaterThan(0)
+  })
+  it('a blank + joker together: blank ignored, lone joker → ♠A', () => {
+    const v = evaluate([blank(), joker()])
+    expect(v.category).toBe(CATEGORY.HIGH_CARD)
+    expect(v.wildAs).toMatchObject({ suit: 'S', rank: 14 })
+  })
+})
+
+describe('true tie via joker collision (SPEC §2.3)', () => {
+  it('joker copies an in-play card → exact tie (compareValue 0)', () => {
+    // one side plays ♠A, the other plays a joker (→ ♠A) → identical best hand
+    expect(compareValue(evaluate(h('SA')), evaluate([joker()]))).toBe(0)
+  })
+  it('two lone jokers tie', () => {
+    expect(compareValue(evaluate([joker()]), evaluate([joker()]))).toBe(0)
   })
 })

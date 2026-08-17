@@ -1,4 +1,5 @@
 import type { PlayerId, WinReason } from '../../../game/state'
+import type { PvpReward } from '../../../state/platformStore'
 import Modal from '../Modal'
 import Button from '../Button'
 
@@ -13,6 +14,7 @@ export default function EndModal({
   winner,
   reason,
   me,
+  reward,
   onRematch,
   onLeave,
   waiting,
@@ -22,6 +24,8 @@ export default function EndModal({
   winner: PlayerId | null
   reason: WinReason | null
   me: PlayerId
+  /** PvP-win diamond result (shown as a「+5 💎」line); null on a loss / solo. */
+  reward?: PvpReward | null
   onRematch: () => void
   onLeave: () => void
   /** online: I agreed to a rematch and am waiting for the opponent to agree */
@@ -48,6 +52,29 @@ export default function EndModal({
           {iWon ? '你' : '對手'}以「<span className="accent">{REASON[reason]}</span>」獲勝
         </p>
       )}
+      {reward &&
+        (reward.capped ? (
+          <p style={{ textAlign: 'center', color: 'var(--parch-muted)', fontWeight: 700, fontSize: 14, margin: '2px 0' }}>
+            今日對戰鑽石已領滿
+          </p>
+        ) : (
+          <p
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'baseline',
+              flexWrap: 'wrap',
+              gap: 6,
+              textAlign: 'center',
+              color: 'var(--wood-text)',
+              fontWeight: 900,
+              margin: '2px 0',
+            }}
+          >
+            <span>對戰勝利 +{reward.amount} 💎</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--parch-muted)' }}>今日 {reward.count}/3</span>
+          </p>
+        ))}
       {waiting ? (
         <p style={{ textAlign: 'center', color: '#1f9d57', fontWeight: 800 }}>等待對手同意再玩一場…</p>
       ) : foeWantsRematch ? (

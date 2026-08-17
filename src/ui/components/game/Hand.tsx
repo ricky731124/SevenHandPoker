@@ -12,6 +12,12 @@ interface Props {
   onToggle: (id: string) => void
   cardW?: number
   maxWidth?: number
+  /**
+   * Special-card targeting mode (Phase C). When set, only cards whose id is in
+   * the set are clickable (valid targets, highlighted); the rest are dimmed and
+   * inert. `null`/absent ⇒ normal pick mode.
+   */
+  targetableIds?: Set<string> | null
 }
 
 /**
@@ -21,7 +27,7 @@ interface Props {
  *  - Inner motion: the selection lift only — snappy and per-card, so lifting
  *    one card never jitters the rest. No hover (mobile-first).
  */
-export default function Hand({ cards, selected, sortMode, sortDir, interactive, onToggle, cardW = 58, maxWidth = 640 }: Props) {
+export default function Hand({ cards, selected, sortMode, sortDir, interactive, onToggle, cardW = 58, maxWidth = 640, targetableIds = null }: Props) {
   const ordered = sortHand(cards, sortMode, sortDir)
   const n = ordered.length
   // Spread with a small gap (no overlap) while it fits; only overlap when the
@@ -35,6 +41,9 @@ export default function Hand({ cards, selected, sortMode, sortDir, interactive, 
     <div className="hand" style={{ width: overlap * (n - 1) + cardW, height: cardW * 1.4 + lift }}>
       {ordered.map((c, i) => {
         const isSel = selected.includes(c.id)
+        const isTarget = !!targetableIds && targetableIds.has(c.id)
+        const dimmed = !!targetableIds && !isTarget
+        const clickable = interactive && (!targetableIds || isTarget)
         return (
           <motion.div
             key={c.id}
@@ -45,10 +54,10 @@ export default function Hand({ cards, selected, sortMode, sortDir, interactive, 
             transition={{ type: 'spring', stiffness: 420, damping: 30, delay: Math.min(i * 0.045, 0.5) }}
           >
             <motion.div
-              className={`hand__card${isSel ? ' hand__card--sel' : ''}`}
-              animate={{ y: isSel ? -lift : 0 }}
+              className={`hand__card${isSel ? ' hand__card--sel' : ''}${isTarget ? ' hand__card--target' : ''}${dimmed ? ' hand__card--dim' : ''}`}
+              animate={{ y: isSel ? -lift : isTarget ? -Math.round(lift * 0.5) : 0 }}
               transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-              onClick={() => interactive && onToggle(c.id)}
+              onClick={() => clickable && onToggle(c.id)}
             >
               <Card card={c} w={cardW} />
             </motion.div>

@@ -1,0 +1,31 @@
+.toast-anchor {
+  position: fixed;
+  top: clamp(56px, 13vh, 104px); /* dropped down so nothing clips the top edge */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000; /* above every modal/scrim */
+  pointer-events: none;
+}
+.toast {
+  max-width: 86vw;
+  padding: 16px 34px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  /* translucent dark glass — not the wood texture */
+  background: rgba(18, 7, 9, 0.82);
+  backdrop-filter: blur(6px);
+  color: #fff6ea;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .toast {
+    padding: 13px 26px;
+    font-size: 20px;
+  }
+}

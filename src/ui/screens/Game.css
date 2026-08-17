@@ -13,9 +13,10 @@
   --reserve: clamp(90px, 14vw, 146px);
 }
 
-/* ---- Round wooden buttons (menu / sort) ---- */
+/* ---- Round wooden buttons (menu / sort / pause) ---- */
 .topbar__menu,
-.sortbtn {
+.sortbtn,
+.game__pausebtn {
   border: 3px solid var(--wood-edge);
   border-radius: 50%;
   background:
@@ -47,20 +48,27 @@
 .game__foe-avatar {
   position: absolute;
   top: clamp(6px, 1.5vh, 14px);
-  right: clamp(8px, 2vw, 20px);
+  right: clamp(5px, 1.4vw, 12px); /* hug the right edge a touch more (space to spare there) */
   z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* The name is a fixed-width field (Game.tsx nameStyle) whose RIGHT edge is
+     pinned here; centering the column centres the avatar + name text over that
+     field, so short names stay centred instead of drifting. */
+  align-items: center;
 }
 /* opponent speech bubble ("N 張") under their avatar */
 .foe-bubble {
   position: absolute;
-  top: clamp(74px, calc(0.22 * var(--stage-h, 100vh)), 150px);
+  /* below the opponent's avatar + name label so it never covers the name */
+  top: clamp(96px, calc(0.27 * var(--stage-h, 100vh)), 168px);
   right: clamp(10px, 2.2vw, 26px);
-  z-index: 41;
+  z-index: 47; /* above the pause/sort buttons so the "N 張" is never covered */
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
   font-weight: 800;
-  font-size: clamp(13px, 2.2vw, 17px);
-  padding: 5px 12px;
+  font-size: clamp(12px, 2vw, 15px);
+  padding: 4px 10px;
   border-radius: 12px;
   white-space: nowrap;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
@@ -77,21 +85,33 @@
 .game__me-avatar {
   position: absolute;
   bottom: clamp(6px, 1.5vh, 14px);
-  left: clamp(8px, 2vw, 20px);
+  left: clamp(4px, 0.8vw, 7px); /* hug the left edge more so the name has room before the cards */
   z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* The name is a fixed-width field (Game.tsx nameStyle) whose LEFT edge is pinned
+     here; centering the column centres the avatar + name text over that field, so
+     short names stay centred instead of drifting. */
+  align-items: center;
 }
 .avatar-wrap {
   border-radius: 50%;
   transition: box-shadow 0.25s ease;
   padding: 3px;
+  /* Gap to the name so the active-turn breathing halo never touches it. Because
+     the my-avatar block is bottom-anchored this lifts the avatar up; the foe
+     block is top-anchored so it nudges the foe name down instead — both wanted. */
+  margin-bottom: 5px;
 }
 .avatar-wrap--active {
   box-shadow: 0 0 0 4px var(--gold-2), 0 0 22px 4px rgba(246, 201, 69, 0.85);
   animation: avatar-pulse 1.3s ease-in-out infinite;
 }
+/* Breathe just a touch: a tiny scale + a gentle glow swing — only slightly more
+   noticeable than a static ring, so it never distracts from reading the cards. */
 @keyframes avatar-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px var(--gold-2), 0 0 14px 2px rgba(246, 201, 69, 0.6); }
-  50% { box-shadow: 0 0 0 5px var(--gold-1), 0 0 30px 8px rgba(246, 201, 69, 1); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--gold-2), 0 0 10px 1px rgba(246, 201, 69, 0.45); transform: scale(1); }
+  50% { box-shadow: 0 0 0 5px var(--gold-1), 0 0 18px 3px rgba(246, 201, 69, 0.7); transform: scale(1.03); }
 }
 
 /* ---- Opponent hand (top) ---- */
@@ -123,6 +143,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* Raise the deck (+ its count) so it sits clear of the special-card + sticker
+   buttons stacked in the left column below it (由下到上:頭像→貼圖→特殊牌→發牌).
+   Stage-relative so it tracks the board. */
+.game__deck {
+  transform: translateY(calc(-0.16 * var(--stage-h, 100vh)));
 }
 /* Fixed grid: seven fixed-width cells spread across a narrowed band. Adding
    cards to a pile never changes cell size, so the board never reflows/jitters. */
@@ -193,17 +219,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: pulse 1.2s ease-in-out infinite;
+  animation: pulse 1.15s ease-in-out infinite;
   padding: 0;
 }
+/* A gentle "place here" call: a small glow swing + a slight scale — noticeable
+   but not distracting. */
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 rgba(246, 201, 69, 0.5); }
-  50% { box-shadow: 0 0 14px 2px rgba(246, 201, 69, 0.75); }
+  0%, 100% { box-shadow: 0 0 0 rgba(246, 201, 69, 0.45); transform: scale(1); }
+  50% { box-shadow: 0 0 13px 2px rgba(246, 201, 69, 0.75); transform: scale(1.025); }
 }
 .slot__hint {
   position: absolute;
   bottom: -15px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gold-1);
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
@@ -231,15 +259,15 @@
   width: 100%;
   height: clamp(106px, calc(0.21 * var(--stage-h, 100vh)), 154px);
   margin-top: clamp(52px, calc(0.20 * var(--stage-h, 100vh)), 150px);
-  transform: translate(-10px, 15px); /* nudge the pair left & down */
+  transform: translate(-10px, 30px); /* nudge the pair left & down (down a touch more, clears the N 張 bubble) */
 }
 .sortbtn {
   position: absolute;
   width: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
   height: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
 }
-.sortbtn:nth-child(1) { left: 0; bottom: 0; }            /* field: lower-left */
-.sortbtn:nth-child(2) { right: 0; top: 0; }              /* direction: upper-right */
+.sortbtn:nth-child(1) { left: 0; bottom: 8px; }          /* field (點數/花色): nudged down a touch */
+.sortbtn:nth-child(2) { right: 0; top: -16px; }          /* direction (大↔小): lifted up */
 
 /* ---- System prompt: black translucent pill centered on the coin row ---- */
 .game__status {
@@ -249,14 +277,14 @@
   transform: translate(-50%, -50%);
   z-index: 9;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.44);
-  color: rgba(255, 255, 255, 0.82);
-  padding: 6px 18px;
+  background: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.98);
+  padding: 7px 16px;
   border-radius: 999px;
-  font-size: clamp(14px, 2.3vw, 18px);
-  font-weight: 700;
+  font-size: clamp(16px, 2.7vw, 22px);
+  font-weight: 800;
   white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 .game__action {
   position: absolute;
@@ -282,11 +310,186 @@
   justify-content: center;
   align-items: flex-end;
   padding: 0 var(--reserve-r) clamp(4px, 1vh, 12px) var(--reserve);
+  /* The reserved side-padding (z5) overlaps the sort buttons / deck below it and
+     was eating their clicks. Let clicks pass through the padding; the actual
+     cards re-enable pointer events. */
+  pointer-events: none;
 }
-.hand { position: relative; }
+.hand { position: relative; pointer-events: auto; }
 .hand__slot { position: absolute; bottom: 0; }
 .hand__card { cursor: pointer; border-radius: var(--card-radius); }
 .hand__card--sel { filter: drop-shadow(0 0 9px var(--gold-2)) drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45)); }
+/* special-card targeting: valid targets glow, the rest dim out */
+.hand__card--target { filter: drop-shadow(0 0 10px #6fe0ff) drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45)); }
+.hand__card--dim { filter: grayscale(0.6) brightness(0.72); cursor: default; opacity: 0.7; }
+
+/* ---- Special cards (Phase C) ---- */
+.game__special-trigger {
+  position: absolute;
+  /* Parked in the clear left-column gap between the deck (above) and the
+     bottom-left avatar (below) so the avatar never covers it. Stage-relative so
+     it tracks the bounded-fluid board on both phone and desktop. */
+  left: clamp(6px, 1.4vw, 20px);
+  bottom: clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px);
+  z-index: 42;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  border: 2px solid #6d3f8a;
+  background: linear-gradient(180deg, #a06fd0, #7a45b0);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(13px, 2vw, 17px);
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  animation: spx-pulse 2s ease-in-out infinite;
+}
+.game__special-trigger:active { transform: translateY(1px); }
+.game__special-trigger--used {
+  filter: grayscale(0.85) brightness(0.68);
+  opacity: 0.55;
+  animation: none;
+  cursor: default;
+}
+.game__special-trigger__star { color: var(--gold-1); font-size: 1.1em; }
+
+/* ---- Sticker (貼圖) button — same pill language as 特殊牌, teal accent, parked
+   just above the bottom-left avatar (由下到上:頭像→貼圖→特殊牌→發牌). ---- */
+.game__emote-trigger {
+  position: absolute;
+  left: clamp(6px, 1.4vw, 20px);
+  bottom: clamp(104px, calc(0.31 * var(--stage-h, 100vh)), 190px);
+  z-index: 42;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  border: 2px solid var(--wood-edge);
+  background: var(--wood-tex);
+  background-size: cover;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(13px, 2vw, 17px);
+  box-shadow: 0 2px 0 var(--wood-edge), 0 5px 10px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.game__emote-trigger:active { transform: translateY(1px); }
+.game__emote-trigger__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+}
+.game__emote-trigger__icon svg { width: 100%; height: 100%; display: block; }
+/* "already used" hint bubble — sits just above the trigger, styled like the
+   opponent's "N 張" speech bubble. */
+.game__special-tip {
+  position: absolute;
+  left: clamp(6px, 1.4vw, 20px);
+  bottom: calc(clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px) + 44px);
+  z-index: 43;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-weight: 800;
+  font-size: clamp(12px, 2vw, 15px);
+  padding: 6px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.game__special-tip::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 22px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid rgba(0, 0, 0, 0.82);
+}
+@keyframes spx-pulse {
+  0%, 100% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
+  50% { box-shadow: 0 3px 16px rgba(180, 120, 230, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
+}
+
+.game__timer {
+  position: absolute;
+  top: clamp(6px, 1.6vh, 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000; /* on top of everything, incl. modals */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.66);
+  color: var(--gold-1);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(20px, 3.4vw, 28px);
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.game__timer--low {
+  color: #ff7a7a;
+  background: rgba(60, 0, 0, 0.66);
+  animation: spx-pulse 1s ease-in-out infinite;
+}
+/* Pause/resume the turn timer — a round wooden button above the sort pair. */
+.game__pausebtn {
+  position: absolute;
+  right: clamp(6px, 1.4vw, 20px);
+  top: clamp(96px, calc(0.33 * var(--stage-h, 100vh)), 208px); /* lowered so it clears the opponent's "N 張" bubble */
+  width: clamp(44px, calc(0.085 * var(--stage-h, 100vh)), 60px);
+  height: clamp(44px, calc(0.085 * var(--stage-h, 100vh)), 60px);
+  z-index: 46;
+  cursor: pointer;
+}
+.game__pausebtn:active {
+  transform: translateY(1px);
+}
+.game__pausebtn--used {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.game__special-banner {
+  position: absolute;
+  left: 50%;
+  top: clamp(56px, 12vh, 96px);
+  transform: translateX(-50%);
+  z-index: 32;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 18px;
+  border-radius: 999px;
+  background: rgba(35, 12, 48, 0.92);
+  color: #fff;
+  font-weight: 800;
+  font-size: clamp(13px, 2.2vw, 17px);
+  white-space: nowrap;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
+}
+.game__special-cancel {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+.game__special-cancel:active { transform: translateY(1px); }
 
 /* ---- Opponent-disconnected overlay ---- */
 .net-overlay {
@@ -375,6 +578,7 @@
 .showdown__meta { display: flex; flex-direction: column; min-width: 66px; }
 .showdown__label { font-size: 13px; color: var(--parch-muted); }
 .showdown__hand { font-size: 18px; font-weight: 800; }
+.showdown__wild { font-size: 12px; color: var(--parch-muted); margin-top: 1px; }
 .showdown__won {
   margin-left: auto;
   display: flex;

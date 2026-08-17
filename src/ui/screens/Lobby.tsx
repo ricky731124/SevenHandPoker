@@ -16,7 +16,7 @@ import './Lobby.css'
  */
 export default function Lobby({ mode }: { mode: 'host' | 'guest'; roomId?: string }) {
   const go = useAppStore((s) => s.go)
-  const { phase, code, error, leave } = useNetStore()
+  const { phase, code, error, leave, room } = useNetStore()
   const [copied, setCopied] = useState(false)
 
   const back = () => {
@@ -51,6 +51,12 @@ export default function Lobby({ mode }: { mode: 'host' | 'guest'; roomId?: strin
   return (
     <Card>
       <h1 className="lobby__title">{connected ? '對手已加入！' : mode === 'host' ? '建立對戰' : '加入對戰'}</h1>
+
+      {room && (
+        <p className="lobby__msg">
+          {room.roomType === 'special' ? '特殊牌房' : '一般房'} · 限時 {room.timeLimit ?? 50} 秒
+        </p>
+      )}
 
       <div className="lobby__seats">
         <Seat player="p1" label={`房主${mode === 'host' ? '（你）' : ''}`} on />

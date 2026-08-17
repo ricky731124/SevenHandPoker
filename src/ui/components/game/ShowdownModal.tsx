@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import type { Slot, PlayerId, Showdown } from '../../../game/state'
 import type { Card as TCard } from '../../../game/cards'
+import { SUIT_SYMBOL, SUIT_IS_RED, rankLabel } from '../../../game/cards'
 import Modal from '../Modal'
 import Button from '../Button'
 import Card from '../Card'
@@ -55,13 +56,16 @@ export default function ShowdownModal({
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const myName = me === 'p1' ? showdown.p1Name : showdown.p2Name
   const foeName = foe === 'p1' ? showdown.p1Name : showdown.p2Name
-  const iWon = showdown.winner === me
+  const myWild = me === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
+  const foeWild = foe === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
+  const tie = showdown.winner === 'both'
+  const iWon = tie || showdown.winner === me
 
   return (
     <Modal open={open} onClose={onClose} locked title={`第 ${showdown.slot + 1} 格・對決！`} width={520} panelClass="modal__panel--showdown">
-      <Row label="對手" name={foeName} cards={slot[foe]} won={!iWon} />
-      <div className="showdown__vs accent">VS</div>
-      <Row label="你" name={myName} cards={slot[me]} won={iWon} />
+      <Row label="對手" name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
+      <div className="showdown__vs accent">{tie ? '平手・雙方各得' : 'VS'}</div>
+      <Row label="你" name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
         <Button onClick={onClose}>繼續</Button>
       </div>
@@ -69,12 +73,36 @@ export default function ShowdownModal({
   )
 }
 
-function Row({ label, name, cards, won }: { label: string; name: string; cards: TCard[]; won: boolean }) {
+function Row({ label, name, cards, won, wildAs }: { label: string; name: string; cards: TCard[]; won: boolean; wildAs?: TCard }) {
+  // A card whose suit was changed by a suit-bloom special (at most one per match).
+  const resuited = cards.find((c) => c.resuitFrom)
   return (
     <div className={`showdown__row${won ? ' showdown__row--win' : ''}`}>
       <div className="showdown__meta">
         <span className="showdown__label">{label}</span>
         <span className="showdown__hand accent">{name}</span>
+        {wildAs && (
+          <span className="showdown__wild">
+            鬼牌→
+            <span style={{ color: SUIT_IS_RED[wildAs.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
+              {SUIT_SYMBOL[wildAs.suit]}
+              {rankLabel(wildAs.rank)}
+            </span>
+          </span>
+        )}
+        {resuited && (
+          <span className="showdown__wild">
+            <span style={{ color: SUIT_IS_RED[resuited.resuitFrom!] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
+              {SUIT_SYMBOL[resuited.resuitFrom!]}
+              {rankLabel(resuited.rank)}
+            </span>
+            →
+            <span style={{ color: SUIT_IS_RED[resuited.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
+              {SUIT_SYMBOL[resuited.suit]}
+              {rankLabel(resuited.rank)}
+            </span>
+          </span>
+        )}
       </div>
       <div className="showdown__cards">
         {cards.map((c) => (

@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { PlayerId } from '../../../game/state'
+import type { Seat } from '../../hooks/useSeats'
 import PlayerAvatar from '../PlayerAvatar'
 import { sfx } from '../../../audio/sfx'
 
-/** Opening ceremony: a two-faced coin (cat on front, bird on back) flips and
- *  lands on the first picker. */
+/** Opening ceremony: a two-faced coin (p1 on front, p2 on back) flips and lands
+ *  on the first picker. Faces show each seat's resolved avatar. */
 export default function CoinToss({
   firstPicker,
   me,
+  p1,
+  p2,
   onDone,
 }: {
   firstPicker: PlayerId
   me: PlayerId
+  p1: Seat
+  p2: Seat
   onDone: () => void
 }) {
   const [phase, setPhase] = useState<'spin' | 'result'>('spin')
@@ -32,7 +37,8 @@ export default function CoinToss({
 
   // Land showing the first picker's face (p1 on front / p2 on back).
   const finalFlip = firstPicker === 'p1' ? 1800 : 1980
-  const label = firstPicker === me ? '你先攻！' : '對手先攻'
+  const pickerName = firstPicker === 'p1' ? p1.name : p2.name
+  const label = firstPicker === me ? '你先攻！' : `${pickerName} 先攻`
 
   return (
     <div className="cointoss">
@@ -45,10 +51,10 @@ export default function CoinToss({
         style={{ transformStyle: 'preserve-3d' }}
       >
         <div className="cointoss__face cointoss__face--front">
-          <PlayerAvatar player="p1" size={104} bare />
+          <PlayerAvatar avatarId={p1.avatarId} size={104} bare />
         </div>
         <div className="cointoss__face cointoss__face--back">
-          <PlayerAvatar player="p2" size={104} bare />
+          <PlayerAvatar avatarId={p2.avatarId} size={104} bare />
         </div>
       </motion.div>
       {phase === 'result' && (

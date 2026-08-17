@@ -9,7 +9,9 @@ import {
   getClientId,
   type Role,
   type Room,
+  type RoomType,
 } from '../net/room'
+import { usePlatformStore } from './platformStore'
 
 export type NetPhase = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error'
 
@@ -23,7 +25,7 @@ interface NetStore {
   _presenceUnsub: (() => void) | null
 
   /** host: create a room and wait for a guest */
-  create: () => Promise<void>
+  create: (roomType?: RoomType, timeLimit?: number) => Promise<void>
   /** guest: join an existing room by code */
   join: (code: string) => Promise<void>
   /** re-subscribe to an existing room after an accidental reload (no re-join) */
@@ -41,12 +43,12 @@ export const useNetStore = create<NetStore>((set, get) => ({
   _unsub: null,
   _presenceUnsub: null,
 
-  create: async () => {
+  create: async (roomType = 'normal', timeLimit = 50) => {
     get()._unsub?.()
     get()._presenceUnsub?.()
     set({ phase: 'connecting', error: null, role: 'host', code: null, room: null })
     try {
-      const { code } = await createRoom()
+      const { code } = await createRoom(usePlatformStore.getState().uid, roomType, timeLimit)
       saveSession(code, 'host')
       const unsub = subscribeRoom(code, (room) => update(set, get, room))
       const presence = maintainPresence(code, 'host')
@@ -61,7 +63,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
     get()._presenceUnsub?.()
     set({ phase: 'connecting', error: null, role: 'guest', code, room: null })
     try {
-      await joinRoom(code)
+      await joinRoom(code, usePlatformStore.getState().uid)
       saveSession(code, 'guest')
       const unsub = subscribeRoom(code, (room) => update(set, get, room))
       const presence = maintainPresence(code, 'guest')

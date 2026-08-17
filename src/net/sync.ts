@@ -1,5 +1,6 @@
 import type { Card } from '../game/cards'
-import type { GameState, PlayerId, Phase, Showdown, WinReason } from '../game/state'
+import type { GameState, PlayerId, Phase, Showdown, SlotOwner, WinReason } from '../game/state'
+import type { SpecialCardId } from '../game/specialCards'
 
 /**
  * Networked game (Phase 2). The HOST owns the authoritative GameState and writes
@@ -20,9 +21,11 @@ export type Intent =
   | { type: 'pick'; ids: string[]; sel?: LiveSel }
   | { type: 'place'; slot: number }
   | { type: 'continue' }
+  // guest activates a special card; host arbitrates. targetId only for swap/suit.
+  | { type: 'special'; card: SpecialCardId; targetId?: string }
 
 export interface SyncSlot {
-  owner: PlayerId | null
+  owner: SlotOwner // includes 'both' for a joker tie
   p1Count: number
   /** host-side (p1) real cards — only once the slot is revealed (owner set) */
   p1Cards: Card[] | null
@@ -45,11 +48,26 @@ export interface SyncGame {
   /** host's pushed-out selection (indices) so the guest can render it; only while the host has a pending pick */
   foeSel: { total: number; idx: number[] } | null
   lastShowdown: Showdown | null
+  /** one-shot special-card budget per player, so the guest can grey its button */
+  specialUsed: Record<PlayerId, boolean>
 }
 
 const HIDDEN: Card = { id: '_', suit: 'S', rank: 2 }
 function hidden(n: number, prefix: string): Card[] {
   return Array.from({ length: Math.max(0, n) }, (_, i) => ({ ...HIDDEN, id: `${prefix}${i}` }))
+}
+
+/**
+ * RTDB rejects `undefined` anywhere in a `set()`. A Showdown's p1WildAs/p2WildAs
+ * are undefined whenever that side had no joker (i.e. almost every showdown), so
+ * strip the undefined keys before writing — otherwise the whole guest-view write
+ * throws and the guest freezes at the showdown.
+ */
+function cleanShowdown(sd: Showdown): Showdown {
+  const out: Showdown = { slot: sd.slot, winner: sd.winner, p1Name: sd.p1Name, p2Name: sd.p2Name }
+  if (sd.p1WildAs) out.p1WildAs = sd.p1WildAs
+  if (sd.p2WildAs) out.p2WildAs = sd.p2WildAs
+  return out
 }
 
 /** Host → RTDB. `foeSel` is the host's pushed-out pick (only meaningful while the host has a pending pick). */
@@ -72,7 +90,8 @@ export function serializeForGuest(engine: GameState, foeSel: { total: number; id
     })),
     pending: engine.pendingPick ? { by: engine.pendingPick.by, count: engine.pendingPick.cards.length } : null,
     foeSel: engine.pendingPick?.by === 'p1' ? foeSel : null,
-    lastShowdown: engine.lastShowdown,
+    lastShowdown: engine.lastShowdown ? cleanShowdown(engine.lastShowdown) : null,
+    specialUsed: engine.specialUsed,
   }
 }
 
@@ -104,6 +123,10 @@ export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: {
     firstPicker: g.firstPicker,
     winner: g.winner ?? null,
     winReason: g.winReason ?? null,
+    // Guest never runs checkWin (host is authoritative); host is p1 online.
+    tieBreakWinner: 'p1',
+    // Host-arbitrated special-card budget (RTDB may drop an all-false object).
+    specialUsed: g.specialUsed ?? { p1: false, p2: false },
   }
   // RTDB drops empty arrays, so a foeSel that was {total, idx:[]} reads back
   // without idx — normalise so the UI never touches idx.length on undefined.

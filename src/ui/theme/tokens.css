@@ -60,6 +60,8 @@
   /* --- Type --- */
   --font-display: 'Huninn', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   --font-body: 'Huninn', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  /* American comic display face (for the BATTLE splash etc.) */
+  --font-comic: 'Bangers', 'Huninn', system-ui, sans-serif;
 
   /* --- Radii / spacing --- */
   --r-sm: 8px;

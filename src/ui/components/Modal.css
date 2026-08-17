@@ -9,8 +9,15 @@
   justify-content: center;
   padding: 12px;
 }
+/* Light scrim: for peek/spy, keep the board (esp. your own hand) clearly
+   visible behind — no blur, low dim. */
+.modal__scrim--light {
+  background: rgba(20, 4, 8, 0.22);
+  backdrop-filter: none;
+}
 
 .modal__panel {
+  position: relative; /* positioning context for in-panel absolute elements (e.g. a back button) */
   width: 100%;
   background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
   border: 3px solid var(--parch-edge);

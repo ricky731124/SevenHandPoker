@@ -1,87 +1,32 @@
-import type { Card, Rank, Suit } from './cards'
 import { compareValue, evaluate } from './evaluate'
 import {
   applyPick,
   applyPlace,
   emptySlotsFor,
+  isTargetable,
   otherPlayer,
+  ownsSlot,
+  suitTargets,
+  swapTargets,
   type GameState,
   type PlayerId,
 } from './state'
+import { getSpecialCard, type SpecialCardId } from './specialCards'
+import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
+import { bossPick, bossPlace, type BossRuntime } from './bossAI'
 
 /**
- * Single reasonable-difficulty AI.
+ * The default single-difficulty AI (used by 對戰電腦 and non-campaign play).
  *  - Pick: send the strongest coherent pile it can form (made hands first).
- *  - Place: put the human's incoming pile where it hurts least — steal a coin
- *    if possible, otherwise defer without handing one away, while nudging
- *    toward its own 3-in-a-row and away from the human's.
+ *  - Place: put the human's incoming pile where it hurts least.
+ *
+ * Campaign bosses pass a `boss` runtime to aiPick/aiPlace, which delegates to
+ * bossAI.ts (profile-driven strategies/skills). Without it, behaviour is exactly
+ * as before — existing callers and tests are unaffected.
  */
 
-function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {
-  const m = new Map<K, T[]>()
-  for (const x of arr) {
-    const k = key(x)
-    const g = m.get(k)
-    if (g) g.push(x)
-    else m.set(k, [x])
-  }
-  return m
-}
-
-/** Candidate piles (made hands) the AI could pick from its hand. */
-function candidatePiles(hand: Card[]): Card[][] {
-  const out: Card[][] = []
-  const byRank = groupBy(hand, (c) => c.rank)
-  const bySuit = groupBy(hand, (c) => c.suit)
-
-  const groups = [...byRank.values()]
-  const pairs = groups.filter((g) => g.length >= 2).sort((a, b) => b[0].rank - a[0].rank)
-  const trips = groups.filter((g) => g.length >= 3).sort((a, b) => b[0].rank - a[0].rank)
-  const quads = groups.filter((g) => g.length >= 4)
-
-  // quads / trips / pairs
-  for (const q of quads) out.push(q.slice(0, 4))
-  for (const t of trips) out.push(t.slice(0, 3))
-  for (const p of pairs) out.push(p.slice(0, 2))
-
-  // two pair
-  if (pairs.length >= 2) out.push([...pairs[0].slice(0, 2), ...pairs[1].slice(0, 2)])
-
-  // full house: a trip + a different pair
-  if (trips.length >= 1) {
-    const otherPair = pairs.find((p) => p[0].rank !== trips[0][0].rank)
-    if (otherPair) out.push([...trips[0].slice(0, 3), ...otherPair.slice(0, 2)])
-  }
-
-  // flush: 5 of a suit (highest)
-  for (const cards of bySuit.values()) {
-    if (cards.length >= 5) {
-      out.push([...cards].sort((a, b) => b.rank - a.rank).slice(0, 5))
-    }
-  }
-
-  // straight: any 5 consecutive distinct ranks (Ace high or wheel)
-  const straight = findStraight(hand)
-  if (straight) out.push(straight)
-
-  return out
-}
-
-function findStraight(hand: Card[]): Card[] | null {
-  const byRank = groupBy(hand, (c) => c.rank)
-  const has = (r: number) => byRank.get(r as Rank)?.[0]
-  // Ace can be high (14) or low (1) — check windows 10..14 down to A2345
-  const windows: number[][] = []
-  for (let hi = 14; hi >= 5; hi--) windows.push([hi, hi - 1, hi - 2, hi - 3, hi - 4])
-  windows.push([5, 4, 3, 2, 14]) // wheel
-  for (const w of windows) {
-    const cards = w.map((r) => has(r === 1 ? 14 : r)).filter(Boolean) as Card[]
-    if (cards.length === 5) return cards
-  }
-  return null
-}
-
-export function aiPick(state: GameState, me: PlayerId): string[] {
+export function aiPick(state: GameState, me: PlayerId, boss?: BossRuntime): string[] {
+  if (boss) return bossPick(state, me, boss)
   const hand = state.hands[me]
   const cands = candidatePiles(hand)
   if (cands.length > 0) {
@@ -91,21 +36,15 @@ export function aiPick(state: GameState, me: PlayerId): string[] {
     }
     return best.map((c) => c.id)
   }
-  // Fallback: the two highest cards as a high-card pile (1 if only one left).
-  const sorted = [...hand].sort((a, b) => b.rank - a.rank || suitRank(b.suit) - suitRank(a.suit))
-  return sorted.slice(0, Math.min(2, sorted.length)).map((c) => c.id)
+  return fallbackPile(hand).map((c) => c.id)
 }
 
-function suitRank(s: Suit): number {
-  return { C: 0, D: 1, H: 2, S: 3 }[s]
-}
-
-export function aiPlace(state: GameState, me: PlayerId): number {
-  // BLIND placement: the AI must not peek at the incoming pile's values
-  // (the human places blind too). It routes the enemy pile toward slots where
-  // its OWN pile is strong (likely to win the showdown), defers into empty
-  // slots otherwise, and watches line-building on both sides.
-  const picker = state.pendingPick!.by // the human (foe)
+export function aiPlace(state: GameState, me: PlayerId, boss?: BossRuntime): number {
+  if (boss) return bossPlace(state, me, boss)
+  // BLIND placement: the AI must not peek at the incoming pile's values (the
+  // human places blind too). It routes the enemy pile toward slots where its
+  // OWN pile is strong, defers into empty slots otherwise, watching both lines.
+  const picker = state.pendingPick!.by
   const empties = emptySlotsFor(state, picker)
 
   let best = empties[0]
@@ -115,18 +54,13 @@ export function aiPlace(state: GameState, me: PlayerId): number {
     let score = 0
 
     if (myPile.length > 0) {
-      // Strong own pile → routing the enemy here likely wins AI a coin.
       score += pileStrength(myPile) * 40
-      // If winning here would advance the AI's own line, nudge higher.
       if (adjacency(state, me, i) > 0) score += 120
     } else {
-      // Deferred showdown: safe baseline, hands no coin over now.
       score += 150
     }
 
-    // Prefer central slots (more line flexibility), mild.
     score -= Math.abs(3 - i)
-    // Discourage clustering the human's coins toward a line.
     score -= adjacency(state, picker, i) * 20
 
     if (score > bestScore) {
@@ -137,27 +71,69 @@ export function aiPlace(state: GameState, me: PlayerId): number {
   return best
 }
 
-/** Coarse strength 0..~8.9 for routing decisions. */
-function pileStrength(pile: Card[]): number {
-  const v = evaluate(pile)
-  return v.category + (v.rankSeq[0] ?? 0) / 15
-}
-
 /** Count of `owner`'s owned coins adjacent to slot i (line-building signal). */
-function adjacency(state: GameState, owner: PlayerId, i: number): number {
+export function adjacency(state: GameState, owner: PlayerId, i: number): number {
   let n = 0
-  if (state.slots[i - 1]?.owner === owner) n++
-  if (state.slots[i + 1]?.owner === owner) n++
+  const prev = state.slots[i - 1]
+  const nextS = state.slots[i + 1]
+  if (prev && ownsSlot(prev, owner)) n++
+  if (nextS && ownsSlot(nextS, owner)) n++
   return n
 }
 
+/**
+ * Should the AI activate one of its carried special cards this pick turn?
+ * Returns the card + target to use, or null to hold. (Default policy; campaign
+ * bosses get richer per-boss special use in a later phase.)
+ *
+ * Minimal-but-real policy (SPEC §15 "選 3 用 1", one activation per match): the
+ * AI only spends its one-shot on cards that change the BOARD in its favour —
+ * suit-bloom toward a real flush cluster, or swap dumping a low dead card. Info
+ * cards (偷窺/讓我看看) give it nothing to act on, so it never wastes the one-shot.
+ */
+export function aiChooseSpecial(
+  state: GameState,
+  me: PlayerId,
+  loadout: SpecialCardId[],
+): { card: SpecialCardId; targetId: string } | null {
+  if (state.specialUsed[me]) return null
+  const hand = state.hands[me]
+
+  let best: { card: SpecialCardId; targetId: string; cluster: number } | null = null
+  for (const id of loadout) {
+    const def = getSpecialCard(id)
+    if (!def?.suit) continue
+    const targets = suitTargets(state, me, def.suit)
+    if (targets.length === 0) continue
+    const have = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
+    const cluster = have + 1
+    if (cluster >= 3 && (!best || cluster > best.cluster)) {
+      const victim = targets.reduce((lo, c) => (c.rank < lo.rank ? c : lo), targets[0])
+      best = { card: id, targetId: victim.id, cluster }
+    }
+  }
+  if (best) return { card: best.card, targetId: best.targetId }
+
+  if (loadout.includes('swap') && state.deck.length > 0) {
+    const targets = swapTargets(state, me)
+    const rankCount = new Map<number, number>()
+    for (const c of targets) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
+    const deadLows = targets.filter((c) => c.rank <= 6 && (rankCount.get(c.rank) ?? 0) === 1)
+    if (deadLows.length) {
+      const victim = deadLows.reduce((lo, c) => (c.rank < lo.rank ? c : lo), deadLows[0])
+      return { card: 'swap', targetId: victim.id }
+    }
+  }
+  return null
+}
+
 /** Convenience: apply one full AI turn action given the current phase. */
-export function aiStep(state: GameState, me: PlayerId): GameState {
+export function aiStep(state: GameState, me: PlayerId, boss?: BossRuntime): GameState {
   if (state.phase === 'pick' && state.turn === me) {
-    return applyPick(state, me, aiPick(state, me))
+    return applyPick(state, me, aiPick(state, me, boss))
   }
   if (state.phase === 'place' && state.pendingPick && otherPlayer(state.pendingPick.by) === me) {
-    return applyPlace(state, me, aiPlace(state, me))
+    return applyPlace(state, me, aiPlace(state, me, boss))
   }
   return state
 }

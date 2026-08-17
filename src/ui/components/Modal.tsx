@@ -14,17 +14,19 @@ interface Props {
   largeTitle?: boolean
   /** extra class on the panel (e.g. per-dialog desktop sizing) */
   panelClass?: string
+  /** extra class on the scrim (e.g. a lighter backdrop so the board stays visible) */
+  scrimClass?: string
 }
 
 /**
  * Modal with an enter animation only — it unmounts immediately on close
  * (no exit animation) so a throttled rAF can never leave a stuck overlay.
  */
-export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass }: Props) {
+export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass }: Props) {
   if (!open) return null
   return (
     <motion.div
-      className="modal__scrim"
+      className={`modal__scrim${scrimClass ? ` ${scrimClass}` : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       onClick={() => !locked && onClose?.()}

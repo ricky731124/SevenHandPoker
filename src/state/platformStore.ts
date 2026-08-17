@@ -1,0 +1,541 @@
+import { create } from 'zustand'
+import { isFirebaseConfigured } from '../firebaseApp'
+import {
+  onAuth,
+  ensureUser,
+  registerLink,
+  login as authLogin,
+  loginWithGoogle as authLoginWithGoogle,
+  logout as authLogout,
+  validateUsername,
+  validatePassword,
+  validateDisplayName,
+} from '../platform/auth'
+import {
+  ensureProfile,
+  subscribeProfile,
+  fetchProfile,
+  reserveUsername,
+  fetchDisplayName,
+  setDisplayName,
+  setDiamondsEarned,
+  grantPvpReward,
+  todayStr,
+  markTutorialSeen as persistTutorialSeen,
+  setUsername,
+  setSpecialLoadout,
+  setAvatar,
+  setEquippedAchievements,
+  unlockAll,
+  recordStageClear as persistStageClear,
+  writeMatchRecord as persistMatchRecord,
+  buySticker as persistBuySticker,
+  saveActiveSeries as persistActiveSeries,
+  type Profile,
+  type ActiveSeries,
+} from '../platform/profile'
+import { writeLeaderboard } from '../platform/leaderboard'
+import { ALL_SPECIAL_CARD_IDS, getSpecialCard } from '../game/specialCards'
+import { subStageOrder } from '../game/campaign'
+import { ALL_AVATAR_IDS, AVATARS } from '../ui/components/PlayerAvatar'
+import { ACHIEVEMENTS, detectUnlocks, type AchMetric, type HandTypeMetric } from '../game/achievements'
+import { useAchievementStore } from './achievementStore'
+import { STICKER_PRICE, ALL_PAID_STICKER_IDS } from '../game/stickers'
+
+/** First-clear reward for a campaign sub-stage. */
+export interface StageReward {
+  card?: string
+  avatar?: string
+  diamonds: number
+}
+
+// The owner's test account: everything unlocked so it can exercise all content.
+const TEST_ACCOUNT = 'ricky'
+
+// PvP-win diamond reward: +5 per win, up to 3 wins/day (15 鑽) — see Shop 文案.
+const PVP_WIN_REWARD = 5
+const PVP_DAILY_CAP = 15
+
+/** Result of a PvP win's diamond grant, for the end screen's「+5 💎」line. */
+export interface PvpReward {
+  amount: number
+  /** how many rewarded wins today (1..3) */
+  count: number
+  /** true if today's cap was already hit → this win earned nothing */
+  capped: boolean
+}
+
+/** Build the full achievement-metric map from a stats blob (missing → 0). */
+function statMetrics(s: Record<string, number>): Record<AchMetric, number> {
+  return {
+    streak: s.pvpBestStreak ?? 0,
+    games: s.pvpGames ?? 0,
+    wins: s.pvpWins ?? 0,
+    soloGames: s.soloGames ?? 0,
+    soloWins: s.soloWins ?? 0,
+    flush: s.bestFlush ?? 0,
+    fullHouse: s.bestFullHouse ?? 0,
+    quads: s.bestQuads ?? 0,
+    straightFlush: s.bestStraightFlush ?? 0,
+    sfDuel: s.sfDuel ?? 0,
+  }
+}
+
+/**
+ * Platform account state (portable). Bridges Firebase Auth + profile to the UI.
+ * See docs/PLATFORM-SPEC.md §2–§4.
+ */
+
+export type AuthResult = { ok: true } | { ok: false; error: string }
+
+interface PlatformStore {
+  ready: boolean // auth listener attached (or Firebase not configured)
+  uid: string | null
+  isAnonymous: boolean
+  /** Login account name (ASCII) — password accounts only; used for login + the
+   *  test-account check. NOT the in-game name (that's displayName). */
+  username: string | null
+  /** In-game / leaderboard name (free-form, can be Chinese). Falls back to
+   *  username for legacy password accounts that predate displayName. */
+  displayName: string | null
+  /** The auth email (Google accounts) — shown as the read-only account label.
+   *  Game accounts use a synthetic email so they show `username` instead. */
+  email: string | null
+  profile: Profile | null
+  _authUnsub: (() => void) | null
+  _profileUnsub: (() => void) | null
+
+  /** Attach the auth listener once (call on app boot). Does NOT sign anyone in. */
+  init: () => void
+  /** Lazily create an anonymous account + profile at a persistence-worthy action. */
+  ensureAccount: () => Promise<void>
+  register: (username: string, password: string) => Promise<AuthResult>
+  login: (username: string, password: string) => Promise<AuthResult>
+  /** Google sign-in (no password). `needsName` = first time, must pick a display
+   *  name next (chooseDisplayName); `suggestedName` prefills it from the Google
+   *  account name. */
+  loginWithGoogle: () => Promise<{ ok: true; needsName: boolean; suggestedName: string } | { ok: false; error: string }>
+  /** Set the display name for a freshly signed-in Google account (first time). */
+  chooseDisplayName: (name: string) => Promise<AuthResult>
+  /** Change the display name later (個人化設定). Ensures an account first. */
+  saveDisplayName: (name: string) => Promise<AuthResult>
+  logout: () => Promise<void>
+  /** Save the special-card loadout (ensures an account exists first). */
+  saveLoadout: (ids: string[]) => Promise<void>
+  /** Save the equipped avatar (ensures an account exists first). */
+  saveAvatar: (id: string) => Promise<void>
+  /** Save the displayed achievements (≤3 family ids; ensures an account first). */
+  saveAchievements: (ids: string[]) => Promise<void>
+  /** Persist a campaign sub-stage clear + grant its first-clear reward. */
+  recordStageClear: (subId: string, reward: StageReward) => Promise<void>
+  /** Tally a finished match: 戰績 (pvp/solo 場次·勝·連勝) + 連勝/場次/勝場成就。
+   *  牌型成就改在送出當下即時判定(reportHandPlayed),不在這裡算。 */
+  recordMatchResult: (category: 'pvp' | 'solo', won: boolean) => Promise<void>
+  /** The last PvP win's diamond grant (for the end screen line); null on a loss. */
+  lastPvpReward: PvpReward | null
+  /** 送出一疊牌時即時回報其牌型的「單場累計數」;跨越門檻就當場解鎖 + 彈通知。 */
+  reportHandPlayed: (metric: HandTypeMetric, matchCount: number) => Promise<void>
+  /** A showdown revealed 同花順 vs 同花順 → tally 狹路相逢 (may unlock + notify). */
+  reportSfDuel: () => Promise<void>
+  /** Buy a sticker with 鑽石 (checks funds + ownership). */
+  buySticker: (id: string) => Promise<{ ok: boolean; error?: string }>
+  /** Save (or clear) the in-progress BO series for cross-session resume. */
+  saveActiveSeries: (series: ActiveSeries | null) => Promise<void>
+  /** Mark the tutorial as entered (unlocks 第1關). Ensures an account first. */
+  markTutorialSeen: () => Promise<void>
+}
+
+export const usePlatformStore = create<PlatformStore>((set, get) => ({
+  ready: false,
+  uid: null,
+  isAnonymous: false,
+  username: null,
+  displayName: null,
+  email: null,
+  profile: null,
+  lastPvpReward: null,
+  _authUnsub: null,
+  _profileUnsub: null,
+
+  init: () => {
+    if (get()._authUnsub) return
+    if (!isFirebaseConfigured()) {
+      set({ ready: true })
+      return
+    }
+    const unsub = onAuth((user) => {
+      get()._profileUnsub?.()
+      if (!user) {
+        set({ uid: null, isAnonymous: false, username: null, displayName: null, email: null, profile: null, _profileUnsub: null, ready: true })
+        return
+      }
+      set({ uid: user.uid, isAnonymous: user.isAnonymous, email: user.email ?? null, ready: true })
+      void ensureProfile(user.uid, user.isAnonymous)
+      const punsub = subscribeProfile(user.uid, (p) => {
+        set({ profile: p, username: p?.username ?? null, displayName: p?.displayName ?? p?.username ?? null })
+        // Test account: keep everything unlocked (idempotent — only writes when
+        // something is still missing, so the resulting update doesn't loop).
+        if (p?.username === TEST_ACCOUNT) {
+          const needCard = ALL_SPECIAL_CARD_IDS.some((id) => !p.unlocked.specialCards[id])
+          const needAv = ALL_AVATAR_IDS.some((id) => !p.unlocked.avatars[id])
+          const needStk = ALL_PAID_STICKER_IDS.some((id) => !p.unlocked.emojis?.[id])
+          if (needCard || needAv || needStk) void unlockAll(user.uid, ALL_SPECIAL_CARD_IDS, ALL_AVATAR_IDS, ALL_PAID_STICKER_IDS)
+        }
+      })
+      set({ _profileUnsub: punsub })
+    })
+    set({ _authUnsub: unsub })
+  },
+
+  ensureAccount: async () => {
+    if (!isFirebaseConfigured()) return
+    const user = await ensureUser()
+    await ensureProfile(user.uid, user.isAnonymous)
+  },
+
+  register: async (username, password) => {
+    const ve = validateUsername(username) ?? validatePassword(password)
+    if (ve) return { ok: false, error: ve }
+    try {
+      const user = await registerLink(username, password)
+      // linkWithCredential upgrades the same uid in place — onAuthStateChanged
+      // does NOT fire, so push the now-registered state immediately (otherwise
+      // the top-left stays "登入/註冊" until a refresh).
+      set({ isAnonymous: user.isAnonymous, email: user.email ?? null })
+      await ensureProfile(user.uid, false)
+      await reserveUsername(username, user.uid)
+      await setUsername(user.uid, username)
+      // Seed the display name from the account name; editable later in 個人化設定.
+      await setDisplayName(user.uid, username)
+      // Push any progress accrued while anonymous onto the leaderboards now.
+      void syncLeaderboard(user.uid)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: mapAuthError(e) }
+    }
+  },
+
+  login: async (username, password) => {
+    const ve = validateUsername(username)
+    if (ve) return { ok: false, error: ve }
+    try {
+      await authLogin(username, password)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: mapAuthError(e) }
+    }
+  },
+
+  loginWithGoogle: async () => {
+    try {
+      const user = await authLoginWithGoogle()
+      // Same-uid link (anonymous → Google) doesn't fire onAuthStateChanged;
+      // push the registered state now so the UI updates without a refresh.
+      set({ uid: user.uid, isAnonymous: user.isAnonymous, email: user.email ?? null })
+      await ensureProfile(user.uid, false)
+      const name = await fetchDisplayName(user.uid)
+      // Returning Google user: push existing progress to the boards now. A first-
+      // timer (no name yet) gets synced by chooseDisplayName instead.
+      if (name) void syncLeaderboard(user.uid)
+      // Prefill the name picker with the Google account name (often the player's
+      // real name, may be Chinese) so first-timers can just confirm.
+      return { ok: true, needsName: !name, suggestedName: (user.displayName ?? '').slice(0, 12) }
+    } catch (e) {
+      return { ok: false, error: mapAuthError(e) }
+    }
+  },
+
+  chooseDisplayName: async (name) => {
+    const ve = validateDisplayName(name)
+    if (ve) return { ok: false, error: ve }
+    const uid = get().uid
+    if (!uid) return { ok: false, error: '尚未登入，請重新登入' }
+    try {
+      await setDisplayName(uid, name)
+      void syncLeaderboard(uid)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: mapAuthError(e) }
+    }
+  },
+
+  saveDisplayName: async (name) => {
+    const ve = validateDisplayName(name)
+    if (ve) return { ok: false, error: ve }
+    if (!isFirebaseConfigured()) return { ok: false, error: '離線中無法變更' }
+    // Guests must not set a display name — it would make them look "logged in"
+    // (the top-left bar keys off a registered account). Log in first.
+    if (get().isAnonymous || !get().uid) return { ok: false, error: '登入後才能設定顯示名稱' }
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (!uid) return { ok: false, error: '需要帳號' }
+    try {
+      await setDisplayName(uid, name)
+      // Renaming updates the denormalized name already shown on the boards.
+      void syncLeaderboard(uid)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: mapAuthError(e) }
+    }
+  },
+
+  logout: async () => {
+    await authLogout()
+  },
+
+  markTutorialSeen: async () => {
+    if (!isFirebaseConfigured()) return
+    if (get().profile?.tutorialSeen) return // already set — no write
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (uid) await persistTutorialSeen(uid)
+  },
+
+  saveLoadout: async (ids) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (uid) await setSpecialLoadout(uid, ids)
+  },
+
+  saveAvatar: async (id) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (uid) {
+      await setAvatar(uid, id)
+      // Changing the avatar must refresh the denormalized 頭像 on the boards too
+      // (same as renaming does) — otherwise the leaderboard keeps the old art.
+      void syncLeaderboard(uid)
+    }
+  },
+
+  saveAchievements: async (ids) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (uid) await setEquippedAchievements(uid, ids)
+  },
+
+  recordStageClear: async (subId, reward) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (!uid) return
+    // maxStageCleared = the furthest-reached sub-stage (for map gating).
+    const cur = get().profile?.progress.maxStageCleared ?? null
+    const maxStageCleared = cur && subStageOrder(cur) >= subStageOrder(subId) ? cur : subId
+    await persistStageClear(uid, {
+      subId,
+      maxStageCleared,
+      cardId: reward.card,
+      avatarId: reward.avatar,
+      diamonds: reward.diamonds,
+    })
+    // Also announce every reward through the shared queue (toast + sound) — the
+    // 通關 modal already reveals them, but the pops give the "earned" feel. Order:
+    // 特殊牌 → 頭像 → 鑽石 (→ 成就). Card/avatar toasts show the REAL unlocked art.
+    const notify = useAchievementStore.getState().pushReward
+    if (reward.card) notify({ art: { kind: 'card', id: reward.card }, title: `解鎖特殊牌「${getSpecialCard(reward.card)?.name ?? reward.card}」` })
+    if (reward.avatar) notify({ art: { kind: 'avatar', id: reward.avatar }, title: `解鎖頭像「${AVATARS.find((a) => a.id === reward.avatar)?.name ?? reward.avatar}」` })
+    if (reward.diamonds > 0) notify({ icon: '💎', title: `過關獎勵　+${reward.diamonds} 💎` })
+    void syncLeaderboard(uid)
+  },
+
+  saveActiveSeries: async (series) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (uid) await persistActiveSeries(uid, series)
+  },
+
+  recordMatchResult: async (category, won) => {
+    if (!isFirebaseConfigured()) return
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (!uid) return
+    const s = get().profile?.stats ?? {}
+    // Absolute stat values (streak resets → read-modify-write).
+    const next: Record<string, number> = {
+      [`${category}Games`]: (s[`${category}Games`] ?? 0) + 1,
+      [`${category}Wins`]: (s[`${category}Wins`] ?? 0) + (won ? 1 : 0),
+    }
+    if (category === 'pvp') {
+      const streak = won ? (s.pvpStreak ?? 0) + 1 : 0
+      next.pvpStreak = streak
+      next.pvpBestStreak = Math.max(s.pvpBestStreak ?? 0, streak)
+    }
+    // Detect 連勝/場次/勝場/電腦 tiers (牌型 tiers are handled live in reportHandPlayed).
+    const metrics = statMetrics({ ...s, ...next })
+    const { updated, newly } = detectUnlocks(get().profile?.unlocked.achievements ?? {}, metrics)
+    await persistMatchRecord(uid, next, updated)
+
+    // PvP-win diamond reward (+5, up to 3 wins/day). Enqueue the reward toast
+    // BEFORE the achievement toasts so the 💎 pops first; capped wins earn/pop
+    // nothing (so a long friend session doesn't spam — max 3 toasts/day).
+    let reward: PvpReward | null = null
+    if (category === 'pvp' && won) {
+      const p = get().profile
+      const today = todayStr()
+      const gotToday = p?.daily?.date === today ? (p?.daily?.pvpDiamonds ?? 0) : 0
+      if (gotToday < PVP_DAILY_CAP) {
+        const total = gotToday + PVP_WIN_REWARD
+        reward = { amount: PVP_WIN_REWARD, count: total / PVP_WIN_REWARD, capped: false }
+        await grantPvpReward(uid, PVP_WIN_REWARD, today, total)
+        useAchievementStore.getState().pushReward({
+          icon: '💎',
+          title: `真人對戰勝利　+${PVP_WIN_REWARD} 💎`,
+          sub: `今日 ${reward.count}/${PVP_DAILY_CAP / PVP_WIN_REWARD}`,
+        })
+      } else {
+        reward = { amount: 0, count: PVP_DAILY_CAP / PVP_WIN_REWARD, capped: true }
+      }
+    }
+    set({ lastPvpReward: reward })
+
+    useAchievementStore.getState().push(newly)
+    void syncLeaderboard(uid)
+  },
+
+  reportHandPlayed: async (metric, matchCount) => {
+    if (!isFirebaseConfigured()) return
+    const uid = get().uid
+    if (!uid) return // never blocks a pick; only tallies for a real account
+    const s = get().profile?.stats ?? {}
+    const key = `best${metric[0].toUpperCase()}${metric.slice(1)}`
+    const best = Math.max(s[key] ?? 0, matchCount)
+    if (best <= (s[key] ?? 0)) return // not a new single-match record → nothing to unlock
+    const metrics = statMetrics({ ...s, [key]: best })
+    const { updated, newly } = detectUnlocks(get().profile?.unlocked.achievements ?? {}, metrics)
+    await persistMatchRecord(uid, { [key]: best }, updated)
+    useAchievementStore.getState().push(newly)
+    void syncLeaderboard(uid)
+  },
+
+  reportSfDuel: async () => {
+    if (!isFirebaseConfigured()) return
+    const uid = get().uid
+    if (!uid) return // never blocks play; only tallies for a real account
+    const s = get().profile?.stats ?? {}
+    const nextCount = (s.sfDuel ?? 0) + 1
+    const metrics = statMetrics({ ...s, sfDuel: nextCount })
+    const { updated, newly } = detectUnlocks(get().profile?.unlocked.achievements ?? {}, metrics)
+    await persistMatchRecord(uid, { sfDuel: nextCount }, updated)
+    useAchievementStore.getState().push(newly)
+    void syncLeaderboard(uid)
+  },
+
+  buySticker: async (id) => {
+    if (!isFirebaseConfigured()) return { ok: false, error: '離線中無法購買' }
+    let uid = get().uid
+    if (!uid) {
+      await get().ensureAccount()
+      uid = get().uid
+    }
+    if (!uid) return { ok: false, error: '需要帳號' }
+    const p = get().profile
+    if (p?.unlocked.emojis?.[id]) return { ok: false, error: '已擁有' }
+    if ((p?.diamonds ?? 0) < STICKER_PRICE) return { ok: false, error: '鑽石不足' }
+    await persistBuySticker(uid, id, STICKER_PRICE)
+    return { ok: true }
+  },
+}))
+
+/**
+ * Recompute this account's three leaderboard scores from the freshly-committed
+ * profile and push the denormalized snapshot. Registered accounts only (guests
+ * have no persistent identity). Best-effort: never blocks/throws into the caller.
+ */
+async function syncLeaderboard(uid: string): Promise<void> {
+  try {
+    const p = await fetchProfile(uid)
+    if (!p || p.isAnonymous) return
+    const displayName = p.displayName ?? p.username
+    if (!displayName) return
+    const maxStage = p.progress.maxStageCleared
+    const order = maxStage ? subStageOrder(maxStage) : -1
+    const stage =
+      maxStage && order >= 0
+        ? { score: order + 1, subId: maxStage, clearedAt: p.progress.stageClearedAt[maxStage] ?? 0 }
+        : null
+    const achievements = ACHIEVEMENTS.reduce((sum, f) => sum + (p.unlocked.achievements[f.id] ?? 0), 0)
+    // Lifetime diamonds: use the tally, but floor it at the current balance for
+    // legacy accounts that earned before the tally existed (one-time backfill so
+    // it stays monotonic afterwards — spending must never drop the score).
+    let diamonds = p.stats.diamondsEarned ?? 0
+    if (diamonds < p.diamonds) {
+      diamonds = p.diamonds
+      await setDiamondsEarned(uid, diamonds)
+    }
+    await writeLeaderboard(uid, {
+      displayName,
+      avatarId: p.equipped.avatar,
+      stage,
+      wins: p.stats.pvpWins ?? 0,
+      achievements,
+      diamonds,
+    })
+  } catch {
+    /* leaderboard is best-effort — a failed write must never break the game flow */
+  }
+}
+
+function mapAuthError(e: unknown): string {
+  const code = (e as { code?: string })?.code ?? ''
+  switch (code) {
+    case 'auth/email-already-in-use':
+    case 'auth/credential-already-in-use':
+    case 'auth/account-exists-with-different-credential':
+      return '這個帳號已被註冊，請換一個或改用登入'
+    case 'auth/weak-password':
+      return '密碼至少 6 個字'
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-login-credentials':
+      return '帳號或密碼錯誤'
+    case 'auth/too-many-requests':
+      return '嘗試太多次，請稍後再試'
+    case 'auth/network-request-failed':
+      return '網路連線失敗，請檢查網路'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return '已取消登入'
+    case 'auth/popup-blocked':
+      return '瀏覽器擋住了登入視窗，請允許彈出視窗後再試'
+    case 'auth/unauthorized-domain':
+      return '此網域尚未開放 Google 登入（請在 Firebase 後台加入授權網域）'
+    case 'auth/operation-not-supported-in-this-environment':
+      return '目前的瀏覽器不支援 Google 登入，請改用 Safari / Chrome 開啟'
+    default:
+      return '發生錯誤，請再試一次'
+  }
+}
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __platform: typeof usePlatformStore }).__platform = usePlatformStore
+}

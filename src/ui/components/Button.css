@@ -43,20 +43,30 @@
   cursor: not-allowed;
 }
 
-/* Icon pinned to the left so paws/icons line up regardless of label length. */
+/* Default: icon sits in-flow to the LEFT of the label with a small gap
+   (used by narrow buttons like 商城 so it never overlaps the text). */
 .woodbtn__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--wood-text);
+  margin-right: 7px;
+}
+.woodbtn__icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+/* Full-width buttons: pin the icon left and keep the label optically centred. */
+.woodbtn--full .woodbtn__icon {
   position: absolute;
   left: 29px;
   top: 50%;
   transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  color: var(--wood-text);
+  margin-right: 0;
 }
-.woodbtn__icon svg {
+.woodbtn--full .woodbtn__icon svg {
   width: 30px;
   height: 30px;
-  display: block;
 }
 .woodbtn__label {
   display: inline-block;

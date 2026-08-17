@@ -1,5 +1,5 @@
-import type { Card } from './cards'
-import { SUIT_ORDER } from './cards'
+import type { Card, Rank, Suit } from './cards'
+import { SUIT_ORDER, isBlank, isJoker } from './cards'
 
 /**
  * Poker hand evaluation for a pile of 1–5 cards (the pile IS the hand — no
@@ -9,6 +9,7 @@ import { SUIT_ORDER } from './cards'
  */
 
 export const CATEGORY = {
+  EMPTY: -1, // no scoring cards at all (a pile of only blanks) — loses to any real hand
   HIGH_CARD: 0,
   PAIR: 1,
   TWO_PAIR: 2,
@@ -30,6 +31,7 @@ export const CATEGORY_NAME_ZH: Record<number, string> = {
   2: '兩對',
   1: '對子',
   0: '高牌',
+  [-1]: '無牌型',
 }
 
 export interface HandValue {
@@ -39,9 +41,43 @@ export interface HandValue {
   /** matching suit-order sequence for the final tiebreak */
   suitSeq: number[]
   name: string
+  /** if the pile held a joker, the concrete card it became (for showdown reveal) */
+  wildAs?: Card
 }
 
+// Every concrete card the joker may become (all 52; duplicates of in-play cards
+// ARE allowed — that's what makes true ties possible, SPEC §2.2/§2.3).
+const ALL_SUITS: Suit[] = ['S', 'H', 'D', 'C']
+const ALL_RANKS: Rank[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+
+/**
+ * Evaluate a pile (SPEC §3.2). Blanks are removed (ignored in comparison but
+ * they still padded the visible count elsewhere); a joker is resolved to the
+ * single card that maximises the pile's hand, recorded in `wildAs`. A pile with
+ * no scoring cards (all blanks) evaluates to CATEGORY.EMPTY.
+ */
 export function evaluate(cards: Card[]): HandValue {
+  const reals = cards.filter((c) => !isBlank(c) && !isJoker(c))
+  const hasJoker = cards.some(isJoker) // invariant: at most one (each player holds one)
+
+  if (!hasJoker) return evaluateConcrete(reals)
+
+  let best: HandValue | null = null
+  for (const suit of ALL_SUITS) {
+    for (const rank of ALL_RANKS) {
+      const wildAs: Card = { id: `wild${suit}${rank}`, suit, rank }
+      const hv = evaluateConcrete([...reals, wildAs])
+      if (best === null || compareValue(hv, best) > 0) best = { ...hv, wildAs }
+    }
+  }
+  return best!
+}
+
+/** Evaluate a pile of 0–5 concrete cards (no blanks, no jokers). */
+export function evaluateConcrete(cards: Card[]): HandValue {
+  if (cards.length === 0) {
+    return { category: CATEGORY.EMPTY, rankSeq: [], suitSeq: [], name: CATEGORY_NAME_ZH[CATEGORY.EMPTY] }
+  }
   const n = cards.length
   const counts = new Map<number, number>()
   for (const c of cards) counts.set(c.rank, (counts.get(c.rank) ?? 0) + 1)
@@ -97,7 +133,12 @@ export function evaluate(cards: Card[]): HandValue {
   return { category, rankSeq, suitSeq, name: CATEGORY_NAME_ZH[category] }
 }
 
-/** Compare two HandValues. >0 → a wins, <0 → b wins, 0 → exact tie (shouldn't happen with a single deck). */
+/**
+ * Compare two HandValues. >0 → a wins, <0 → b wins, 0 → exact tie.
+ * Without jokers a single deck never ties (suit breaks it); a joker can
+ * represent an already-in-play card, so 0 (a true tie) is now reachable — the
+ * caller awards the coin to BOTH sides (SPEC §2.3).
+ */
 export function compareValue(a: HandValue, b: HandValue): number {
   if (a.category !== b.category) return a.category - b.category
   const len = Math.min(a.rankSeq.length, b.rankSeq.length)

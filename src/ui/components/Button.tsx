@@ -55,6 +55,16 @@ export function Paw() {
   )
 }
 
+/** Monochrome shop (shopping bag) icon for the 商城 button. */
+export function IconShop() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 8h12l-1 12H7L6 8Z" />
+      <path d="M9 8V6.2a3 3 0 0 1 6 0V8" />
+    </svg>
+  )
+}
+
 /* Monochrome action icons (inherit the button's wood-brown color). */
 export function IconRobot() {
   return (
