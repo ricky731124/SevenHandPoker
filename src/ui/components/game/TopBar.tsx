@@ -95,7 +95,7 @@ export default function TopBar() {
             </div>
             <div className="settings__row">
               <label>音效</label>
-              <button className="settings__chip settings__chip--on" onClick={() => update({ sfx: !settings.sfx })}>
+              <button className="settings__chip settings__chip--on" onClick={() => { const on = !settings.sfx; update({ sfx: on }); if (on) sfx.success() }}>
                 {settings.sfx ? '開' : '關'}
               </button>
             </div>

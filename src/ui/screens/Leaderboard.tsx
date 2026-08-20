@@ -78,7 +78,7 @@ export default function Leaderboard() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pz__topbar">
-          <button className="pz-back" onClick={() => go('menu')} aria-label="返回" title="返回">
+          <button className="pz-back" onClick={() => { sfx.click(); go('menu') }} aria-label="返回" title="返回">
             <svg viewBox="0 0 24 24" width="26" height="26">
               <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

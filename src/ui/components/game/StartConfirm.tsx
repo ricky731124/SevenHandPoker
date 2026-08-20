@@ -6,6 +6,7 @@ import { getSpecialCard } from '../../../game/specialCards'
 import { AVATARS } from '../PlayerAvatar'
 import Modal from '../Modal'
 import Button from '../Button'
+import { sfx } from '../../../audio/sfx'
 import Diamond from './Diamond'
 import SeriesTrack from './SeriesTrack'
 
@@ -49,7 +50,7 @@ export default function StartConfirm() {
           Every other view already has 取消 / 不要, so no back arrow needed. */}
       {resuming && !confirmReset && (
         <button
-          onClick={cancel}
+          onClick={() => { sfx.click(); cancel() }}
           aria-label="返回"
           title="返回"
           style={{

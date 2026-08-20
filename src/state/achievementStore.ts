@@ -23,15 +23,21 @@ export type Notice = ({ kind: 'ach' } & AchUnlock) | RewardNotice
 
 interface AchievementStore {
   queue: Notice[]
+  /** Epoch-ms until which the toast must hold (no show/sound). Used at match end so
+   *  勝利/失敗 音效先站穩,再放行鑽石/成就佇列(避免第一個「叮」與勝負號角疊在一起)。*/
+  gateUntil: number
   /** enqueue achievement unlocks (appended after anything already queued) */
   push: (unlocks: AchUnlock[]) => void
   /** enqueue a one-off reward notice */
   pushReward: (reward: Omit<RewardNotice, 'kind'>) => void
   shift: () => void
+  /** hold the queue for `ms` from now (only the first item is affected in practice). */
+  hold: (ms: number) => void
 }
 
 export const useAchievementStore = create<AchievementStore>((set) => ({
   queue: [],
+  gateUntil: 0,
   push: (unlocks) =>
     unlocks.length && set((s) => ({ queue: [...s.queue, ...unlocks.map((u) => ({ kind: 'ach' as const, ...u }))] })),
   pushReward: (reward) =>
@@ -47,4 +53,5 @@ export const useAchievementStore = create<AchievementStore>((set) => ({
       return { queue: [...q.slice(0, i), n, ...q.slice(i)] }
     }),
   shift: () => set((s) => ({ queue: s.queue.slice(1) })),
+  hold: (ms) => set({ gateUntil: Date.now() + ms }),
 }))

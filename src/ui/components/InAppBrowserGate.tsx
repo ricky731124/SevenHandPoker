@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useState } from 'react'
 import { isInAppBrowser, isIOS } from '../../platform/pwa'
+import { sfx } from '../../audio/sfx'
 import './PwaOnboard.css'
 
 /**
@@ -18,6 +19,7 @@ export default function InAppBrowserGate() {
     : '點右上角的 ⋮ 選單'
 
   const copyLink = async () => {
+    sfx.click()
     try {
       await navigator.clipboard.writeText(window.location.href)
       setCopied(true)

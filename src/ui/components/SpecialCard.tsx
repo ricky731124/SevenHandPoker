@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { Suit } from '../../game/cards'
 import { SPECIAL_CARDS, type SpecialCardDef } from '../../game/specialCards'
+import { sfx } from '../../audio/sfx'
 import './SpecialCard.css'
 
 /**
@@ -201,8 +202,8 @@ export default function SpecialCard({
     if (clicks.current === 1) {
       timer.current = setTimeout(() => {
         clicks.current = 0
-        if (openOnSingle) onView?.() // single → popup (even when locked)
-        else if (!locked) onSelect?.() // single → select (default)
+        if (openOnSingle) { sfx.click(); onView?.() } // single → popup (even when locked)
+        else if (!locked) onSelect?.() // single → select (default; onSelect owns its sound)
       }, 240)
     } else {
       if (timer.current) clearTimeout(timer.current)
@@ -210,6 +211,7 @@ export default function SpecialCard({
       if (openOnSingle) {
         if (!locked) onSelect?.() // double → select (skip popup)
       } else {
+        sfx.click()
         onView?.() // double → description (works even when locked)
       }
     }

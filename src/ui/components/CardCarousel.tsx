@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Button from './Button'
+import { sfx } from '../../audio/sfx'
 import './CardCarousel.css'
 
 export type CarouselSlide = {
@@ -48,12 +49,12 @@ export default function CardCarousel({
     <div className="ccar" onClick={onClose}>
       <div className="ccar__panel" onClick={(e) => e.stopPropagation()}>
         {index > 0 && (
-          <button className="ccar__nav ccar__nav--prev" onClick={() => onIndex(index - 1)} aria-label="上一張">
+          <button className="ccar__nav ccar__nav--prev" onClick={() => { sfx.click(); onIndex(index - 1) }} aria-label="上一張">
             ‹
           </button>
         )}
         {index < slides.length - 1 && (
-          <button className="ccar__nav ccar__nav--next" onClick={() => onIndex(index + 1)} aria-label="下一張">
+          <button className="ccar__nav ccar__nav--next" onClick={() => { sfx.click(); onIndex(index + 1) }} aria-label="下一張">
             ›
           </button>
         )}

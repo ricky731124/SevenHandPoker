@@ -148,7 +148,9 @@
 .vs__hint {
   position: absolute;
   z-index: 2;
-  bottom: 10px;
+  /* Lift clear of the phone's bottom gesture bar (both iOS & Android). The fixed
+     bump helps everywhere; env() adds the iPhone home-indicator height on top. */
+  bottom: calc(22px + env(safe-area-inset-bottom));
   color: rgba(255, 255, 255, 0.9);
   font-family: var(--font-display);
   font-size: 12px;

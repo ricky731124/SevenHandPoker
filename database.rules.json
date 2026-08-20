@@ -35,6 +35,14 @@
           ".write": "auth != null && auth.uid === $uid"
         }
       }
+    },
+    "matchmaking": {
+      "$type": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null"
+        }
+      }
     }
   }
 }

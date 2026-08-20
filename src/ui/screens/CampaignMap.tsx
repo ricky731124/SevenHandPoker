@@ -8,6 +8,7 @@ import { SpecialCardArt } from '../components/SpecialCard'
 import Diamond from '../components/game/Diamond'
 import SeriesTrack from '../components/game/SeriesTrack'
 import StartConfirm from '../components/game/StartConfirm'
+import { sfx } from '../../audio/sfx'
 import './CampaignMap.css'
 
 /**
@@ -63,7 +64,7 @@ export default function CampaignMap() {
             <button
               className={`cmap__node ${state}`}
               disabled={!unlocked}
-              onClick={() => openStart(sub.id)}
+              onClick={() => { sfx.click(); openStart(sub.id) }}
             >
               <span className="cmap__node-label">{sub.label}</span>
               {!unlocked && <span className="cmap__node-mark">🔒</span>}
@@ -80,7 +81,7 @@ export default function CampaignMap() {
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
-    <button className="cmap__back" onClick={onClick} aria-label="返回" title="返回">
+    <button className="cmap__back" onClick={() => { sfx.click(); onClick() }} aria-label="返回" title="返回">
       <svg viewBox="0 0 24 24" width="26" height="26">
         <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

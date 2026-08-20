@@ -9,9 +9,25 @@ import {
   promptInstall,
   usePwaStore,
 } from '../../platform/pwa'
+import { sfx } from '../../audio/sfx'
 import './PwaOnboard.css'
 
-const DISMISS_KEY = 'shp.a2hs.dismissed'
+const DISMISS_KEY = 'shp.a2hs.dismissedAt'
+const DISMISS_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — a manual ✕ only quiets it for a week
+
+/** True only if the player manually dismissed within the last 7 days. Note: an
+ *  INSTALLED player is never gated by this — Chrome stops firing beforeinstallprompt
+ *  once installed, so canInstall is false and the Android branch bails first. This
+ *  flag only affects the "installable but the player pressed ✕" case, and it
+ *  expires so uninstalling then reinstalling isn't blocked forever. */
+function dismissedRecently(): boolean {
+  try {
+    const ts = Number(localStorage.getItem(DISMISS_KEY))
+    return Number.isFinite(ts) && ts > 0 && Date.now() - ts < DISMISS_MS
+  } catch {
+    return false
+  }
+}
 
 /**
  * Nudges players to add the game to their home screen — the only way to get
@@ -25,35 +41,38 @@ export default function InstallGuide() {
   const canInstall = usePwaStore((s) => s.canInstall)
   const standalone = usePwaStore((s) => s.standalone)
   const room = useAppStore((s) => s.pendingRoom)
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
+  const [dismissed, setDismissed] = useState(dismissedRecently)
 
   // Already an installed app, inside an in-app browser (gate handles that), on
-  // desktop, or dismissed → nothing to do.
+  // desktop, or dismissed within the last week → nothing to do.
   if (standalone || isInAppBrowser() || !isMobile() || dismissed) return null
 
   const soft = Boolean(room)
 
+  // Manual ✕ — quiet the nudge for a week (not forever, so an uninstall→reinstall
+  // still surfaces it again once the browser re-offers install).
   const close = () => {
+    sfx.click()
     setDismissed(true)
     try {
-      localStorage.setItem(DISMISS_KEY, '1')
+      localStorage.setItem(DISMISS_KEY, String(Date.now()))
     } catch {
       /* ignore */
     }
   }
 
+  // Successful install — just hide the nudge in-memory; do NOT persist a dismiss,
+  // because standalone/canInstall already suppress it for installed users, and
+  // persisting here is exactly what used to block re-install after uninstall.
+  const afterInstall = () => setDismissed(true)
+
   // ---- Android: fire the native install prompt ------------------------------
   if (isAndroid()) {
     if (!canInstall) return null // prompt not offered (yet) — nothing we can force
     const install = async () => {
+      sfx.click()
       const ok = await promptInstall()
-      if (ok) close()
+      if (ok) afterInstall()
     }
     if (soft) {
       return portal(

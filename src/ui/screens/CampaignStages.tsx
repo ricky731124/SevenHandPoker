@@ -3,6 +3,7 @@ import { useCampaignStore } from '../../state/campaignStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { CAMPAIGN, isStageUnlocked } from '../../game/campaign'
 import Button from '../components/Button'
+import { sfx } from '../../audio/sfx'
 import './CampaignStages.css'
 
 /**
@@ -19,7 +20,7 @@ export default function CampaignStages() {
 
   return (
     <div className="cstages">
-      <button className="cstages__back" onClick={() => go('menu')} aria-label="返回" title="返回">
+      <button className="cstages__back" onClick={() => { sfx.click(); go('menu') }} aria-label="返回" title="返回">
         <svg viewBox="0 0 24 24" width="26" height="26">
           <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

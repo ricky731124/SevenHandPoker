@@ -16,8 +16,9 @@ type TimeLimit = 50 | 99
 export default function Menu() {
   const go = useAppStore((s) => s.go)
   const launchGame = useAppStore((s) => s.launchGame)
+  const openMatchmaking = useAppStore((s) => s.openMatchmaking)
   const net = useNetStore()
-  const [dialog, setDialog] = useState<null | 'start' | 'create' | 'join'>(null)
+  const [dialog, setDialog] = useState<null | 'start' | 'create' | 'join' | 'free'>(null)
 
   // Create-match config (#9): opponent · room type · per-turn time. Single-select
   // per group; pre-checked with sensible defaults (好友 · 特殊 · 99 秒).
@@ -103,8 +104,37 @@ export default function Menu() {
         <Button full icon={<IconKey />} onClick={() => setDialog('join')}>
           加入對戰
         </Button>
-        <Button full icon={<IconGlobe />} disabled>
-          自由匹配（即將推出）
+        <Button full icon={<IconGlobe />} onClick={() => setDialog('free')}>
+          自由匹配
+        </Button>
+      </Modal>
+
+      {/* Free match: pick room type, then search (30s for a human, else a bot). */}
+      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} title="自由匹配">
+        <p className="menu__hint">選擇房型,系統會為你配對對手：</p>
+        <Button
+          full
+          icon={<IconGlobe />}
+          onClick={() => {
+            sfx.click()
+            ensureAccount()
+            setDialog('start') // 保留「開始遊戲」面板在底下,取消配對即回到圖一
+            openMatchmaking('normal')
+          }}
+        >
+          一般房配對
+        </Button>
+        <Button
+          full
+          icon={<IconGlobe />}
+          onClick={() => {
+            sfx.click()
+            ensureAccount()
+            setDialog('start') // 保留「開始遊戲」面板在底下,取消配對即回到圖一
+            openMatchmaking('special')
+          }}
+        >
+          特殊房配對
         </Button>
       </Modal>
 

@@ -26,9 +26,10 @@ import type { Role } from '../net/room'
 import type { Intent, LiveSel } from '../net/sync'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import { aiChooseSpecial } from '../game/ai'
-import { bossChooseSpecial, type BossRuntime } from '../game/bossAI'
+import { bossChooseSpecial, rollMain, type BossRuntime } from '../game/bossAI'
 import { useToastStore } from './toastStore'
 import { usePlatformStore } from './platformStore'
+import { useAchievementStore } from './achievementStore'
 import { matchHandTypeCounts, handTypeOf, isSfDuel } from '../game/achievements'
 import { sfx } from '../audio/sfx'
 
@@ -153,6 +154,10 @@ interface GameStore {
   aiLoadout: SpecialCardId[]
   /** campaign boss brain for the AI opponent (null = default AI / non-campaign) */
   aiBoss: BossRuntime | null
+  /** free-match ("自由匹配") bot opponent identity (fake name + boss avatar), shown
+   *  in place of the plain "電腦"; non-null also makes the match count as PvP at
+   *  the end (win tally + diamond reward), per 使用者定案「bot 勝全部照算」. */
+  casualFoe: { name: string; avatarId: string } | null
   /** campaign: called once when a match ends, with whether the human won (drives the BO series) */
   onMatchEnd: ((winnerIsMe: boolean) => void) | null
   /** the pre-match pick (B) has been confirmed → proceed to the coin toss */
@@ -199,6 +204,16 @@ interface GameStore {
     aiLoadout: SpecialCardId[]
     boss: BossRuntime
     onMatchEnd: (winnerIsMe: boolean) => void
+  }) => void
+  /** free-match bot: start one LOCAL match vs a boss, dressed as a matched player.
+   *  Counts as PvP (win tally + reward) via the casualFoe flag at match end. */
+  startCasualBotMatch: (opts: {
+    special: boolean
+    timeLimit: number
+    loadout: SpecialCardId[]
+    aiLoadout: SpecialCardId[]
+    boss: BossRuntime
+    foe: { name: string; avatarId: string }
   }) => void
   finishCoinToss: () => void
   finishCoinTossOnline: () => void
@@ -298,6 +313,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadout: [],
   aiLoadout: [],
   aiBoss: null,
+  casualFoe: null,
   onMatchEnd: null,
   loadoutReady: false,
   loadoutWaiting: false,
@@ -337,6 +353,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadout,
       aiLoadout: special ? AI_LOADOUT : [],
       aiBoss: null,
+      casualFoe: null,
       onMatchEnd: null,
       // Normal room never shows the pre-match pick; a special room shows it once
       // per fresh game (rematch passes ready=true to reuse the same loadout).
@@ -368,8 +385,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadout,
       aiLoadout,
       aiBoss: boss,
+      casualFoe: null,
       onMatchEnd,
       // special room → show the pre-match pick (B) each match; normal → skip.
+      loadoutReady: !special,
+      specialTrayOpen: false,
+      specialTargeting: null,
+      specialInfo: null,
+    })
+  },
+
+  startCasualBotMatch: ({ special, timeLimit, loadout, aiLoadout, boss, foe }) => {
+    const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
+    set({
+      mode: 'ai',
+      timeLimit,
+      me: 'p1',
+      engine: null,
+      status: 'coinToss',
+      coinFirstPicker: firstPicker,
+      selected: [],
+      confirm: null,
+      showdownOpen: false,
+      endOpen: false,
+      magnifier: null,
+      foeSelection: null,
+      sortMode: 'rank',
+      sortDir: 'asc',
+      special,
+      loadout,
+      aiLoadout,
+      aiBoss: boss,
+      casualFoe: foe, // shown as the opponent + makes the match count as PvP
+      onMatchEnd: null, // reward/tally handled by recordMatchStat(pvp) via casualFoe
       loadoutReady: !special,
       specialTrayOpen: false,
       specialTargeting: null,
@@ -381,6 +429,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
     set({ engine, status: 'playing' })
+    sfx.deal() // 開局發牌
   },
 
   reset: () => set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null }),
@@ -390,7 +439,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // intro), but pre-filled with LAST match's loadout — not the profile
     // default (that only seeds the very first match). ready=false → B shows;
     // startSinglePlayer seeds `loadout` with the carried-over selection.
-    const { special, loadout, timeLimit } = get()
+    const { special, loadout, timeLimit, casualFoe, aiBoss, aiLoadout } = get()
+    // Free-match rematch: same opponent (fresh main-style roll), still counts as PvP.
+    if (casualFoe && aiBoss) {
+      get().startCasualBotMatch({
+        special,
+        timeLimit,
+        loadout,
+        aiLoadout,
+        boss: { profile: aiBoss.profile, main: rollMain(aiBoss.profile), execution: aiBoss.execution },
+        foe: casualFoe,
+      })
+      return
+    }
     get().startSinglePlayer(special, loadout, false, timeLimit)
   },
 
@@ -421,6 +482,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       acks: { p1: false, p2: false },
       rematchPending: false,
       foeWantsRematch: false,
+      casualFoe: null,
+      aiBoss: null,
       sortMode: 'rank',
       sortDir: 'asc',
       // Carry room config; a special room shows the pre-match pick B (both must
@@ -458,6 +521,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       acks: { p1: false, p2: false },
       rematchPending: false,
       foeWantsRematch: false,
+      casualFoe: null,
+      aiBoss: null,
       sortMode: 'rank',
       sortDir: 'asc',
       // Carry room config; special room shows B (reconnect skips it — mid-game).
@@ -511,7 +576,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setFoeWantsRematch: (v) => set({ foeWantsRematch: v }),
 
-  finishCoinTossOnline: () => set({ status: 'playing' }),
+  finishCoinTossOnline: () => {
+    set({ status: 'playing' })
+    sfx.deal() // 開局發牌
+  },
 
   applyGuestView: (v) => {
     const prev = get()
@@ -525,12 +593,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const endOpen = engine.phase === 'ended'
     // one-shot sounds on transitions
     if (showdownOpen && !prev.showdownOpen) {
-      engine.lastShowdown?.winner === prev.me ? sfx.coin() : sfx.showdown()
+      // 對決音效:不論輸贏,雙方一觸發就播。贏家(含平手)等對決音效(1.6s)跑完
+      // 再接「搶金幣」;輸家無聲。
+      sfx.showdown()
+      const iWon = engine.lastShowdown?.winner === prev.me || engine.lastShowdown?.winner === 'both'
+      if (iWon) setTimeout(() => sfx.coinWin(), 1600)
       reportShowdownDuel(engine) // 同花順 vs 同花順 → 狹路相逢
     }
     if (endOpen && !prev.endOpen) {
       const won = engine.winner === prev.me
       won ? sfx.win() : sfx.lose()
+      useAchievementStore.getState().hold(1800) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
       recordMatchStat(true, won) // guest side of online → pvp 戰績
     }
     // foeSelection = the submitted pick (place phase); the LIVE preview during a
@@ -730,7 +803,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         foeSelection = { total: order.length, idx }
       }
       const next = applyPick(engine, picker, ids)
-      sfx.deal()
+      // 送出本身是按鈕 click(已在 UI 觸發);牌的落地聲由對手放牌(placeAt→place)收尾,
+      // 這裡不再額外發音。
       set({ foeSelection })
       get().applyEngine(next)
     } catch (e) {
@@ -749,7 +823,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const placer = otherPlayer(engine.pendingPick.by)
     try {
       const next = applyPlace(engine, placer, slot)
-      sfx.deal()
+      sfx.place()
       set({ foeSelection: null })
       get().applyEngine(next)
     } catch (e) {
@@ -760,7 +834,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   doDraw: () => {
     const { engine } = get()
     if (!engine || engine.phase !== 'draw') return
-    get().applyEngine(applyDraw(engine))
+    const drawer = engine.postPicker
+    const next = applyDraw(engine)
+    // 補牌:補幾張放幾聲 card-slide(依 DRAW_SCHEDULE,3 或 2 張)。
+    if (drawer) {
+      const n = next.hands[drawer].length - engine.hands[drawer].length
+      if (n > 0) sfx.draw(n)
+    }
+    get().applyEngine(next)
   },
 
   applyEngine: (next) => {
@@ -770,7 +851,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ acks: { p1: false, p2: false } })
       // Let the coin topple / placement land first, then reveal the showdown.
       if (next.lastShowdown) {
-        next.lastShowdown.winner === get().me ? sfx.coin() : sfx.showdown()
+        // 對決音效:雙方都播;贏家(含平手)1.6s 後接搶金幣,輸家無聲。
+        sfx.showdown()
+        const iWon = next.lastShowdown.winner === get().me || next.lastShowdown.winner === 'both'
+        if (iWon) setTimeout(() => sfx.coinWin(), 1600)
         reportShowdownDuel(next) // 同花順 vs 同花順 → 狹路相逢
       }
       // Let the placement land and read before the showdown popup — new players
@@ -787,8 +871,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       setTimeout(() => set({ endOpen: true }), 550)
       const won = next.winner === get().me
       won ? sfx.win() : sfx.lose()
+      useAchievementStore.getState().hold(1800) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
       // 戰績:host + 單機在此結算一次(guest 走 applyGuestView 的 ended transition)。
-      recordMatchStat(!!get().online, won)
+      // 自由匹配的 bot 局(casualFoe)照真人算 PvP → 勝場王/勝場成就 + 發鑽(使用者定案)。
+      recordMatchStat(!!get().online || !!get().casualFoe, won)
       // campaign: fold this match into the BO series (the end screen then shows
       // series status / result — wired with the campaign UI).
       get().onMatchEnd?.(won)
@@ -894,6 +980,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // swap / suit-bloom — only enter targeting if a legal target exists.
       const targets = def.suit ? suitTargets(engine, me, def.suit) : swapTargets(engine, me)
       if (targets.length === 0) {
+        sfx.error()
         useToastStore.getState().show(def.suit ? `手上沒有可變${SUIT_ZH[def.suit]}的牌` : '手上沒有可換的牌')
         return
       }
@@ -902,14 +989,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
       // back on the private info channel (netgame → showSpecialInfo).
-      sfx.click()
+      sfx.special()
       online.send({ type: 'special', card: id })
       set({ specialTrayOpen: false })
     } else {
       // peek / spy (host or single-player): resolve the info now + spend the budget.
       const foe = otherPlayer(me)
       const cards = (id === 'peek' ? peekNextDraw(engine, me) : engine.hands[foe]).slice()
-      sfx.click()
+      sfx.special()
       set({
         engine: markSpecialUsed(engine, me),
         specialTrayOpen: false,
@@ -928,14 +1015,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (online?.role === 'guest') {
       // host applies it and syncs the result back (hand + specialUsed).
       online.send({ type: 'special', card: specialTargeting, targetId: cardId })
-      sfx.deal()
+      sfx.special()
       set({ specialTargeting: null })
       get().flashStatus(`你已使用了「${def?.name}」`)
       return
     }
     const next = def?.suit ? applySuit(engine, me, cardId, def.suit) : applySwap(engine, me, cardId)
     if (next === engine) return // illegal target → ignore
-    sfx.deal()
+    sfx.special()
     // Swap removes the target and draws a new card → drop the now-gone card from
     // the pick selection so the 送出 count stays correct (clubs keeps the id).
     const validIds = new Set(next.hands[me].map((c) => c.id))
@@ -964,7 +1051,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else if (decision.card === 'swap' && decision.targetId) next = applySwap(engine, ai, decision.targetId)
     else next = markSpecialUsed(engine, ai) // peek / spy: no board change, just the one-shot
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
-    sfx.deal()
+    sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
     // 資訊卡強化打法 (#5): record what the boss legitimately learned so its later
     // picks/placements can act on it (spy → true-strength reads; peek → sure draw-hold).
     if (aiBoss && decision.card === 'spy') set({ aiBoss: { ...aiBoss, spySeen: true, spyHand: next.hands[otherPlayer(ai)] } })

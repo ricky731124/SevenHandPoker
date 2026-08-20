@@ -5,6 +5,7 @@ import Button from './Button'
 import Diamond from './game/Diamond'
 import { usePlatformStore } from '../../state/platformStore'
 import { STICKERS, STICKER_PRICE, stickerSrc, type StickerDef } from '../../game/stickers'
+import { sfx } from '../../audio/sfx'
 import '../screens/Panel.css'
 import '../screens/Personalize.css'
 
@@ -36,6 +37,8 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
     const res = await buySticker(def.id)
     setBusy(false)
     setConfirm(null)
+    if (res.ok) sfx.success() // 購買成功
+    else sfx.error() // e.g. 鑽石不足 — the easiest way to hear the error cue
     setResult({ ok: res.ok, name: def.name, id: def.id, error: res.error })
   }
 
@@ -44,19 +47,19 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
       <div className="pz-screen" style={{ zIndex: 300 }} onClick={onClose}>
       <motion.div className="panel panel--wide" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
         <div className="pz__topbar">
-          <button className="pz-back" onClick={onClose} aria-label="返回" title="返回">
+          <button className="pz-back" onClick={() => { sfx.click(); onClose() }} aria-label="返回" title="返回">
             <svg viewBox="0 0 24 24" width="26" height="26">
               <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           <div className="pz__tabs">
-            <button className={`pz__tab${tab === 'sticker' ? ' pz__tab--on' : ''}`} onClick={() => setTab('sticker')}>貼圖</button>
-            <button className={`pz__tab${tab === 'home' ? ' pz__tab--on' : ''}`} onClick={() => setTab('home')}>主畫面</button>
+            <button className={`pz__tab${tab === 'sticker' ? ' pz__tab--on' : ''}`} onClick={() => { sfx.click(); setTab('sticker') }}>貼圖</button>
+            <button className={`pz__tab${tab === 'home' ? ' pz__tab--on' : ''}`} onClick={() => { sfx.click(); setTab('home') }}>主畫面</button>
           </div>
           <span style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontWeight: 800, color: 'var(--wood-text)', fontSize: 24 }}>
             <Diamond size={28} />
             {diamonds}
-            <button type="button" onClick={() => setInfo(true)} aria-label="鑽石取得方式" title="鑽石取得方式" className="shop-qbtn">
+            <button type="button" onClick={() => { sfx.click(); setInfo(true) }} aria-label="鑽石取得方式" title="鑽石取得方式" className="shop-qbtn">
               ?
             </button>
           </span>
@@ -71,7 +74,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => !have && setConfirm(s)}
+                    onClick={() => { if (!have) { sfx.click(); setConfirm(s) } }}
                     disabled={have}
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 12, borderRadius: 14, border: '2px solid var(--wood-600,#8a6a3e)', background: 'var(--parch-100,#fbf1d9)', cursor: have ? 'default' : 'pointer', opacity: have ? 0.7 : 1 }}
                   >

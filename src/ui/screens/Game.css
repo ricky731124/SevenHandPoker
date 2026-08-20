@@ -149,6 +149,9 @@
    Stage-relative so it tracks the board. */
 .game__deck {
   transform: translateY(calc(-0.16 * var(--stage-h, 100vh)));
+  /* iPhone notch (landscape): nudge the deck + its count clear of the cutout.
+     env() is 0 on Android/desktop, so the layout there is untouched. */
+  padding-left: env(safe-area-inset-left);
 }
 /* Fixed grid: seven fixed-width cells spread across a narrowed band. Adding
    cards to a pile never changes cell size, so the board never reflows/jitters. */
@@ -329,7 +332,7 @@
   /* Parked in the clear left-column gap between the deck (above) and the
      bottom-left avatar (below) so the avatar never covers it. Stage-relative so
      it tracks the bounded-fluid board on both phone and desktop. */
-  left: clamp(6px, 1.4vw, 20px);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
   bottom: clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px);
   z-index: 42;
   display: inline-flex;
@@ -360,7 +363,7 @@
    just above the bottom-left avatar (由下到上:頭像→貼圖→特殊牌→發牌). ---- */
 .game__emote-trigger {
   position: absolute;
-  left: clamp(6px, 1.4vw, 20px);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
   bottom: clamp(104px, calc(0.31 * var(--stage-h, 100vh)), 190px);
   z-index: 42;
   display: inline-flex;
@@ -392,7 +395,7 @@
    opponent's "N 張" speech bubble. */
 .game__special-tip {
   position: absolute;
-  left: clamp(6px, 1.4vw, 20px);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
   bottom: calc(clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px) + 44px);
   z-index: 43;
   background: rgba(0, 0, 0, 0.82);

@@ -18,6 +18,7 @@ import ShowdownModal from '../components/game/ShowdownModal'
 import MagnifierModal from '../components/game/MagnifierModal'
 import useBoardSizes from '../hooks/useBoardSizes'
 import type { SortDir, SortMode } from '../../game/sort'
+import { sfx } from '../../audio/sfx'
 import './Game.css'
 import './Tutorial.css'
 
@@ -118,7 +119,7 @@ export default function Tutorial() {
         ['--stage-h' as string]: `${sz.stageH}px`,
       }}
     >
-      <button type="button" className="tut-exit" onClick={() => go('campaignStages')}>
+      <button type="button" className="tut-exit" onClick={() => { sfx.click(); go('campaignStages') }}>
         離開
         <br />
         教學
@@ -196,12 +197,12 @@ export default function Tutorial() {
           <PlayerAvatar avatarId="cat" size={34} />
           <p className="tut-coach__text">{t.coach}</p>
           {t.gate === 'say' && (
-            <button type="button" className="tut-coach__btn" onClick={t.next}>
+            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); t.next() }}>
               下一步 ▶
             </button>
           )}
           {t.gate === 'win' && (
-            <button type="button" className="tut-coach__btn" onClick={() => go('campaignStages')}>
+            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); go('campaignStages') }}>
               完成教學
             </button>
           )}

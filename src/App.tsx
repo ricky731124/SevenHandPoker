@@ -15,6 +15,7 @@ import Game from './ui/screens/Game'
 import Tutorial from './ui/screens/Tutorial'
 import CampaignMap from './ui/screens/CampaignMap'
 import CampaignStages from './ui/screens/CampaignStages'
+import Matchmaking from './ui/screens/Matchmaking'
 import TableBackground from './ui/components/TableBackground'
 import Toast from './ui/components/Toast'
 import AchievementToast from './ui/components/AchievementToast'
@@ -36,6 +37,7 @@ const screens = {
 
 export default function App() {
   const screen = useAppStore((s) => s.screen)
+  const matchType = useAppStore((s) => s.matchType)
   const Current = screens[screen]
   const uid = usePlatformStore((s) => s.uid)
 
@@ -80,6 +82,7 @@ export default function App() {
         <Current />
       </motion.div>
 
+      {matchType && <Matchmaking />}
       <Toast />
       <AchievementToast />
       <UpgradePrompt />

@@ -199,7 +199,7 @@ function AvatarTab({
   const pick = (id: string) => {
     const a = AVATARS.find((x) => x.id === id)
     if (!a || !avail(a) || id === equipped) return
-    sfx.click()
+    sfx.success() // 裝備變更(頭像)
     void onSave(id) // select == equip (applies immediately)
     useToastStore.getState().show('頭像已更新！')
   }
@@ -231,7 +231,7 @@ function AvatarTab({
             <TapButton
               key={a.id}
               className={`pz-av${on ? ' pz-av--on' : ''}${ok ? '' : ' pz-av--locked'}`}
-              onSingle={() => setPopup(i)}
+              onSingle={() => { sfx.click(); setPopup(i) }}
               onDouble={() => pick(a.id)}
               title={ok ? a.name : `${a.name}（未解鎖）`}
             >
@@ -505,7 +505,7 @@ function EmojiTab({ owned, allUnlocked }: { owned: Record<string, true>; allUnlo
             <button
               key={s.id}
               type="button"
-              onClick={() => setPopup(i)}
+              onClick={() => { sfx.click(); setPopup(i) }}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 8, borderRadius: 12, border: '2px solid var(--wood-600,#8a6a3e)', background: 'var(--parch-100,#fbf1d9)', opacity: owns ? 1 : 0.55, cursor: 'pointer' }}
             >
               <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: owns ? 'none' : 'grayscale(1)' }}>
@@ -551,6 +551,7 @@ function AccountSettingsRows() {
     setBusy(true)
     const res = await usePlatformStore.getState().saveDisplayName(name)
     setBusy(false)
+    res.ok ? sfx.success() : sfx.error()
     useToastStore.getState().show(res.ok ? '顯示名稱已更新！' : res.error)
   }
   const row: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 38, padding: '1px 4px', borderBottom: '1px solid var(--wood-300,#cdb188)' }
@@ -616,7 +617,7 @@ function SettingsTab() {
       <div style={row}>
         <label style={{ fontSize: 16, color: 'var(--wood-800,#4a3418)', fontFamily: 'var(--font-display)' }}>音效</label>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={chip(settings.sfx)} onClick={() => { sfx.click(); update({ sfx: true }) }}>開</button>
+          <button style={chip(settings.sfx)} onClick={() => { update({ sfx: true }); sfx.success() }}>開</button>
           <button style={chip(!settings.sfx)} onClick={() => { sfx.click(); update({ sfx: false }) }}>關</button>
         </div>
       </div>
@@ -628,7 +629,7 @@ function SettingsTab() {
             return (
               <button
                 key={key}
-                onClick={() => { sfx.click(); update({ cardBack: key }) }}
+                onClick={() => { sfx.success(); update({ cardBack: key }) }}
                 style={{
                   position: 'relative',
                   padding: 3,
@@ -686,7 +687,7 @@ function LoadoutTab({
     if (sel.includes(id)) next = sel.filter((x) => x !== id)
     else if (sel.length >= LOADOUT_SIZE) return // full — ignore
     else next = [...sel, id]
-    sfx.click()
+    sfx.success() // 裝備變更(預設牌組)
     setSel(next)
     void onSave(next)
   }

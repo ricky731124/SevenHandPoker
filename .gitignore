@@ -6,3 +6,4 @@ dist-ssr
 .env
 .env.local
 src/net/firebaseConfig.local.ts
+_sfx_src

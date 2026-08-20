@@ -39,7 +39,10 @@ interface AppState {
   /** Pending game launch config, consumed by Game screen. `special` = special-
    *  card room (loadout + pre-match pick + in-game activation). `timeLimit` =
    *  per-turn seconds (SPEC §15 / #9 create-match config). */
-  pendingGame: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string } | null
+  pendingGame: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean } | null
+  /** Room type chosen for 自由匹配; non-null = the matchmaking OVERLAY is showing
+   *  (rendered on top of the menu, not a separate screen). */
+  matchType: 'normal' | 'special' | null
   /** A room code from a /?room= deep link, held until the identity gate resolves. */
   pendingRoom: string | null
   /** Room type of a deep-linked room (from ?type=), shown before joining. */
@@ -55,7 +58,11 @@ interface AppState {
    *  upgrade prompt's 使用 Google 登入). */
   wantGoogle: boolean
   go: (screen: Screen) => void
-  launchGame: (cfg: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string }) => void
+  launchGame: (cfg: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean }) => void
+  /** Show the free-match overlay for a room type (一般/特殊) — stays over the menu. */
+  openMatchmaking: (type: 'normal' | 'special') => void
+  /** Close the free-match overlay (manual 取消 → back to the menu underneath). */
+  closeMatchmaking: () => void
   setPendingRoom: (code: string | null, type?: 'normal' | 'special' | null, time?: number | null) => void
   updateSettings: (patch: Partial<Settings>) => void
   askUpgrade: () => void
@@ -72,6 +79,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   screen: 'menu',
   settings: loadSettings(),
   pendingGame: null,
+  matchType: null,
   pendingRoom: null,
   pendingRoomType: null,
   pendingRoomTime: null,
@@ -80,6 +88,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   wantGoogle: false,
   go: (screen) => set({ screen }),
   launchGame: (cfg) => set({ pendingGame: cfg, screen: 'game' }),
+  openMatchmaking: (type) => set({ matchType: type }),
+  closeMatchmaking: () => set({ matchType: null }),
   setPendingRoom: (code, type = null, time = null) =>
     set({ pendingRoom: code, pendingRoomType: type, pendingRoomTime: time }),
   askUpgrade: () => set({ upgradePrompt: true }),

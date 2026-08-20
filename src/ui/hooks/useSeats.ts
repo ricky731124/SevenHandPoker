@@ -23,6 +23,7 @@ const roleDefaultAvatar = (pid: PlayerId) => (pid === 'p1' ? 'cat' : 'bird')
 export default function useSeats(): { p1: Seat; p2: Seat } {
   const me = useGameStore((s) => s.me)
   const online = useGameStore((s) => s.online)
+  const casualFoe = useGameStore((s) => s.casualFoe)
   const displayName = usePlatformStore((s) => s.displayName)
   const profile = usePlatformStore((s) => s.profile)
   const room = useNetStore((s) => s.room)
@@ -41,6 +42,9 @@ export default function useSeats(): { p1: Seat; p2: Seat } {
     if (campStage) {
       const av = AVATARS.find((a) => a.id === campStage.bossAvatar)
       foeSeat = { name: av?.name ?? campStage.name, avatarId: campStage.bossAvatar }
+    } else if (casualFoe) {
+      // 自由匹配 bot dressed as a matched player (fake name + a boss portrait).
+      foeSeat = { name: casualFoe.name, avatarId: casualFoe.avatarId }
     } else {
       foeSeat = { name: '電腦', avatarId: 'bird' } // single-player AI
     }

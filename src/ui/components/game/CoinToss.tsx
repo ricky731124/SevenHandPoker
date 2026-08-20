@@ -23,9 +23,8 @@ export default function CoinToss({
   const [phase, setPhase] = useState<'spin' | 'result'>('spin')
 
   useEffect(() => {
-    sfx.coin()
+    sfx.coin() // 檔案本身已含「擲 + 落」,播一次即可(落聲約在 2.2~2.5s,對上落定動畫)
     const t1 = setTimeout(() => {
-      sfx.coin()
       setPhase('result')
     }, 2200)
     const t2 = setTimeout(onDone, 3800)

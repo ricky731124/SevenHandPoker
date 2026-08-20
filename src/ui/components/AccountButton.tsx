@@ -11,6 +11,7 @@ import JoinConfirm from './JoinConfirm'
 import Shop from './Shop'
 import { avatarSrc } from './PlayerAvatar'
 import Diamond from './game/Diamond'
+import { sfx } from '../../audio/sfx'
 import './AccountButton.css'
 
 /**
@@ -131,18 +132,59 @@ export default function AccountButton() {
   const handleGoogle = async () => {
     if (gBusy) return
     setGBusy(true)
-    const res = await usePlatformStore.getState().loginWithGoogle()
-    setGBusy(false)
-    if (!res.ok) {
-      if (res.error) useToastStore.getState().show(res.error)
-      return
+    // The Google popup promise is unreliable on cancel: on mobile a closed popup
+    // never rejects (button would stay stuck on 請稍候 forever); on desktop it
+    // rejects only after ~8-10s. We can't read the Google-side action, so we
+    // recover via focus instead — once the player returns to our window and
+    // nothing has settled within 3s, treat it as cancelled and re-enable the
+    // button. A later success is still honoured (see below).
+    let recovered = false
+    let done = false
+    let graceTimer: ReturnType<typeof setTimeout> | null = null
+    const cleanup = () => {
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onVisible)
+      if (graceTimer) clearTimeout(graceTimer)
+      graceTimer = null
     }
-    if (res.needsName) {
-      setFromGate(false)
-      setDialog('chooseName') // first time → pick a display name
-    } else {
-      useToastStore.getState().show('登入成功！')
-      finish()
+    const onReturn = () => {
+      if (done || graceTimer) return
+      graceTimer = setTimeout(() => {
+        if (done) return
+        recovered = true
+        setGBusy(false)
+        useToastStore.getState().show('已取消登入')
+      }, 3000)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') onReturn()
+    }
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onVisible)
+    try {
+      const res = await usePlatformStore.getState().loginWithGoogle()
+      done = true
+      cleanup()
+      if (res.ok) {
+        // Honour a successful sign-in even if we already "recovered" (slow success).
+        setGBusy(false)
+        if (res.needsName) {
+          setFromGate(false)
+          setDialog('chooseName') // first time → pick a display name
+        } else {
+          useToastStore.getState().show('登入成功！')
+          finish()
+        }
+        return
+      }
+      if (!recovered) {
+        setGBusy(false)
+        if (res.error) useToastStore.getState().show(res.error)
+      }
+    } catch {
+      done = true
+      cleanup()
+      if (!recovered) setGBusy(false)
     }
   }
 
@@ -164,7 +206,7 @@ export default function AccountButton() {
           <button
             type="button"
             className="acctbar__me"
-            onClick={() => useAppStore.getState().go('personalize')}
+            onClick={() => { sfx.click(); useAppStore.getState().go('personalize') }}
             title="個人化設定"
           >
             <img
@@ -206,7 +248,7 @@ export default function AccountButton() {
         <button
           type="button"
           className="acctbar-qbtn"
-          onClick={() => useAppStore.getState().go('howto')}
+          onClick={() => { sfx.click(); useAppStore.getState().go('howto') }}
           aria-label="遊戲介紹"
           title="遊戲介紹"
         >

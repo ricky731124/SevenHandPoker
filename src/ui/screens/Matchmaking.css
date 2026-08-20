@@ -1,0 +1,37 @@
+/* Free-match overlay contents (inside a locked Modal panel — the Modal provides
+   the parchment card + the click-blocking scrim over the menu). */
+.mm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 4px 2px;
+}
+
+.mm__spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 5px solid rgba(106, 74, 36, 0.25);
+  border-top-color: var(--wood-edge, #6a4a24);
+  animation: mm-spin 0.9s linear infinite;
+}
+
+@keyframes mm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mm__sub {
+  margin: 0;
+  font-weight: 700;
+  color: var(--parch-muted, #7a5c34);
+}
+
+.mm__phase {
+  margin: 0;
+  font-weight: 800;
+  color: var(--parch-text, #4a2f14);
+  font-family: var(--font-display);
+}

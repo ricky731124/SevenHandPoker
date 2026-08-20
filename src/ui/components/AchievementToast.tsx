@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAchievementStore } from '../../state/achievementStore'
 import { getAchievement, TIER_NAME_ZH, type AchTier } from '../../game/achievements'
@@ -16,15 +16,29 @@ import { sfx } from '../../audio/sfx'
 export default function AchievementToast() {
   const queue = useAchievementStore((s) => s.queue)
   const shift = useAchievementStore((s) => s.shift)
+  const gateUntil = useAchievementStore((s) => s.gateUntil)
   const front = queue[0]
+  const [, bump] = useState(0) // re-render once the gate window passes
 
   useEffect(() => {
     if (!front) return
-    sfx.win()
-    // Rewards are quick pops; achievement unlocks linger a little longer.
-    const t = setTimeout(shift, front.kind === 'reward' ? 2600 : 5200)
+    // Match-end hold: keep the toast (and its ding) off-screen until the 勝利/失敗
+    // 音效 has had its 1.8s head start, then show + play normally.
+    const wait = gateUntil - Date.now()
+    if (wait > 0) {
+      const t = setTimeout(() => bump((x) => x + 1), wait + 20)
+      return () => clearTimeout(t)
+    }
+    // Distinct dopamine beats: 入帳叮 for a reward, 解鎖鈴 for an achievement.
+    if (front.kind === 'reward') sfx.reward()
+    else sfx.achievement()
+    // Rewards are quick pops (2.5s); achievement unlocks linger (5s).
+    const t = setTimeout(shift, front.kind === 'reward' ? 2500 : 5000)
     return () => clearTimeout(t)
-  }, [front, shift])
+  }, [front, shift, gateUntil])
+
+  // Still inside the match-end hold window → render nothing yet.
+  if (front && gateUntil - Date.now() > 0) return null
 
   // A one-off reward (e.g. PvP-win diamonds).
   if (front?.kind === 'reward') {

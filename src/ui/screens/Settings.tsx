@@ -5,13 +5,14 @@ import CardBack from '../components/CardBack'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 
-function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function Toggle({ on, onChange, disabled, enableSuccess }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; enableSuccess?: boolean }) {
   return (
     <div className="settings__seg">
       <button
         disabled={disabled}
         className={`settings__chip${on ? ' settings__chip--on' : ''}`}
-        onClick={() => { sfx.click(); onChange(true) }}
+        // 設定儲存回饋:開音效 → success(此時音效已開,聽得到);其它照 click。
+        onClick={() => { if (enableSuccess) { onChange(true); sfx.success() } else { sfx.click(); onChange(true) } }}
       >
         開
       </button>
@@ -41,7 +42,7 @@ export default function Settings() {
         </div>
         <div className="settings__row">
           <label>音效</label>
-          <Toggle on={settings.sfx} onChange={(v) => update({ sfx: v })} />
+          <Toggle on={settings.sfx} onChange={(v) => update({ sfx: v })} enableSuccess />
         </div>
 
         <div className="settings__row">
@@ -52,7 +53,7 @@ export default function Settings() {
                 key={key}
                 className={`settings__chip${settings.cardBack === key ? ' settings__chip--on' : ''}`}
                 style={{ padding: 6 }}
-                onClick={() => { sfx.click(); update({ cardBack: key }) }}
+                onClick={() => { sfx.success(); update({ cardBack: key }) }}
               >
                 <span style={{ display: 'inline-block', pointerEvents: 'none' }}>
                   <CardBack w={30} theme={key} />

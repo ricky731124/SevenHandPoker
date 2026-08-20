@@ -31,6 +31,7 @@ import CampaignEndModal from '../components/game/CampaignEndModal'
 import { useCampaignStore } from '../../state/campaignStore'
 import useBoardSizes from '../hooks/useBoardSizes'
 import useSeats from '../hooks/useSeats'
+import { sfx } from '../../audio/sfx'
 import Lobby from './Lobby'
 import './Game.css'
 
@@ -43,9 +44,10 @@ export default function Game() {
     const key = `${pending?.mode}:${pending?.roomId ?? ''}`
     if (startedFor.current === key) return
     startedFor.current = key
-    // Campaign matches are launched by campaignStore (startCampaignMatch), so
-    // don't start a plain single-player game over the top of them.
-    if (pending?.mode === 'ai' && !pending.campaignSubId) {
+    // Campaign matches (campaignStore) and free-match bot games (Matchmaking
+    // screen, startCasualBotMatch) are already set up before launch — don't start
+    // a plain single-player game over the top of them.
+    if (pending?.mode === 'ai' && !pending.campaignSubId && !pending.casualBot) {
       const saved = (usePlatformStore.getState().profile?.equipped.specialCards ?? []) as SpecialCardId[]
       startSinglePlayer(!!pending.special, saved, false, pending.timeLimit ?? 50)
     }
@@ -350,6 +352,14 @@ function GameBoard() {
     if (timed && isMyActionTurn && secsLeft === 0) g.timeoutAutoPlay()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secsLeft, timed, isMyActionTurn])
+  // Countdown: one tick every second through the final 15s of MY turn. The 1s
+  // interval above freezes secsLeft while paused, so this naturally stops on pause
+  // and resumes from the remaining seconds; a played card / new turn resets turnKey
+  // (secsLeft jumps back above 15) so the ticking stops immediately.
+  useEffect(() => {
+    if (timed && isMyActionTurn && secsLeft <= 15 && secsLeft >= 1 && turnDuration > 15) sfx.countdown()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secsLeft, timed, isMyActionTurn])
   const timerLabel = `${isMyActionTurn ? '你的' : '對方的'}${engine.phase === 'place' ? '放置時間' : '出手時間'}`
 
   const statusText =
@@ -397,7 +407,7 @@ function GameBoard() {
         <button
           type="button"
           className="game__pausebtn"
-          onClick={onPauseClick}
+          onClick={() => { sfx.click(); onPauseClick() }}
           title={isPaused ? '繼續' : '暫停'}
           aria-label={isPaused ? '繼續' : '暫停'}
         >
@@ -479,7 +489,7 @@ function GameBoard() {
       {targeting && (
         <div className="game__special-banner">
           <span>{targetHint}</span>
-          <button type="button" className="game__special-cancel" onClick={g.cancelSpecialTarget}>
+          <button type="button" className="game__special-cancel" onClick={() => { sfx.click(); g.cancelSpecialTarget() }}>
             取消
           </button>
         </div>
@@ -563,7 +573,8 @@ function GameBoard() {
           me={me}
           reward={lastPvpReward}
           waiting={!!g.online && g.rematchPending}
-          foeWantsRematch={!!g.online && g.foeWantsRematch}
+          // Free-match bot always "agrees" to a rematch → the player just clicks 再玩一場.
+          foeWantsRematch={(!!g.online && g.foeWantsRematch) || !!g.casualFoe}
           onRematch={g.online ? g.agreeRematch : g.nextGame}
           onLeave={() => {
             if (g.online) g.leaveOnline()
