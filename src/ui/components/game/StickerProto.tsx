@@ -32,7 +32,7 @@ export default function StickerProto() {
   if (owned.length === 0) return null
 
   const send = (def: StickerDef) => {
-    sfx.deal()
+    sfx.success() // 送出貼圖
     setTray(false)
     setMyShot({ id: def.id, n: Date.now() })
     if (online) sendEmote(def.id)

@@ -1,37 +1,25 @@
 import { createPortal } from 'react-dom'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useAppStore } from '../../state/appStore'
+import { useToastStore } from '../../state/toastStore'
 import {
   isAndroid,
   isIOS,
   isInAppBrowser,
   isMobile,
+  isPwaInstalled,
   promptInstall,
   usePwaStore,
 } from '../../platform/pwa'
 import { sfx } from '../../audio/sfx'
 import './PwaOnboard.css'
 
-const DISMISS_KEY = 'shp.a2hs.dismissedAt'
-const DISMISS_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — a manual ✕ only quiets it for a week
-
-/** True only if the player manually dismissed within the last 7 days. Note: an
- *  INSTALLED player is never gated by this — Chrome stops firing beforeinstallprompt
- *  once installed, so canInstall is false and the Android branch bails first. This
- *  flag only affects the "installable but the player pressed ✕" case, and it
- *  expires so uninstalling then reinstalling isn't blocked forever. */
-function dismissedRecently(): boolean {
-  try {
-    const ts = Number(localStorage.getItem(DISMISS_KEY))
-    return Number.isFinite(ts) && ts > 0 && Date.now() - ts < DISMISS_MS
-  } catch {
-    return false
-  }
-}
-
 /**
  * Nudges players to add the game to their home screen — the only way to get
- * true fullscreen (no browser chrome) + landscape lock on mobile.
+ * true fullscreen (no browser chrome) + landscape lock on mobile. The mobile
+ * BROWSER view is cramped/unreliable, so as long as the player is NOT running
+ * the installed app (standalone), we keep offering install every visit (使用者:
+ * 沒裝就一直引導;關掉只當次隱藏,下次再進來還是提示).
  *
  * Normal entry → prominent "push". Invite entry (a /?room= deep link) → quiet
  * "soft" bar, because adding to home won't help the current room (the icon
@@ -41,75 +29,90 @@ export default function InstallGuide() {
   const canInstall = usePwaStore((s) => s.canInstall)
   const standalone = usePwaStore((s) => s.standalone)
   const room = useAppStore((s) => s.pendingRoom)
-  const [dismissed, setDismissed] = useState(dismissedRecently)
+  const [dismissed, setDismissed] = useState(false) // 只當次隱藏,不寫 localStorage → 下次進來再提示
+  // Android only: is the PWA actually installed (WebAPK) even though we're in a
+  // browser tab? null = still detecting → render nothing (avoids the manual↔native flip).
+  const [androidInstalled, setAndroidInstalled] = useState<boolean | null>(isAndroid() ? null : false)
+  useEffect(() => {
+    if (isAndroid()) void isPwaInstalled().then(setAndroidInstalled)
+  }, [])
 
-  // Already an installed app, inside an in-app browser (gate handles that), on
-  // desktop, or dismissed within the last week → nothing to do.
+  // Running the installed app, inside an in-app browser (gate handles that), on
+  // desktop, or dismissed this session → nothing to do.
   if (standalone || isInAppBrowser() || !isMobile() || dismissed) return null
 
   const soft = Boolean(room)
 
-  // Manual ✕ — quiet the nudge for a week (not forever, so an uninstall→reinstall
-  // still surfaces it again once the browser re-offers install).
+  // Manual ✕ — hide for THIS session only (next visit re-prompts, since the
+  // browser view is bad and we want installers to keep being nudged).
   const close = () => {
     sfx.click()
     setDismissed(true)
-    try {
-      localStorage.setItem(DISMISS_KEY, String(Date.now()))
-    } catch {
-      /* ignore */
-    }
   }
 
-  // Successful install — just hide the nudge in-memory; do NOT persist a dismiss,
-  // because standalone/canInstall already suppress it for installed users, and
-  // persisting here is exactly what used to block re-install after uninstall.
   const afterInstall = () => setDismissed(true)
 
-  // ---- Android: fire the native install prompt ------------------------------
+  // ---- Android ---------------------------------------------------------------
   if (isAndroid()) {
-    if (!canInstall) return null // prompt not offered (yet) — nothing we can force
+    if (androidInstalled === null) return null // 偵測中,先不顯示(避免版面閃動)
+
+    // 有裝、但用瀏覽器開 → 建議改用桌面圖示(體驗較好)。
+    if (androidInstalled) {
+      if (soft) {
+        return portal(
+          <div className="a2hs a2hs--soft">
+            <span className="a2hs__soft-text">建議使用桌面圖示開啟,遊戲體驗較佳(開啟後輸入房號 {room})</span>
+            <button className="a2hs__close" aria-label="關閉" onClick={close}>✕</button>
+          </div>,
+        )
+      }
+      return portal(
+        <div className="a2hs a2hs--push">
+          <div className="a2hs__title">(建議) 用桌面圖示開啟</div>
+          <div className="a2hs__text">建議使用桌面圖示開啟，遊戲體驗較佳。</div>
+          <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>✕</button>
+        </div>,
+      )
+    }
+
+    // 沒裝 → 安裝提示。單一版面(不因 canInstall 閃動):按鈕有原生提示就叫原生,
+    // 沒有就用 toast 引導 ⋮ 選單。
     const install = async () => {
       sfx.click()
-      const ok = await promptInstall()
-      if (ok) afterInstall()
+      if (canInstall) {
+        const ok = await promptInstall()
+        if (ok) afterInstall()
+      } else {
+        useToastStore.getState().show('請點瀏覽器右上角 ⋮ 選單 →「安裝應用程式」')
+      }
     }
     if (soft) {
       return portal(
         <div className="a2hs a2hs--soft">
-          <span className="a2hs__soft-text">
-            想要全螢幕?安裝遊戲後開啟、輸入房號 {room}
-          </span>
-          <button className="a2hs__btn" onClick={install}>
-            安裝
-          </button>
-          <button className="a2hs__close" aria-label="關閉" onClick={close}>
-            ✕
-          </button>
+          <span className="a2hs__soft-text">安裝到主畫面,體驗全螢幕(開啟後輸入房號 {room})</span>
+          <button className="a2hs__btn" onClick={install}>安裝</button>
+          <button className="a2hs__close" aria-label="關閉" onClick={close}>✕</button>
         </div>,
       )
     }
     return portal(
       <div className="a2hs a2hs--push">
-        <div className="a2hs__title">安裝遊戲 · 全螢幕玩</div>
-        <div className="a2hs__text">加到主畫面,像 App 一樣開啟,沒有網址列。</div>
-        <button className="a2hs__btn" onClick={install}>
-          安裝到主畫面
-        </button>
-        <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>
-          ✕
-        </button>
+        <div className="a2hs__title">(建議) 安裝到主畫面，體驗全螢幕遊玩</div>
+        <div className="a2hs__text">安裝到主畫面，之後使用桌面圖示開啟遊戲即可全螢幕遊玩。</div>
+        <button className="a2hs__btn" onClick={install}>安裝到主畫面</button>
+        <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>✕</button>
       </div>,
     )
   }
 
-  // ---- iOS: no native prompt — guide to the Safari share button -------------
+  // ---- iOS: no native prompt — guide to the Safari share button. iOS 無法偵測
+  //      「是否已加到主畫面」(那只是捷徑,非真安裝) → 只要不是從主畫面圖示開啟就一律提示。
   if (isIOS()) {
     if (soft) {
       return portal(
         <div className="a2hs a2hs--soft">
           <span className="a2hs__soft-text">
-            想要全螢幕?點下方<span className="a2hs__share">⬆️</span>「加入主畫面」後開遊戲、輸入房號 {room}
+            想要全螢幕?點下方分享按鈕 <ShareIcon />「加入主畫面」後開遊戲、輸入房號 {room}
           </span>
           <button className="a2hs__close" aria-label="關閉" onClick={close}>
             ✕
@@ -120,10 +123,9 @@ export default function InstallGuide() {
     return portal(
       <>
         <div className="a2hs a2hs--push">
-          <div className="a2hs__title">加到主畫面 · 全螢幕玩</div>
+          <div className="a2hs__title">(建議) 加到主畫面，體驗全螢幕遊玩</div>
           <div className="a2hs__text">
-            點下方的<span className="a2hs__share">⬆️</span>分享鍵 → 選「加入主畫面」,
-            之後點桌面圖示就是全螢幕。
+            點擊下方的分享按鈕 <ShareIcon /> → 往下滑，選「加入主畫面」並加入，之後使用桌面圖示開啟遊戲即可全螢幕遊玩。
           </div>
           <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>
             ✕
@@ -135,6 +137,29 @@ export default function InstallGuide() {
   }
 
   return null
+}
+
+/** iOS Safari 分享按鈕圖示:一個開口向上的方框 + 往上突出的箭頭。線條 icon、無填色,
+ *  跟著文字色(currentColor)。 */
+function ShareIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ verticalAlign: '-0.15em', margin: '0 2px' }}
+    >
+      <path d="M12 15V3" />
+      <path d="M8.5 6.5 12 3l3.5 3.5" />
+      <path d="M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2" />
+    </svg>
+  )
 }
 
 function portal(node: ReactNode) {

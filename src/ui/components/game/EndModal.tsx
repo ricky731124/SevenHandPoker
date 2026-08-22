@@ -55,7 +55,7 @@ export default function EndModal({
       {reward &&
         (reward.capped ? (
           <p style={{ textAlign: 'center', color: 'var(--parch-muted)', fontWeight: 700, fontSize: 14, margin: '2px 0' }}>
-            今日對戰鑽石已領滿
+            今日真人對戰獎勵已領滿
           </p>
         ) : (
           <p
@@ -72,7 +72,7 @@ export default function EndModal({
             }}
           >
             <span>對戰勝利 +{reward.amount} 💎</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--parch-muted)' }}>今日 {reward.count}/3</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--parch-muted)' }}>今日 {reward.count}/2</span>
           </p>
         ))}
       {waiting ? (

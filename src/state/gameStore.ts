@@ -23,6 +23,7 @@ import {
 import type { Suit } from '../game/cards'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
+import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
 import type { Intent, LiveSel } from '../net/sync'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import { aiChooseSpecial } from '../game/ai'
@@ -40,6 +41,25 @@ import { sfx } from '../audio/sfx'
  */
 function recordMatchStat(online: boolean, won: boolean): void {
   void usePlatformStore.getState().recordMatchResult(online ? 'pvp' : 'solo', won)
+}
+
+/** Settle an ONLINE match's result exactly once per room code (#8). Returns false
+ *  if this session was already tallied (a flaky reconnect must never double-count).
+ *  Clears the openMatch marker so a later boot won't reconcile it as a loss. */
+function settleOnlineResult(code: string, won: boolean): boolean {
+  if (isMatchSettled(code)) return false
+  markMatchSettled(code)
+  clearOpenMatch()
+  void usePlatformStore.getState().recordMatchResult('pvp', won)
+  return true
+}
+
+/** Mark that a started online match is in progress (persists across a tab close),
+ *  so an abandoned match can be reconciled on the next boot. */
+function trackOpenMatch(code: string | undefined, engine: GameState): void {
+  if (!code) return
+  const started = engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0)
+  if (started) setOpenMatch(code)
 }
 
 /**
@@ -227,8 +247,9 @@ interface GameStore {
   leaveOnline: () => void
   /** Record a 中離 result for an online match (iWon = opponent left/timed-out).
    *  No-op unless the match actually started and hasn't ended (開局前不計). Call
-   *  right before leaveOnline. */
-  forfeitOnline: (iWon: boolean) => void
+   *  right before leaveOnline. `silent` = I only learned I won by leaving myself
+   *  (斷線提早離開)→ tally + rewards but NO 勝利音. Returns whether it tallied. */
+  forfeitOnline: (iWon: boolean, opts?: { silent?: boolean }) => boolean
   rematchStart: () => void
   agreeRematch: () => void
 
@@ -428,7 +449,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   finishCoinToss: () => {
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing' })
+    set({ engine, status: 'playing', incomingEmote: null }) // 清掉上一局殘留的貼圖
     sfx.deal() // 開局發牌
   },
 
@@ -577,7 +598,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setFoeWantsRematch: (v) => set({ foeWantsRematch: v }),
 
   finishCoinTossOnline: () => {
-    set({ status: 'playing' })
+    set({ status: 'playing', incomingEmote: null }) // 清掉上一局殘留的貼圖
     sfx.deal() // 開局發牌
   },
 
@@ -593,18 +614,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const endOpen = engine.phase === 'ended'
     // one-shot sounds on transitions
     if (showdownOpen && !prev.showdownOpen) {
-      // 對決音效:不論輸贏,雙方一觸發就播。贏家(含平手)等對決音效(1.6s)跑完
-      // 再接「搶金幣」;輸家無聲。
+      // 對決撞擊音(riser-hit,impact ~0.6s)雙方都播;0.8s 後(撞擊落定)贏家(含平手)
+      // 接「搶金幣成功」、輸家接「搶金幣失敗」。
       sfx.showdown()
       const iWon = engine.lastShowdown?.winner === prev.me || engine.lastShowdown?.winner === 'both'
-      if (iWon) setTimeout(() => sfx.coinWin(), 1600)
+      setTimeout(() => (iWon ? sfx.coinWin() : sfx.coinFail()), 400)
       reportShowdownDuel(engine) // 同花順 vs 同花順 → 狹路相逢
     }
     if (endOpen && !prev.endOpen) {
       const won = engine.winner === prev.me
       won ? sfx.win() : sfx.lose()
-      useAchievementStore.getState().hold(1800) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
-      recordMatchStat(true, won) // guest side of online → pvp 戰績
+      useAchievementStore.getState().hold(700) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
+      const code = get().online?.code // guest side of online → pvp 戰績(以房號去重)
+      if (code) settleOnlineResult(code, won)
+    }
+    trackOpenMatch(get().online?.code, engine) // #8: remember a started online match
+    // 放牌/補牌音:host 在權威路徑(placeAt/doDraw)發聲,但 guest 只拿到鏡像 engine,
+    // 這兩個聲音原本從不觸發(#6:玩家誤以為是手機問題,其實是「當 guest 沒聲」)。
+    // 從前後 engine 差異補放:格子多了牌=放牌(雙方放牌都響,同 host);我的手牌變多=我補牌。
+    const prevEng = prev.engine
+    if (prevEng && !newGame) {
+      const slotCount = (e: typeof engine) => e.slots.reduce((n, s) => n + s.p1.length + s.p2.length, 0)
+      if (slotCount(engine) > slotCount(prevEng)) sfx.place()
+      const myGrew = engine.hands[prev.me].length - prevEng.hands[prev.me].length
+      if (myGrew > 0 && engine.phase !== 'ended') sfx.draw(myGrew) // 換牌(偷天換日/花色)張數不變 → 只有真補牌才響
     }
     // foeSelection = the submitted pick (place phase); the LIVE preview during a
     // pick lives in foeLive and is set by the live listener — don't clobber it.
@@ -660,16 +693,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
 
-  forfeitOnline: (iWon) => {
+  forfeitOnline: (iWon, opts) => {
     const { online, engine } = get()
-    if (!online || !engine || engine.phase === 'ended') return
+    if (!online || !engine || engine.phase === 'ended') return false
     // 開局前(還沒送出第一張牌)離開 → 雙方不計。用「已放進格子的牌」判定開局:
     // guest 的鏡像 placementsDone 恆為 0(見 sync.deserializeForGuest),但 slots
     // 兩端都有真實張數,所以 host 中離時 guest 才能正確拿到判勝 + 真人鑽石。
     const anyPlaced = engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0)
     const started = anyPlaced || engine.placementsDone.p1 + engine.placementsDone.p2 > 0 || !!engine.pendingPick
-    if (!started) return
+    if (!started) return false // 開局前離開 → 不判勝、不計場次、不跑任何流程
+    if (isMatchSettled(online.code)) return false // 這一局已結算過 → 不重複計(#8 防呆)
+    // 判我勝時補勝利音(中離/等滿斷線不走正常 ended,原本無聲)+ 讓勝利音先站穩再放行
+    // 💎 佇列。但 silent(我自己提早離開才知道贏)→ 不放勝利音,獎勵在主畫面直接跑。
+    if (iWon && !opts?.silent) {
+      sfx.win()
+      useAchievementStore.getState().hold(700)
+    }
+    markMatchSettled(online.code)
+    clearOpenMatch()
     void usePlatformStore.getState().recordMatchResult('pvp', iWon)
+    return true
   },
 
   rematchStart: () => {
@@ -836,8 +879,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!engine || engine.phase !== 'draw') return
     const drawer = engine.postPicker
     const next = applyDraw(engine)
-    // 補牌:補幾張放幾聲 card-slide(依 DRAW_SCHEDULE,3 或 2 張)。
-    if (drawer) {
+    // 補牌:只有「我」補牌時放聲(補幾張放幾聲 card-slide);對手補牌不出聲。
+    if (drawer && drawer === get().me) {
       const n = next.hands[drawer].length - engine.hands[drawer].length
       if (n > 0) sfx.draw(n)
     }
@@ -846,15 +889,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   applyEngine: (next) => {
     set({ engine: next })
+    trackOpenMatch(get().online?.code, next) // #8: remember a started online match
     if (next.phase === 'showdown') {
       // new showdown → require both players to acknowledge before advancing
       set({ acks: { p1: false, p2: false } })
       // Let the coin topple / placement land first, then reveal the showdown.
       if (next.lastShowdown) {
-        // 對決音效:雙方都播;贏家(含平手)1.6s 後接搶金幣,輸家無聲。
+        // 對決撞擊音雙方都播;0.8s 後贏家(含平手)接搶金幣成功、輸家接搶金幣失敗。
         sfx.showdown()
         const iWon = next.lastShowdown.winner === get().me || next.lastShowdown.winner === 'both'
-        if (iWon) setTimeout(() => sfx.coinWin(), 1600)
+        setTimeout(() => (iWon ? sfx.coinWin() : sfx.coinFail()), 400)
         reportShowdownDuel(next) // 同花順 vs 同花順 → 狹路相逢
       }
       // Let the placement land and read before the showdown popup — new players
@@ -871,10 +915,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       setTimeout(() => set({ endOpen: true }), 550)
       const won = next.winner === get().me
       won ? sfx.win() : sfx.lose()
-      useAchievementStore.getState().hold(1800) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
+      useAchievementStore.getState().hold(700) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
       // 戰績:host + 單機在此結算一次(guest 走 applyGuestView 的 ended transition)。
-      // 自由匹配的 bot 局(casualFoe)照真人算 PvP → 勝場王/勝場成就 + 發鑽(使用者定案)。
-      recordMatchStat(!!get().online || !!get().casualFoe, won)
+      // 線上走 settleOnlineResult(以房號去重,一場只結算一次);自由匹配的 bot 局
+      // (casualFoe)無房號、單一 client 只結一次,照真人算 PvP。
+      const on = get().online
+      if (on) settleOnlineResult(on.code, won)
+      else recordMatchStat(!!get().casualFoe, won)
       // campaign: fold this match into the BO series (the end screen then shows
       // series status / result — wired with the campaign UI).
       get().onMatchEnd?.(won)
@@ -912,12 +959,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   closeMagnifier: () => set({ magnifier: null }),
 
   toggleSortMode: () => {
-    sfx.hover()
+    // 排序鍵的 click 由 SortButtons(RoundBtn)播;這裡不再播 hover。
     set({ sortMode: get().sortMode === 'rank' ? 'suit' : 'rank' })
     get().emitLive() // re-sort moves my pushed cards → opponent sees it
   },
   toggleSortDir: () => {
-    sfx.hover()
     set({ sortDir: get().sortDir === 'desc' ? 'asc' : 'desc' })
     get().emitLive()
   },

@@ -94,23 +94,23 @@ export default function Menu() {
       </motion.div>
 
       {/* Start dialog: 4 modes */}
-      <Modal open={dialog === 'start'} onClose={() => setDialog(null)} title="開始遊戲" largeTitle>
+      <Modal open={dialog === 'start'} onClose={() => setDialog(null)} title="開始遊戲" largeTitle panelClass="menu-start">
         <Button full icon={<Paw />} onClick={() => { setDialog(null); go('campaignStages') }}>
           主線任務
         </Button>
+        <Button full icon={<IconGlobe />} onClick={() => setDialog('free')}>
+          快速配對
+        </Button>
         <Button full icon={<IconDice />} onClick={() => setDialog('create')}>
-          建立對戰
+          建立房間
         </Button>
         <Button full icon={<IconKey />} onClick={() => setDialog('join')}>
-          加入對戰
-        </Button>
-        <Button full icon={<IconGlobe />} onClick={() => setDialog('free')}>
-          自由匹配
+          加入房間
         </Button>
       </Modal>
 
       {/* Free match: pick room type, then search (30s for a human, else a bot). */}
-      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} title="自由匹配">
+      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} title="快速配對" panelClass="menu-free">
         <p className="menu__hint">選擇房型,系統會為你配對對手：</p>
         <Button
           full
@@ -139,7 +139,7 @@ export default function Menu() {
       </Modal>
 
       {/* Create-match config: opponent · room type · time (each required), confirm */}
-      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} title="建立對戰">
+      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} title="建立房間">
         <CheckGroup
           label="對手"
           value={opponent}
@@ -178,7 +178,7 @@ export default function Menu() {
       </Modal>
 
       {/* Join room */}
-      <Modal open={dialog === 'join'} onClose={() => setDialog('start')} title="加入對戰">
+      <Modal open={dialog === 'join'} onClose={() => setDialog('start')} title="加入房間">
         <p className="menu__hint">輸入朋友給你的 3 碼房號：</p>
         <input
           className="menu__input"

@@ -18,6 +18,8 @@ export interface RewardNotice {
   art?: RewardArt
   title: string
   sub?: string
+  /** override the on-screen duration in ms (default 2000). e.g. 每日簽到 = 5000. */
+  dur?: number
 }
 export type Notice = ({ kind: 'ach' } & AchUnlock) | RewardNotice
 
@@ -55,3 +57,22 @@ export const useAchievementStore = create<AchievementStore>((set) => ({
   shift: () => set((s) => ({ queue: s.queue.slice(1) })),
   hold: (ms) => set({ gateUntil: Date.now() + ms }),
 }))
+
+// DEV-only test hooks (成就/獎勵很難自然觸發 → 手動彈假的來測 toast 序列與音效)。
+// 在瀏覽器 console 執行:__testToast()(只彈通知)、__testWin()(勝利音→1.8s→鑽石/頭像/特殊牌→成就)。
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  const enqueueFakes = () => {
+    const s = useAchievementStore.getState()
+    s.pushReward({ icon: '💎', title: '+5 💎', sub: '每日勝利獎勵' })
+    s.pushReward({ title: '解鎖頭像', sub: '新頭像', art: { kind: 'avatar', id: 'dog' } })
+    s.pushReward({ title: '解鎖特殊牌', sub: '新卡片', art: { kind: 'card', id: 'swap' } })
+    s.push([{ id: 'wins', tier: 1 }])
+  }
+  const w = window as unknown as { __testToast: () => void; __testWin: () => void }
+  w.__testToast = enqueueFakes
+  w.__testWin = () => {
+    void import('../audio/sfx').then(({ sfx }) => sfx.win())
+    useAchievementStore.getState().hold(700)
+    enqueueFakes()
+  }
+}

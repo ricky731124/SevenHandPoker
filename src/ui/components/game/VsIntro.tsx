@@ -12,13 +12,10 @@ import './VsIntro.css'
  */
 export default function VsIntro({ p1, p2, onDone }: { p1: Seat; p2: Seat; onDone: () => void }) {
   useEffect(() => {
-    sfx.deal() // whoosh as they charge in
-    const impact = setTimeout(() => sfx.showdown(), 520) // clash
+    // 進場「BATTLE」撞擊:riser-hit(build→impact 約 0.6s),對上碰撞動畫(約 0.5s)。
+    sfx.battle()
     const done = setTimeout(onDone, 4000)
-    return () => {
-      clearTimeout(impact)
-      clearTimeout(done)
-    }
+    return () => clearTimeout(done)
   }, [onDone])
 
   const charge = (fromLeft: boolean) => ({

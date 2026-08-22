@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 import { useAppStore } from './state/appStore'
 import { usePlatformStore } from './state/platformStore'
-import { tryReconnect } from './net/netgame'
+import { tryReconnect, reconcileAbandonedMatch } from './net/netgame'
 import { trackPresence } from './net/presence'
 import { isFirebaseConfigured } from './firebaseApp'
 import OnlineCount from './ui/components/OnlineCount'
@@ -22,6 +22,7 @@ import AchievementToast from './ui/components/AchievementToast'
 import UpgradePrompt from './ui/components/UpgradePrompt'
 import InAppBrowserGate from './ui/components/InAppBrowserGate'
 import InstallGuide from './ui/components/InstallGuide'
+import OrientationTip from './ui/components/OrientationTip'
 
 const screens = {
   menu: Menu,
@@ -56,6 +57,9 @@ export default function App() {
     usePlatformStore.getState().init()
     void (async () => {
       if (await tryReconnect()) return
+      // Didn't resume a game → if a started match was left un-rejoinable, settle it
+      // as a single loss (#8). Idempotent via the settled-set.
+      void reconcileAbandonedMatch()
       const room = new URLSearchParams(window.location.search).get('room')
       // The join-confirm popup peeks the room's type/time/host, so the link
       // only needs the code (no ?type/?time).
@@ -89,7 +93,8 @@ export default function App() {
 
       <InstallGuide />
       <InAppBrowserGate />
-      {/* 線上人數只在主畫面顯示(且只有 ricky 看得到,見 OnlineCount) */}
+      <OrientationTip />
+      {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
       {screen === 'menu' && <OnlineCount />}
     </>
   )

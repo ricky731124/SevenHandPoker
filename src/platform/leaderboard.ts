@@ -1,4 +1,14 @@
-import { getDatabase, ref, get, update, type Database } from 'firebase/database'
+import {
+  getDatabase,
+  ref,
+  get,
+  update,
+  query,
+  orderByChild,
+  limitToLast,
+  startAt,
+  type Database,
+} from 'firebase/database'
 import { getFirebaseApp } from '../firebaseApp'
 
 /**
@@ -94,25 +104,60 @@ export async function writeLeaderboard(uid: string, snap: LbSnapshot): Promise<v
   await update(ref(db(), 'leaderboard'), patch)
 }
 
-/** Read a whole board and return it sorted best-first (score desc; ties broken by
- *  earliest reach — `since` asc). Player counts are small, so pulling the whole
- *  board client-side is fine (add an index later if it grows). */
-export async function fetchBoard(board: Board): Promise<LbRow[]> {
-  const snap = await get(ref(db(), `leaderboard/${board}`))
+/** How many rows the board shows. */
+export const TOP_N = 20
+
+function rowFrom(uid: string, v: Partial<LbRow>): LbRow {
+  return {
+    uid,
+    displayName: v.displayName ?? '?',
+    avatarId: v.avatarId ?? 'cat',
+    score: v.score ?? 0,
+    since: v.since ?? v.updatedAt ?? 0,
+    subId: v.subId,
+    updatedAt: v.updatedAt ?? 0,
+  }
+}
+
+const byScoreThenSince = (a: LbRow, b: LbRow) => (b.score !== a.score ? b.score - a.score : a.since - b.since)
+
+/** Top-N only. Uses an indexed range query (`orderByChild('score')` +
+ *  `limitToLast`) so the client downloads ~N rows, not the whole board — the fix
+ *  for both the leaderboard's bandwidth/perf (#3) and the main-thread stall that
+ *  was swallowing the tab click sound (#2). Needs `.indexOn: ["score"]` on each
+ *  board in the DB rules. */
+export async function fetchTop(board: Board, n = TOP_N): Promise<LbRow[]> {
+  const snap = await get(query(ref(db(), `leaderboard/${board}`), orderByChild('score'), limitToLast(n)))
   if (!snap.exists()) return []
   const rows: LbRow[] = []
   snap.forEach((child) => {
-    const v = (child.val() ?? {}) as Partial<LbRow>
-    rows.push({
-      uid: child.key as string,
-      displayName: v.displayName ?? '?',
-      avatarId: v.avatarId ?? 'cat',
-      score: v.score ?? 0,
-      since: v.since ?? v.updatedAt ?? 0,
-      subId: v.subId,
-      updatedAt: v.updatedAt ?? 0,
-    })
+    rows.push(rowFrom(child.key as string, (child.val() ?? {}) as Partial<LbRow>))
   })
-  rows.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.since - b.since))
-  return rows
+  return rows.sort(byScoreThenSince)
+}
+
+export interface MyRank {
+  rank: number
+  row: LbRow
+}
+
+/** My exact rank + row, for the frozen "我的排名" bar when I'm not in the top-N.
+ *  Reads my own entry, then range-queries only the entries scoring at-or-above me
+ *  (indexed) and counts how many outrank me — far lighter than pulling the board.
+ *  Returns null if I have no entry on this board. */
+export async function fetchMyRank(board: Board, uid: string): Promise<MyRank | null> {
+  const mine = await get(ref(db(), `leaderboard/${board}/${uid}`))
+  if (!mine.exists()) return null
+  const row = rowFrom(uid, (mine.val() ?? {}) as Partial<LbRow>)
+  const snap = await get(query(ref(db(), `leaderboard/${board}`), orderByChild('score'), startAt(row.score)))
+  let above = 0
+  snap.forEach((child) => {
+    if (child.key === uid) return
+    const v = (child.val() ?? {}) as Partial<LbRow>
+    const s = v.score ?? 0
+    const since = v.since ?? v.updatedAt ?? 0
+    // strictly higher score, or equal score reached earlier → ranks above me
+    if (s > row.score || (s === row.score && since < row.since)) above++
+  })
+  return { rank: above + 1, row }
 }

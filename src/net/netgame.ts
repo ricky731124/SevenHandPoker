@@ -5,9 +5,15 @@ import {
   getClientId,
   leaveRoom,
   markAbandoned,
+  readGuestLoadout,
   readHostSnapshot,
   readSession,
+  saveGuestLoadout,
   saveHostSnapshot,
+  readOpenMatch,
+  clearOpenMatch,
+  isMatchSettled,
+  markMatchSettled,
   type Role,
   type Room,
 } from './room'
@@ -271,7 +277,10 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       !!opts?.reconnect,
       special,
       timeLimit,
-      myLoadout(),
+      // Reconnect: restore the loadout the guest COMMITTED to in B (persisted per-tab),
+      // not the profile's equipped deck — otherwise a mid-match reload silently hands
+      // the guest its full preset deck instead of the cards it picked (#7).
+      opts?.reconnect ? (readGuestLoadout(code) as SpecialCardId[] | null) ?? myLoadout() : myLoadout(),
     )
   }
   const unsubGame = onValue(gameRef(code), (snap) => {
@@ -290,7 +299,12 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
   // pre-match pick barrier: advance to the coin once BOTH ready.
   const unsubReady = onValue(P(code, 'ready'), (snap) => {
     const r = (snap.val() as { host?: boolean; guest?: boolean } | null) ?? {}
-    if (r.host && r.guest) useGameStore.getState().setLoadoutReady()
+    if (r.host && r.guest) {
+      useGameStore.getState().setLoadoutReady()
+      // Persist the loadout the guest just committed to, so a mid-match reload
+      // restores THESE cards instead of the profile's equipped deck (#7).
+      saveGuestLoadout(code, useGameStore.getState().loadout)
+    }
   })
   // shared pause state (Stage C).
   const unsubPause = onValue(pauseRef(code), (snap) => {
@@ -372,6 +386,22 @@ export function detachOnline(): void {
  * deliberate "離開遊戲"), rejoin the same room. Host restores its engine from the
  * local snapshot; guest re-reads the guest-view. Returns true if it reconnected.
  */
+/**
+ * #8: on boot, settle an abandoned online match as a loss — ONCE. Call this only
+ * AFTER tryReconnect() returned false (i.e. we did NOT resume the game): if a
+ * STARTED match is still marked open, it means I left/closed and can't rejoin, so
+ * the opponent will (or already did) take the win → record my single loss. The
+ * settled-set makes this idempotent (flaky reconnects never double-count).
+ */
+export async function reconcileAbandonedMatch(): Promise<void> {
+  const code = readOpenMatch()
+  if (!code) return
+  clearOpenMatch()
+  if (isMatchSettled(code)) return
+  markMatchSettled(code)
+  await usePlatformStore.getState().recordMatchResult('pvp', false)
+}
+
 export async function tryReconnect(): Promise<boolean> {
   const session = readSession()
   if (!session) return false

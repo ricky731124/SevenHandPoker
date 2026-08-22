@@ -107,7 +107,11 @@ export default function Matchmaking() {
           {matchType === 'special' ? '特殊房' : '一般房'} · 配對時間：{elapsed} 秒
         </p>
         <p className="mm__phase">{phaseText(elapsed)}</p>
-        <Button variant="secondary" onClick={cancel}>
+        {/* Lock 取消 for the first 2s: an instant pairing (someone already waiting)
+            can land in the same tick a fast tap hits 取消 → the canceller bails but
+            the peer is left connected to a room nobody joins. #7 (no countdown text
+            — 使用者:倒數會讓人看不懂) */}
+        <Button variant="secondary" onClick={cancel} disabled={elapsed < 2}>
           取消
         </Button>
       </div>

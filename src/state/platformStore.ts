@@ -19,7 +19,7 @@ import {
   fetchDisplayName,
   setDisplayName,
   setDiamondsEarned,
-  grantPvpReward,
+  grantDailyReward,
   todayStr,
   markTutorialSeen as persistTutorialSeen,
   setUsername,
@@ -35,6 +35,8 @@ import {
   type ActiveSeries,
 } from '../platform/profile'
 import { writeLeaderboard } from '../platform/leaderboard'
+import { writeCard, type CardProfileFields } from '../platform/cards'
+import { useLeaderboardCache } from './leaderboardCache'
 import { ALL_SPECIAL_CARD_IDS, getSpecialCard } from '../game/specialCards'
 import { subStageOrder } from '../game/campaign'
 import { ALL_AVATAR_IDS, AVATARS } from '../ui/components/PlayerAvatar'
@@ -52,18 +54,23 @@ export interface StageReward {
 // The owner's test account: everything unlocked so it can exercise all content.
 const TEST_ACCOUNT = 'ricky'
 
-// PvP-win diamond reward: +5 per win, up to 3 wins/day (15 鑽) — see Shop 文案.
-const PVP_WIN_REWARD = 5
-const PVP_DAILY_CAP = 15
+// 每日任務發鑽 (#6): 每項 +5。真人勝發鑽上限 2 場(舊制 3 場已取代)。
+const DAILY_REWARD = 5
+const PVP_WIN_CAP = 2 // 真人獲勝發鑽最多 2 場/日
 
 /** Result of a PvP win's diamond grant, for the end screen's「+5 💎」line. */
 export interface PvpReward {
   amount: number
-  /** how many rewarded wins today (1..3) */
+  /** how many rewarded pvp wins today (1..2) */
   count: number
-  /** true if today's cap was already hit → this win earned nothing */
+  /** true if today's pvp-win reward cap was already hit → this win earned nothing */
   capped: boolean
 }
+
+// 每日簽到只嘗試發一次/載入(避免 profile 尚未刷新前重複發)。跨載入靠 daily.signin。
+let signinGrantedThisLoad = false
+// 每次載入把自己的公開名片補寫一次(回訪登入不會經過 syncLeaderboard,名片會缺欄位)。
+let cardBackfilledThisLoad = false
 
 /** Build the full achievement-metric map from a stats blob (missing → 0). */
 function statMetrics(s: Record<string, number>): Record<AchMetric, number> {
@@ -131,6 +138,8 @@ interface PlatformStore {
   /** Tally a finished match: 戰績 (pvp/solo 場次·勝·連勝) + 連勝/場次/勝場成就。
    *  牌型成就改在送出當下即時判定(reportHandPlayed),不在這裡算。 */
   recordMatchResult: (category: 'pvp' | 'solo', won: boolean) => Promise<void>
+  /** 每日簽到:今天第一次(有登入、手機需橫向)自動發 +5 鑽並跳 5 秒 toast。冪等。 */
+  claimDailySignin: () => Promise<void>
   /** The last PvP win's diamond grant (for the end screen line); null on a loss. */
   lastPvpReward: PvpReward | null
   /** 送出一疊牌時即時回報其牌型的「單場累計數」;跨越門檻就當場解鎖 + 彈通知。 */
@@ -165,6 +174,8 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
     }
     const unsub = onAuth((user) => {
       get()._profileUnsub?.()
+      cardBackfilledThisLoad = false // 換帳號 → 允許重新補寫名片(含最新成就)
+      signinGrantedThisLoad = false
       if (!user) {
         set({ uid: null, isAnonymous: false, username: null, displayName: null, email: null, profile: null, _profileUnsub: null, ready: true })
         return
@@ -173,6 +184,11 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
       void ensureProfile(user.uid, user.isAnonymous)
       const punsub = subscribeProfile(user.uid, (p) => {
         set({ profile: p, username: p?.username ?? null, displayName: p?.displayName ?? p?.username ?? null })
+        // 補寫自己的公開名片一次/載入(回訪登入沒經過 syncLeaderboard → 名片會缺頭像/牌組/戰績)。
+        if (!cardBackfilledThisLoad && p && !p.isAnonymous && (p.displayName ?? p.username)) {
+          cardBackfilledThisLoad = true
+          void writeCard(user.uid, cardFromProfile(p))
+        }
         // Test account: keep everything unlocked (idempotent — only writes when
         // something is still missing, so the resulting update doesn't loop).
         if (p?.username === TEST_ACCOUNT) {
@@ -304,7 +320,10 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
       await get().ensureAccount()
       uid = get().uid
     }
-    if (uid) await setSpecialLoadout(uid, ids)
+    if (uid) {
+      await setSpecialLoadout(uid, ids)
+      void syncCard(uid) // 更新公開名片的預設牌組(#5)
+    }
   },
 
   saveAvatar: async (id) => {
@@ -329,7 +348,10 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
       await get().ensureAccount()
       uid = get().uid
     }
-    if (uid) await setEquippedAchievements(uid, ids)
+    if (uid) {
+      await setEquippedAchievements(uid, ids)
+      void syncCard(uid) // 展示成就變更 → 更新公開名片(#5/#2)
+    }
   },
 
   recordStageClear: async (subId, reward) => {
@@ -394,31 +416,76 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
     const { updated, newly } = detectUnlocks(get().profile?.unlocked.achievements ?? {}, metrics)
     await persistMatchRecord(uid, next, updated)
 
-    // PvP-win diamond reward (+5, up to 3 wins/day). Enqueue the reward toast
-    // BEFORE the achievement toasts so the 💎 pops first; capped wins earn/pop
-    // nothing (so a long friend session doesn't spam — max 3 toasts/day).
+    // 每日任務發鑽 (#6): 達成即自動發,走同一個 toast 佇列(獎勵先於成就)。訪客不發。
+    //   完成任意一場對戰 +5(pvp/電腦/主線都算)、真人獲勝 1 場 +5、真人獲勝 2 場 +5。
     let reward: PvpReward | null = null
-    if (category === 'pvp' && won) {
-      const p = get().profile
+    const p = get().profile
+    if (uid && p && !p.isAnonymous) {
       const today = todayStr()
-      const gotToday = p?.daily?.date === today ? (p?.daily?.pvpDiamonds ?? 0) : 0
-      if (gotToday < PVP_DAILY_CAP) {
-        const total = gotToday + PVP_WIN_REWARD
-        reward = { amount: PVP_WIN_REWARD, count: total / PVP_WIN_REWARD, capped: false }
-        await grantPvpReward(uid, PVP_WIN_REWARD, today, total)
-        useAchievementStore.getState().pushReward({
-          icon: '💎',
-          title: `真人對戰勝利　+${PVP_WIN_REWARD} 💎`,
-          sub: `今日 ${reward.count}/${PVP_DAILY_CAP / PVP_WIN_REWARD}`,
-        })
-      } else {
-        reward = { amount: 0, count: PVP_DAILY_CAP / PVP_WIN_REWARD, capped: true }
+      const d = p.daily?.date === today ? p.daily : undefined
+      const day = {
+        date: today,
+        signin: !!d?.signin,
+        match: !!d?.match,
+        pvpWin1: !!d?.pvpWin1,
+        pvpWin2: !!d?.pvpWin2,
+      }
+      const toasts: { title: string }[] = []
+      let total = 0
+      if (!day.match) {
+        day.match = true
+        total += DAILY_REWARD
+        toasts.push({ title: `每日任務：完成一場對戰　+${DAILY_REWARD} 💎` })
+      }
+      if (category === 'pvp' && won) {
+        if (!day.pvpWin1) {
+          day.pvpWin1 = true
+          total += DAILY_REWARD
+          toasts.push({ title: `每日任務：真人對戰獲勝一場　+${DAILY_REWARD} 💎` })
+          reward = { amount: DAILY_REWARD, count: 1, capped: false }
+        } else if (!day.pvpWin2) {
+          day.pvpWin2 = true
+          total += DAILY_REWARD
+          toasts.push({ title: `每日任務：真人對戰獲勝二場　+${DAILY_REWARD} 💎` })
+          reward = { amount: DAILY_REWARD, count: 2, capped: false }
+        } else {
+          reward = { amount: 0, count: PVP_WIN_CAP, capped: true } // 今日真人勝已領滿
+        }
+      }
+      if (total > 0) {
+        await grantDailyReward(uid, total, day)
+        toasts.forEach((t) => useAchievementStore.getState().pushReward({ icon: '💎', title: t.title }))
       }
     }
     set({ lastPvpReward: reward })
 
     useAchievementStore.getState().push(newly)
     void syncLeaderboard(uid)
+  },
+
+  claimDailySignin: async () => {
+    // 由「點每日任務」這個手勢觸發(音效已解鎖、profile 也已載入)→ 比登入自動發穩。
+    if (!isFirebaseConfigured() || signinGrantedThisLoad) return
+    const uid = get().uid
+    const p = get().profile
+    if (!uid || !p || p.isAnonymous) return // 訪客不領
+    const today = todayStr()
+    if (p.daily?.date === today && p.daily?.signin) return // 今天已領
+    signinGrantedThisLoad = true
+    const d = p.daily?.date === today ? p.daily : undefined
+    try {
+      await grantDailyReward(uid, DAILY_REWARD, {
+        date: today,
+        signin: true,
+        match: !!d?.match,
+        pvpWin1: !!d?.pvpWin1,
+        pvpWin2: !!d?.pvpWin2,
+      })
+      // 5 秒特製 toast + 入帳音(reward 音)。
+      useAchievementStore.getState().pushReward({ icon: '💎', title: `每日簽到　+${DAILY_REWARD} 💎`, dur: 5000 })
+    } catch {
+      signinGrantedThisLoad = false // 失敗 → 允許再試
+    }
   },
 
   reportHandPlayed: async (metric, matchCount) => {
@@ -499,8 +566,45 @@ async function syncLeaderboard(uid: string): Promise<void> {
       achievements,
       diamonds,
     })
+    // 我的成績剛變動 → 下次進排行榜要重抓(不然看到的是舊快取)。
+    useLeaderboardCache.getState().markDirty()
+    // 同步公開名片(#5):頭像/名/牌組/戰績,供別人的資訊卡讀取。lastOnline 由 presence 管。
+    await writeCard(uid, cardFromProfile(p))
   } catch {
     /* leaderboard is best-effort — a failed write must never break the game flow */
+  }
+}
+
+/** Build the public name-card fields from a profile (#5). */
+function cardFromProfile(p: Profile): CardProfileFields {
+  const s = p.stats ?? {}
+  return {
+    displayName: p.displayName ?? p.username ?? '玩家',
+    avatarId: p.equipped.avatar,
+    loadout: p.equipped.specialCards ?? [],
+    // 展示成就 = 玩家裝備的成就族 + 其現階(只收已解鎖 tier>0 的)。
+    achievements: (p.equipped.achievements ?? [])
+      .map((id) => ({ id, tier: p.unlocked.achievements?.[id] ?? 0 }))
+      .filter((a) => a.tier > 0),
+    pvp: {
+      games: s.pvpGames ?? 0,
+      wins: s.pvpWins ?? 0,
+      streak: s.pvpStreak ?? 0,
+      bestStreak: s.pvpBestStreak ?? 0,
+    },
+    solo: { games: s.soloGames ?? 0, wins: s.soloWins ?? 0 },
+  }
+}
+
+/** Refresh only the public name-card (used where the leaderboard sync isn't — e.g.
+ *  changing the preset deck). Registered players only; best-effort. */
+async function syncCard(uid: string): Promise<void> {
+  try {
+    const p = await fetchProfile(uid)
+    if (!p || p.isAnonymous || !(p.displayName ?? p.username)) return
+    await writeCard(uid, cardFromProfile(p))
+  } catch {
+    /* best-effort */
   }
 }
 

@@ -71,6 +71,21 @@ export const usePwaStore = create<PwaState>(() => ({
   standalone: isStandalone(),
 }))
 
+/** Android Chrome only: whether THIS PWA is actually installed (WebAPK), even
+ *  when currently opened in a browser tab. Uses getInstalledRelatedApps() against
+ *  the manifest's related_applications entry. iOS / unsupported → false (there is
+ *  no way to detect an iOS home-screen shortcut). Never throws. */
+export async function isPwaInstalled(): Promise<boolean> {
+  try {
+    const nav = navigator as unknown as { getInstalledRelatedApps?: () => Promise<unknown[]> }
+    if (!nav.getInstalledRelatedApps) return false
+    const apps = await nav.getInstalledRelatedApps()
+    return Array.isArray(apps) && apps.length > 0
+  } catch {
+    return false
+  }
+}
+
 /** Fire the native "install app" prompt. Returns true if the user accepted. */
 export async function promptInstall(): Promise<boolean> {
   if (!deferredPrompt) return false

@@ -1,16 +1,16 @@
-/* Owner-only concurrency readout, pinned bottom-right over everything. */
+/* Concurrency readout, pinned bottom-right over everything (shown to everyone). */
 .online-count {
   position: fixed;
   right: 10px;
   bottom: 10px;
   z-index: 60;
-  padding: 5px 12px;
+  padding: 7px 15px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.62);
   color: #eafff0;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   letter-spacing: 0.02em;
   border: 1px solid rgba(255, 255, 255, 0.22);

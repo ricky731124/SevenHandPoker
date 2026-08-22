@@ -12,6 +12,7 @@ import { getSpecialCard, ALL_SPECIAL_CARD_IDS, type SpecialCardId } from '../../
 import { SUIT_SYMBOL } from '../../game/cards'
 import Button from '../components/Button'
 import PlayerAvatar from '../components/PlayerAvatar'
+import PlayerInfoCard from '../components/PlayerInfoCard'
 import Deck from '../components/game/Deck'
 import SortButtons from '../components/game/SortButtons'
 import Hand from '../components/game/Hand'
@@ -108,57 +109,103 @@ function OnlineGame({ mode, roomId }: { mode: 'host' | 'guest'; roomId?: string 
   const displayName = usePlatformStore((s) => s.displayName)
   const myAvatar = usePlatformStore((s) => s.profile?.equipped?.avatar)
   const myUnlockedSpecials = usePlatformStore((s) => s.profile?.unlocked?.specialCards)
+  const myUid = usePlatformStore((s) => s.uid)
   useEffect(() => {
     if (netPhase === 'connected' && code) attachOnline(code, mode)
   }, [netPhase, code, mode])
   // Publish my display identity + unlocked special-card set (for the PvP
-  // intersection pool) so the opponent can show my name/avatar and compute the pool.
+  // intersection pool) + my uid (so the opponent can open my public name-card, #5).
   useEffect(() => {
     if (netPhase !== 'connected' || !code) return
     const specials = username === 'ricky' ? ALL_SPECIAL_CARD_IDS : Object.keys(myUnlockedSpecials ?? { swap: true })
+    const base = { specials, uid: myUid }
     const meta = displayName
-      ? { name: displayName, avatarId: myAvatar || 'cat', specials }
-      : { name: 'guest', avatarId: mode === 'host' ? 'cat' : 'bird', specials }
+      ? { name: displayName, avatarId: myAvatar || 'cat', ...base }
+      : { name: 'guest', avatarId: mode === 'host' ? 'cat' : 'bird', ...base }
     void setPlayerMeta(code, mode, meta)
-  }, [netPhase, code, mode, username, displayName, myAvatar, myUnlockedSpecials])
-  // 關分頁/離開頁面也算主動判敗(盡力而為:瀏覽器不一定來得及送出這筆)。對手那邊
-  // 靠斷線 90 秒判定照常記勝。
+  }, [netPhase, code, mode, username, displayName, myAvatar, myUnlockedSpecials, myUid])
+  // #8:不再於 pagehide 立即記敗(重整/切分頁/短暫斷線都會觸發 pagehide → 會誤記)。
+  // 改由「開打即寫 openMatch 標記,下次開 app 若回不到同一房才補記一敗」處理(見 net/room
+  // + tryReconnect / reconcileAbandonedMatch),對手那邊仍靠斷線 90 秒判定照常記勝。
+  // 這局有沒有「真的開打」(有出牌被判勝場/場次)。全部判勝/發鑽/流程都以此為前提。
+  const engine = useGameStore((s) => s.engine)
+  const matchStarted =
+    !!engine &&
+    (engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0) ||
+      engine.placementsDone.p1 + engine.placementsDone.p2 > 0 ||
+      !!engine.pendingPick)
+  const foeAbandoned = room?.abandoned === (mode === 'host' ? 'guest' : 'host')
+  const forfeitedRef = useRef(false)
+  const [dcWin, setDcWin] = useState(false) // 斷線等滿 90 秒、判我勝的彈窗
+  // silent=true → 我自己提早離開才知道贏(斷線)→ 不放勝利音,獎勵在主畫面跑。
+  const claimWin = (silent: boolean) => {
+    if (forfeitedRef.current) return false
+    forfeitedRef.current = useGameStore.getState().forfeitOnline(true, { silent })
+    return forfeitedRef.current
+  }
+  // 對手「主動離開房間(中離)」一確認就當下判勝(你在遊戲中 → 有勝利音)。
   useEffect(() => {
-    const bail = () => useGameStore.getState().forfeitOnline(false)
-    window.addEventListener('pagehide', bail)
-    return () => window.removeEventListener('pagehide', bail)
-  }, [])
+    if (foeAbandoned && matchStarted) claimWin(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foeAbandoned, matchStarted])
 
   if (netPhase !== 'connected') return <Lobby mode={mode} roomId={roomId} />
 
   const foeKey = mode === 'host' ? 'guest' : 'host'
-  const abandonedByFoe = room?.abandoned === foeKey
   // presence exists once the foe has joined; connected===false means they dropped
   const foeConnected = room?.players?.[foeKey]?.connected !== false
   const exit = () => {
-    // Opponent left / didn't reconnect in 90s → this match counts as my win.
-    useGameStore.getState().forfeitOnline(true)
     useGameStore.getState().leaveOnline()
     go('menu')
+  }
+  // 斷線:提早離開 = silent 判勝(獎勵回主畫面跑、無勝利音);等滿 90 秒沒回 = 在遊戲中判勝
+  // (有勝利音 + 「你獲勝」彈窗)。都以 matchStarted(有出牌)為前提,否則只是離開不判勝。
+  const disconnectLeave = () => {
+    if (matchStarted) claimWin(true)
+    exit()
+  }
+  const disconnectTimeout = () => {
+    if (matchStarted && claimWin(false)) setDcWin(true)
+    else exit()
   }
   return (
     <>
       <PlayGame />
-      {abandonedByFoe ? (
-        <LeftOverlay onExit={exit} />
+      {dcWin ? (
+        <WinOverlay title="對手已斷線,你獲得勝利！" onExit={exit} />
+      ) : foeAbandoned ? (
+        // 只有「對局進行中」對手中離才算判勝;若這一局已正常結束(對方只是在結算後
+        // 不想再玩而離開),不再宣告勝利、也不重判——只顯示「對手已離開遊戲」(#8)。
+        <LeftOverlay won={matchStarted && engine?.phase !== 'ended'} onExit={exit} />
       ) : !foeConnected ? (
-        <DisconnectOverlay hostGone={mode === 'guest'} onTimeout={exit} onLeave={exit} />
+        <DisconnectOverlay hostGone={mode === 'guest'} onTimeout={disconnectTimeout} onLeave={disconnectLeave} />
       ) : null}
     </>
   )
 }
 
-/** Opponent chose to leave — no countdown, just an exit. */
-function LeftOverlay({ onExit }: { onExit: () => void }) {
+/** Opponent chose to leave — no countdown, just an exit. `won` = the match had
+ *  started, so the leave counts as my win (勝利音/發鑽已在偵測到當下觸發)。 */
+function LeftOverlay({ won, onExit }: { won: boolean; onExit: () => void }) {
   return (
     <div className="net-overlay">
       <div className="net-overlay__card">
-        <div className="net-overlay__title">對手已離開遊戲</div>
+        <div className="net-overlay__title">{won ? '對手已離開遊戲,你獲得勝利！' : '對手已離開遊戲'}</div>
+        <div className="net-overlay__msg">這一局結束了。</div>
+        <div style={{ marginTop: 14 }}>
+          <Button onClick={onExit}>返回主畫面</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Won because a disconnected opponent never came back within 90s. */
+function WinOverlay({ title, onExit }: { title: string; onExit: () => void }) {
+  return (
+    <div className="net-overlay">
+      <div className="net-overlay__card">
+        <div className="net-overlay__title">{title}</div>
         <div className="net-overlay__msg">這一局結束了。</div>
         <div style={{ marginTop: 14 }}>
           <Button onClick={onExit}>返回主畫面</Button>
@@ -225,6 +272,12 @@ function GameBoard() {
   const sz = useBoardSizes()
   const seats = useSeats()
   const lastPvpReward = usePlatformStore((s) => s.lastPvpReward)
+  // Tap the opponent's avatar → their public info card (#5). Online foes only
+  // (AI/campaign have no card); uid comes from the synced room meta.
+  const room = useNetStore((s) => s.room)
+  const [foeCardOpen, setFoeCardOpen] = useState(false)
+  const foeRole = g.online ? (g.online.role === 'host' ? 'guest' : 'host') : null
+  const foeUid = foeRole ? ((room?.players?.[foeRole] as { uid?: string | null } | undefined)?.uid ?? null) : null
 
   // Pause is unlimited: online is a shared synced flag (either side toggles),
   // single-player is a local toggle. While paused, no move may be made — only
@@ -334,6 +387,15 @@ function GameBoard() {
   const pausedRef = useRef(false)
   pausedRef.current = isPaused
   useEffect(() => setPaused(false), [turnKey]) // single-player: fresh turn → resume
+  // 暫停/繼續都用「成功音」,雙方都聽到:online 兩端都由 onlinePause.active 推導 isPaused,
+  // 各自的 effect 會觸發;單機則是本地 toggle。用「變化」驅動,不論誰按下都只響一次。
+  const prevPausedRef = useRef(isPaused)
+  useEffect(() => {
+    if (isPaused !== prevPausedRef.current) {
+      prevPausedRef.current = isPaused
+      sfx.success()
+    }
+  }, [isPaused])
   useEffect(() => {
     if (!timed) {
       setSecsLeft(turnDuration)
@@ -357,7 +419,9 @@ function GameBoard() {
   // and resumes from the remaining seconds; a played card / new turn resets turnKey
   // (secsLeft jumps back above 15) so the ticking stops immediately.
   useEffect(() => {
-    if (timed && isMyActionTurn && secsLeft <= 15 && secsLeft >= 1 && turnDuration > 15) sfx.countdown()
+    // pick 從剩 15s、place(放置別人的牌)從剩 8s 起,每秒一聲;只有「有決定權的人」(isMyActionTurn)聽到。
+    const cdFrom = engine.phase === 'place' ? 8 : 15
+    if (timed && isMyActionTurn && secsLeft <= cdFrom && secsLeft >= 1 && turnDuration > cdFrom) sfx.countdown()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secsLeft, timed, isMyActionTurn])
   const timerLabel = `${isMyActionTurn ? '你的' : '對方的'}${engine.phase === 'place' ? '放置時間' : '出手時間'}`
@@ -400,14 +464,17 @@ function GameBoard() {
 
       {timed && (
         <div className={`game__timer${secsLeft <= 10 && !isPaused ? ' game__timer--low' : ''}`}>
-          {timerLabel}：{isPaused ? '暫停' : secsLeft}
+          {timerLabel}：{secsLeft}
         </div>
       )}
+      {/* 暫停中:大字蓋在對手牌區(指示框與計時器之間),半透明 → 仍看得到對手的牌;
+          pointer-events:none → 點對手格子的牌能穿透開放大鏡;z 高於牌桌、低於彈窗 (#6)。 */}
+      {isPaused && inPlay && <div className="game__paused">暫停中</div>}
       {showPause && (
         <button
           type="button"
           className="game__pausebtn"
-          onClick={() => { sfx.click(); onPauseClick() }}
+          onClick={onPauseClick}
           title={isPaused ? '繼續' : '暫停'}
           aria-label={isPaused ? '繼續' : '暫停'}
         >
@@ -424,7 +491,11 @@ function GameBoard() {
         </button>
       )}
 
-      <div className="game__foe-avatar">
+      <div
+        className="game__foe-avatar"
+        onClick={g.online ? () => { sfx.click(); setFoeCardOpen(true) } : undefined}
+        style={g.online ? { cursor: 'pointer' } : undefined}
+      >
         <div className={`avatar-wrap${foeActive ? ' avatar-wrap--active' : ''}`}>
           <PlayerAvatar avatarId={seats[foe].avatarId} size={sz.avatar} />
         </div>
@@ -478,7 +549,11 @@ function GameBoard() {
       </div>
 
       {(g.statusOverride ?? statusText) && (
-        <div className="game__status">{g.statusOverride ?? statusText}</div>
+        // 只在「輪到我動作」(選牌 / 放對手的牌)時讓提示框微微呼吸,提醒玩家該他了;
+        // 對手思考/確認中不呼吸(我沒決定權)。#5
+        <div className={`game__status${myActive && !isPaused ? ' game__status--mine' : ''}`}>
+          {g.statusOverride ?? statusText}
+        </div>
       )}
       {/* online: I confirmed the showdown, waiting for the opponent to confirm too */}
       {!!g.online && engine.phase === 'showdown' && !g.showdownOpen && (
@@ -489,9 +564,7 @@ function GameBoard() {
       {targeting && (
         <div className="game__special-banner">
           <span>{targetHint}</span>
-          <button type="button" className="game__special-cancel" onClick={() => { sfx.click(); g.cancelSpecialTarget() }}>
-            取消
-          </button>
+          <Button size="sm" onClick={g.cancelSpecialTarget}>取消</Button>
         </div>
       )}
 
@@ -501,7 +574,10 @@ function GameBoard() {
           selected={targeting ? [] : g.selected}
           sortMode={g.sortMode}
           sortDir={g.sortDir}
-          interactive={(!!targeting || iPick) && !isPaused}
+          // 特殊牌指定(偷天換日/花色)一旦進入 targeting 就不受暫停凍結——否則玩家
+          // 在指定過程中按到暫停/切分頁,手牌會變成不可點,只剩「取消」→ 看起來卡死(使用者回報#8)。
+          // 一般選牌(iPick)仍受暫停凍結。
+          interactive={!!targeting || (iPick && !isPaused)}
           onToggle={targeting ? g.activateSpecialTarget : g.toggleCard}
           targetableIds={targetableIds}
           cardW={sz.card}
@@ -521,6 +597,7 @@ function GameBoard() {
             onClick={() => {
               if (specialSpent) return flashSpentTip()
               if (isPaused) return
+              sfx.click()
               g.openSpecialTray()
             }}
             onPointerEnter={(e) => {
@@ -553,6 +630,14 @@ function GameBoard() {
       )}
 
       <StickerProto />
+
+      {foeCardOpen && (
+        <PlayerInfoCard
+          uid={foeUid}
+          fallback={{ name: seats[foe].name, avatarId: seats[foe].avatarId }}
+          onClose={() => setFoeCardOpen(false)}
+        />
+      )}
 
       <ConfirmSubmit data={g.confirm} onConfirm={g.confirmPick} onCancel={g.cancelConfirm} />
       <ShowdownModal

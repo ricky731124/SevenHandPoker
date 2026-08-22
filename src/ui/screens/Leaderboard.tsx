@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import { usePlatformStore } from '../../state/platformStore'
+import { useLeaderboardCache } from '../../state/leaderboardCache'
 import { isFirebaseConfigured } from '../../firebaseApp'
-import { fetchBoard, type Board, type LbRow } from '../../platform/leaderboard'
+import { type Board, type LbRow } from '../../platform/leaderboard'
 import { ACHIEVEMENTS } from '../../game/achievements'
 import PlayerAvatar from '../components/PlayerAvatar'
+import PlayerInfoCard from '../components/PlayerInfoCard'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 import './Personalize.css'
@@ -17,8 +19,6 @@ const TABS: { id: Board; label: string }[] = [
   { id: 'byAchievements', label: '徽章大師' },
   { id: 'byDiamonds', label: '積鑽達人' },
 ]
-
-const TOP_N = 20
 
 // Max achievement score = every family at gold (3 tiers each).
 const ACH_MAX = ACHIEVEMENTS.length * 3
@@ -47,29 +47,38 @@ export default function Leaderboard() {
   const registered = !!uid && !isAnonymous
 
   const [tab, setTab] = useState<Board>('byStage')
-  // Per-board cache so switching tabs back doesn't refetch. undefined = not loaded.
-  const [cache, setCache] = useState<Partial<Record<Board, LbRow[]>>>({})
-  const [error, setError] = useState(false)
+  const [cardRow, setCardRow] = useState<LbRow | null>(null)
+  const cache = useLeaderboardCache()
 
+  // On entering the screen: fetch-or-use-cache (see leaderboardCache). Fires once
+  // per mount — switching tabs never refetches; leaving+re-entering only refetches
+  // when dirty (played a match) or 5 min stale.
   useEffect(() => {
     if (!isFirebaseConfigured()) return
-    if (cache[tab]) return
-    let alive = true
-    setError(false)
-    void fetchBoard(tab)
-      .then((rows) => alive && setCache((c) => ({ ...c, [tab]: rows })))
-      .catch(() => alive && setError(true))
-    return () => {
-      alive = false
-    }
-  }, [tab, cache])
+    void cache.open()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const rows = cache[tab]
-  const loading = !rows && !error && isFirebaseConfigured()
-  const top = rows?.slice(0, TOP_N) ?? []
-  const myIndex = uid && rows ? rows.findIndex((r) => r.uid === uid) : -1
+  const rows = cache.tops[tab]
+  const myRankCache = cache.myRanks
+  const myTopIndex = uid && rows ? rows.findIndex((r) => r.uid === uid) : -1
+
+  // My exact rank — only when registered and NOT already in the top-N (cached).
+  useEffect(() => {
+    if (!rows || !registered || !uid) return
+    if (myTopIndex >= 0) return
+    void cache.ensureMyRank(tab, uid)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, rows, myTopIndex, registered, uid])
+
+  // rows === undefined → this board hasn't arrived yet (first fetch or a still-
+  // resolving background board); [] → loaded but empty.
+  const error = cache.error
+  const loading = rows === undefined && !error && isFirebaseConfigured()
+  const top = rows ?? []
 
   return (
+    <>
     <div className="pz-screen" onClick={() => go('menu')}>
       <motion.div
         className="panel panel--wide panel--lb"
@@ -111,7 +120,14 @@ export default function Leaderboard() {
           ) : (
             <ol className="lb-list">
               {top.map((row, i) => (
-                <LbRowView key={row.uid} board={tab} row={row} rank={i + 1} me={row.uid === uid} />
+                <LbRowView
+                  key={row.uid}
+                  board={tab}
+                  row={row}
+                  rank={i + 1}
+                  me={row.uid === uid}
+                  onOpen={() => { sfx.click(); setCardRow(row) }}
+                />
               ))}
             </ol>
           )}
@@ -120,30 +136,49 @@ export default function Leaderboard() {
         {/* Frozen "my rank" bar — pinned at the bottom, never scrolls. */}
         {!loading && !error && isFirebaseConfigured() && rows && (
           <div className="lb-selfbar">
-            {!registered ? (
-              <span className="lb-selfbar__note">登入後遊玩即可列入排行榜！</span>
-            ) : myIndex >= 0 ? (
-              <>
-                <span className="lb-selfbar__label">我的排名</span>
-                <span className="lb-selfbar__rank">{myIndex + 1}</span>
-                <PlayerAvatar avatarId={rows[myIndex].avatarId} size={40} />
-                <span className="lb-selfbar__name">{rows[myIndex].displayName}</span>
-                <span className="lb-selfbar__score">{scoreLabel(tab, rows[myIndex])}</span>
-              </>
-            ) : (
-              <span className="lb-selfbar__note">你還沒有這個榜的成績，繼續加油！</span>
-            )}
+            {(() => {
+              if (!registered) return <span className="lb-selfbar__note">登入後遊玩即可列入排行榜！</span>
+              // In the top-N already → reuse that row.
+              if (myTopIndex >= 0) {
+                return <SelfRow rank={myTopIndex + 1} row={rows[myTopIndex]} board={tab} />
+              }
+              const mine = myRankCache[tab]
+              if (mine === undefined) return <span className="lb-selfbar__note">查詢名次中…</span>
+              if (mine === null) return <span className="lb-selfbar__note">你還沒有這個榜的成績，繼續加油！</span>
+              return <SelfRow rank={mine.rank} row={mine.row} board={tab} />
+            })()}
           </div>
         )}
       </motion.div>
     </div>
+    {cardRow && (
+      <PlayerInfoCard
+        uid={cardRow.uid}
+        fallback={{ name: cardRow.displayName, avatarId: cardRow.avatarId }}
+        onClose={() => setCardRow(null)}
+      />
+    )}
+    </>
   )
 }
 
-function LbRowView({ board, row, rank, me }: { board: Board; row: LbRow; rank: number; me: boolean }) {
+/** Contents of the frozen "我的排名" bar. */
+function SelfRow({ rank, row, board }: { rank: number; row: LbRow; board: Board }) {
+  return (
+    <>
+      <span className="lb-selfbar__label">我的排名</span>
+      <span className="lb-selfbar__rank">{rank}</span>
+      <PlayerAvatar avatarId={row.avatarId} size={40} />
+      <span className="lb-selfbar__name">{row.displayName}</span>
+      <span className="lb-selfbar__score">{scoreLabel(board, row)}</span>
+    </>
+  )
+}
+
+function LbRowView({ board, row, rank, me, onOpen }: { board: Board; row: LbRow; rank: number; me: boolean; onOpen: () => void }) {
   const tierClass = rank === 1 ? ' lb-row--gold' : rank === 2 ? ' lb-row--silver' : rank === 3 ? ' lb-row--bronze' : ''
   return (
-    <li className={`lb-row${tierClass}${me ? ' lb-row--me' : ''}`}>
+    <li className={`lb-row${tierClass}${me ? ' lb-row--me' : ''}`} onClick={onOpen} style={{ cursor: 'pointer' }}>
       <span className="lb-rank">{rank <= 3 ? <span className="lb-medal">{MEDALS[rank - 1]}</span> : rank}</span>
       <PlayerAvatar avatarId={row.avatarId} size={44} />
       <span className="lb-name">{row.displayName}</span>

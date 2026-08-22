@@ -289,6 +289,15 @@
   white-space: nowrap;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 }
+/* Gentle "it's your move" breathing (±~5%, slow) — draws the eye to the prompt
+   when the turn passes to me, without touching the layout. #5 */
+@keyframes status-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.97); }
+  50%      { transform: translate(-50%, -50%) scale(1.03); }
+}
+.game__status--mine {
+  animation: status-breathe 3.6s ease-in-out infinite;
+}
 .game__action {
   position: absolute;
   right: clamp(4px, 1vw, 18px);
@@ -447,6 +456,28 @@
   background: rgba(60, 0, 0, 0.66);
   animation: spx-pulse 1s ease-in-out infinite;
 }
+/* 暫停中 — bigger than the timer, same translucency, over the opponent's cards.
+   Above the board so the text sits on top of the cards, but pointer-events:none
+   so a tap passes through to the card underneath (magnifier); any modal (z≥1000)
+   still covers it. #6 */
+.game__paused {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  padding: 8px 28px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #ff5252; /* 亮紅色 */
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(24px, 4.2vw, 36px); /* 仍比計時器(20~28)大一點 */
+  letter-spacing: 2px;
+  white-space: nowrap;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
 /* Pause/resume the turn timer — a round wooden button above the sort pair. */
 .game__pausebtn {
   position: absolute;
@@ -465,34 +496,30 @@
   cursor: default;
 }
 
+/* Sits just below centre over MY slot row so the prompt + 取消 are clear, but kept
+   compact so it doesn't cover the status pill or the pushed-out card (#4). */
 .game__special-banner {
   position: absolute;
   left: 50%;
-  top: clamp(56px, 12vh, 96px);
-  transform: translateX(-50%);
+  top: 66%;
+  transform: translate(-50%, -50%);
   z-index: 32;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px 8px 18px;
+  gap: 8px;
+  padding: 7px 8px 7px 18px;
   border-radius: 999px;
-  background: rgba(35, 12, 48, 0.92);
+  /* 字型與背景透度比照「出手時間」計時器(顏色/大小不同):var(--font-display) + 黑底 .66 */
+  background: rgba(0, 0, 0, 0.66);
   color: #fff;
-  font-weight: 800;
-  font-size: clamp(13px, 2.2vw, 17px);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(16px, 2.7vw, 21px);
+  letter-spacing: 0.5px;
   white-space: nowrap;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }
-.game__special-cancel {
-  border: none;
-  border-radius: 999px;
-  padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-weight: 800;
-  cursor: pointer;
-}
-.game__special-cancel:active { transform: translateY(1px); }
+/* the 取消 inside is a real wood button (<Button size="sm">) — no extra CSS here */
 
 /* ---- Opponent-disconnected overlay ---- */
 .net-overlay {

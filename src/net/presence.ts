@@ -1,4 +1,4 @@
-import { ref, onValue, onDisconnect, set, remove, push, type DatabaseReference } from 'firebase/database'
+import { ref, onValue, onDisconnect, set, remove, push, serverTimestamp, type DatabaseReference } from 'firebase/database'
 import { getDb } from './firebase'
 
 /**
@@ -17,12 +17,18 @@ export function trackPresence(uid: string): () => void {
   const db = getDb()
   const connectedRef = ref(db, '.info/connected')
   let conRef: DatabaseReference | null = null
+  const cardLastOnline = ref(db, `cards/${uid}/lastOnline`)
   const unsub = onValue(connectedRef, (snap) => {
     if (snap.val() !== true) return
     // A fresh child per (re)connection; auto-removed on disconnect.
     conRef = push(ref(db, `presence/${uid}`))
     void onDisconnect(conRef).remove()
     void set(conRef, true)
+    // Stamp the player card's lastOnline on disconnect (#5) — so an offline
+    // player's card shows when they were last on. Also stamp now, so a currently
+    // online player has a recent value (the card shows「線上」for them anyway).
+    void onDisconnect(cardLastOnline).set(serverTimestamp())
+    void set(cardLastOnline, serverTimestamp())
   })
   return () => {
     unsub()

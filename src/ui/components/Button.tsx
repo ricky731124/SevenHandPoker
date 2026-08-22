@@ -27,7 +27,11 @@ export default function Button({
     <motion.button
       className={`woodbtn woodbtn--${variant} woodbtn--${size}${full ? ' woodbtn--full' : ''}`}
       disabled={disabled}
-      onMouseEnter={() => !disabled && sfx.hover()}
+      // pointerType guard: touch taps synthesize a mouseenter, which made every
+      // mobile tap play hover+click. Only real mouse movement should hover.
+      // Fire on every hover (the sweeping cue is intended) — volume is kept very
+      // low instead of throttling (使用者 #1: 停留才響太怪,改壓音量).
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !disabled) sfx.hover() }}
       onClick={() => {
         if (disabled) return
         sfx.click()
@@ -107,6 +111,16 @@ export function IconGlobe() {
       <circle cx="12" cy="12" r="8.5" />
       <ellipse cx="12" cy="12" rx="3.6" ry="8.5" />
       <path d="M3.8 9.5h16.4M3.8 14.5h16.4" />
+    </svg>
+  )
+}
+/** Monochrome calendar (每日任務). Inherits the button's wood-brown color. */
+export function IconCalendar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 9.5h17M8 3.2v3.4M16 3.2v3.4" />
+      <path d="M7.5 13h3M7.5 16.5h3M13.5 13h3M13.5 16.5h3" strokeWidth="2.2" />
     </svg>
   )
 }

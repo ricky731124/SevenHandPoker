@@ -34,9 +34,23 @@ const WCAP = 1000
 // Sits above every phone-landscape height, so phones lay out at full height.
 const HCAP = 580
 
+/** True when the portrait "fake-landscape" trick is active (#root rotated 90°,
+ *  see global.css). In that state the effective width/height are SWAPPED — laying
+ *  out against the raw portrait dims is exactly what cut the left/right edges. */
+function isRotated(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !!window.matchMedia &&
+    window.matchMedia('(max-width: 900px) and (orientation: portrait) and (pointer: coarse)').matches
+  )
+}
+
 function calc(): BoardSizes {
-  const vw = typeof window === 'undefined' ? 1024 : window.innerWidth
-  const vh = typeof window === 'undefined' ? 600 : window.innerHeight
+  const rawW = typeof window === 'undefined' ? 1024 : window.innerWidth
+  const rawH = typeof window === 'undefined' ? 600 : window.innerHeight
+  const rotated = isRotated()
+  const vw = rotated ? rawH : rawW // rotated 90° → swap so the board fills the real space
+  const vh = rotated ? rawW : rawH
 
   // Effective width the board is laid out against (bounded on desktop only).
   const ew = Math.min(vw, WCAP)

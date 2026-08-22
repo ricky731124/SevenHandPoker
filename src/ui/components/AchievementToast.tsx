@@ -18,7 +18,7 @@ export default function AchievementToast() {
   const shift = useAchievementStore((s) => s.shift)
   const gateUntil = useAchievementStore((s) => s.gateUntil)
   const front = queue[0]
-  const [, bump] = useState(0) // re-render once the gate window passes
+  const [tick, bump] = useState(0) // re-render (and re-run the effect) once the gate window passes
 
   useEffect(() => {
     if (!front) return
@@ -26,16 +26,19 @@ export default function AchievementToast() {
     // 音效 has had its 1.8s head start, then show + play normally.
     const wait = gateUntil - Date.now()
     if (wait > 0) {
+      // bump() bumps `tick`, which is in this effect's deps → the effect re-runs
+      // after the wait and falls through to play + schedule the dismiss. (Without
+      // tick in deps the effect would never re-run and the toast would hang.)
       const t = setTimeout(() => bump((x) => x + 1), wait + 20)
       return () => clearTimeout(t)
     }
     // Distinct dopamine beats: 入帳叮 for a reward, 解鎖鈴 for an achievement.
     if (front.kind === 'reward') sfx.reward()
     else sfx.achievement()
-    // Rewards are quick pops (2.5s); achievement unlocks linger (5s).
-    const t = setTimeout(shift, front.kind === 'reward' ? 2500 : 5000)
+    // Rewards linger 2s (or their own `dur`, e.g. 每日簽到 5s); achievements 3.5s.
+    const t = setTimeout(shift, front.kind === 'reward' ? front.dur ?? 2000 : 3500)
     return () => clearTimeout(t)
-  }, [front, shift, gateUntil])
+  }, [front, shift, gateUntil, tick])
 
   // Still inside the match-end hold window → render nothing yet.
   if (front && gateUntil - Date.now() > 0) return null

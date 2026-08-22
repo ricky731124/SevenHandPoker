@@ -23,6 +23,8 @@ export interface PlayerPresence {
   avatarId?: string
   /** special-card ids this player has unlocked — used for the PvP intersection pool. */
   specials?: string[]
+  /** account uid — lets the opponent load this player's public name-card (#5). */
+  uid?: string | null
 }
 
 /**
@@ -251,11 +253,12 @@ export function roomLink(code: string): string {
 export async function setPlayerMeta(
   code: string,
   role: Role,
-  meta: { name: string | null; avatarId: string; specials?: string[] },
+  meta: { name: string | null; avatarId: string; specials?: string[]; uid?: string | null },
 ): Promise<void> {
   try {
     const patch: Record<string, unknown> = { name: meta.name, avatarId: meta.avatarId }
     if (meta.specials) patch.specials = meta.specials // RTDB rejects undefined — include only when known
+    if (meta.uid) patch.uid = meta.uid
     await update(ref(getDb(), `rooms/${code}/players/${role}`), patch)
   } catch {
     /* best-effort */
@@ -282,6 +285,7 @@ export async function markAbandoned(code: string, role: Role): Promise<void> {
 
 const SESSION_KEY = 'shp.session'
 const hostSnapKey = (code: string) => `shp.host.${code}`
+const guestLoadKey = (code: string) => `shp.gload.${code}`
 
 export interface Session {
   code: string
@@ -313,6 +317,7 @@ export function clearSession(): void {
     const s = readSession()
     sessionStorage.removeItem(SESSION_KEY)
     if (s?.role === 'host') sessionStorage.removeItem(hostSnapKey(s.code))
+    if (s?.role === 'guest') sessionStorage.removeItem(guestLoadKey(s.code))
   } catch {
     /* ignore */
   }
@@ -333,6 +338,77 @@ export function readHostSnapshot<T = unknown>(code: string): T | null {
     return raw ? (JSON.parse(raw) as T) : null
   } catch {
     return null
+  }
+}
+
+/** Guest-only: persist the CONFIRMED pre-match loadout (per-tab). The guest keeps
+ *  no engine snapshot (it reads RTDB), but the loadout it picked in B isn't in the
+ *  guest-view either — so a mid-match reload would otherwise fall back to the
+ *  profile's full equipped deck instead of the cards it actually committed to (#7). */
+export function saveGuestLoadout(code: string, ids: string[]): void {
+  try {
+    sessionStorage.setItem(guestLoadKey(code), JSON.stringify(ids))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readGuestLoadout(code: string): string[] | null {
+  try {
+    const raw = sessionStorage.getItem(guestLoadKey(code))
+    const v = raw ? JSON.parse(raw) : null
+    return Array.isArray(v) ? (v as string[]) : null
+  } catch {
+    return null
+  }
+}
+
+/* ---- Online match-result integrity (#8) --------------------------------------
+ * openMatch (localStorage — survives a tab CLOSE, unlike the sessionStorage
+ * reconnect marker): the room code of a STARTED online match I'm in. It's cleared
+ * the moment the match settles (finished / forfeited / reconciled). If it's still
+ * set on a later app boot and I can't rejoin that room, the match was abandoned →
+ * settle it as a loss (once).
+ * settled[]: room codes already counted (win OR loss). Guarantees a session is
+ * tallied AT MOST ONCE for me, no matter how many disconnect/reconnect cycles. */
+const OPEN_MATCH_KEY = 'shp.openmatch'
+const SETTLED_KEY = 'shp.settled'
+
+export function setOpenMatch(code: string): void {
+  try {
+    if (localStorage.getItem(OPEN_MATCH_KEY) !== code) localStorage.setItem(OPEN_MATCH_KEY, code)
+  } catch {
+    /* ignore */
+  }
+}
+export function readOpenMatch(): string | null {
+  try {
+    return localStorage.getItem(OPEN_MATCH_KEY)
+  } catch {
+    return null
+  }
+}
+export function clearOpenMatch(): void {
+  try {
+    localStorage.removeItem(OPEN_MATCH_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+export function isMatchSettled(code: string): boolean {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SETTLED_KEY) || '[]') as string[]
+    return arr.includes(code)
+  } catch {
+    return false
+  }
+}
+export function markMatchSettled(code: string): void {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SETTLED_KEY) || '[]') as string[]
+    if (!arr.includes(code)) localStorage.setItem(SETTLED_KEY, JSON.stringify([...arr, code].slice(-40)))
+  } catch {
+    /* ignore */
   }
 }
 

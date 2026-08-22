@@ -5,10 +5,11 @@ import { usePlatformStore } from '../../state/platformStore'
 import { isUsernameTaken } from '../../platform/profile'
 import { validateUsername, validatePassword, validateDisplayName, clampDisplayName, DISPLAY_NAME_HINT } from '../../platform/auth'
 import { useToastStore } from '../../state/toastStore'
-import Button, { IconShop } from './Button'
+import Button, { IconShop, IconCalendar } from './Button'
 import Modal from './Modal'
 import JoinConfirm from './JoinConfirm'
 import Shop from './Shop'
+import DailyTasks from './DailyTasks'
 import { avatarSrc } from './PlayerAvatar'
 import Diamond from './game/Diamond'
 import { sfx } from '../../audio/sfx'
@@ -55,6 +56,7 @@ export default function AccountButton() {
   const avatarId = usePlatformStore((s) => s.profile?.equipped.avatar)
   const diamonds = usePlatformStore((s) => s.profile?.diamonds) ?? 0
   const logout = usePlatformStore((s) => s.logout)
+  const claimDailySignin = usePlatformStore((s) => s.claimDailySignin)
   const pendingRoom = useAppStore((s) => s.pendingRoom)
   const wantRegister = useAppStore((s) => s.wantRegister)
   const wantGoogle = useAppStore((s) => s.wantGoogle)
@@ -67,6 +69,7 @@ export default function AccountButton() {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [shopOpen, setShopOpen] = useState(false)
   const [announceOpen, setAnnounceOpen] = useState(false)
+  const [dailyOpen, setDailyOpen] = useState(false)
   const [fromGate, setFromGate] = useState(false)
   const [joinFlow, setJoinFlow] = useState(false)
   // Whether the chooser shows 訪客 (deep-link / first-launch) or not (the menu
@@ -202,48 +205,64 @@ export default function AccountButton() {
   return (
     <>
       <div className="acctbar">
-        {registered ? (
-          <button
-            type="button"
-            className="acctbar__me"
-            onClick={() => { sfx.click(); useAppStore.getState().go('personalize') }}
-            title="個人化設定"
-          >
-            <img
-              className="acctbar__avatar"
-              src={avatarSrc(avatarId ?? 'cat')}
-              alt=""
-              onError={(e) => (e.currentTarget.style.display = 'none')}
-            />
-            <span className="acctbar__meta">
-              <span className="acctbar__name">{displayName}</span>
-              <span className="acctbar__gems">
-                <Diamond size={19} />
-                {diamonds}
+        {/* Top row: identity (or 登入/註冊) + 公告 inline to its right (same gap as
+            the right cluster). #4:公告靠左、緊鄰名字/登入鈕。 */}
+        <div className="acctbar__top">
+          {registered ? (
+            <button
+              type="button"
+              className="acctbar__me"
+              onClick={() => { sfx.click(); useAppStore.getState().go('personalize') }}
+              title="個人化設定"
+            >
+              <img
+                className="acctbar__avatar"
+                src={avatarSrc(avatarId ?? 'cat')}
+                alt=""
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+              <span className="acctbar__meta">
+                <span className="acctbar__name">{displayName}</span>
+                <span className="acctbar__gems">
+                  <Diamond size={19} />
+                  {diamonds}
+                </span>
               </span>
-            </span>
-          </button>
-        ) : (
-          <Button
-            size="sm"
-            onClick={() => {
-              setJoinFlow(false)
-              setGateAllowGuest(false)
-              setFromGate(true)
-              setDialog('gate')
-            }}
-          >
-            登入 / 註冊
+            </button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => {
+                setJoinFlow(false)
+                setGateAllowGuest(false)
+                setFromGate(true)
+                setDialog('gate')
+              }}
+            >
+              登入 / 註冊
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" icon={<span className="acct-announce-ico">📢</span>} onClick={() => setAnnounceOpen(true)}>
+            公告
           </Button>
-        )}
+        </div>
 
-        {/* 公告:置於頭像/名稱下方,靠左對齊,大小同商城鈕;icon 直接用 📢 */}
-        <Button size="sm" variant="secondary" icon={<span className="acct-announce-ico">📢</span>} onClick={() => setAnnounceOpen(true)}>
-          公告
+        {/* 每日任務:置於頭像/名稱下方(原公告位置),月曆 icon。點擊即當作「今日簽到」
+            (登入玩家、今天首次)→ 發 5 鑽 + 5 秒 toast;再開面板查看進度(#6/#2)。 */}
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<IconCalendar />}
+          onClick={() => {
+            void claimDailySignin()
+            setDailyOpen(true)
+          }}
+        >
+          每日任務
         </Button>
       </div>
 
-      {/* Top-right: 商城 → 登出 (設定 已併入個人化設置的頁籤). */}
+      {/* Top-right: ? → 商城 → 登出 (設定 已併入個人化設置的頁籤). */}
       <div className="acctbar-right">
         <button
           type="button"
@@ -298,6 +317,7 @@ export default function AccountButton() {
       </Modal>
 
       <Shop open={shopOpen} onClose={() => setShopOpen(false)} />
+      <DailyTasks open={dailyOpen} onClose={() => setDailyOpen(false)} />
 
       {/* 公告彈窗 — 維護更新預告 + 特別感謝。未來新的更新日期往上加(保留約一個月),
           內容變長時 .announce 會自動出現捲軸。 */}

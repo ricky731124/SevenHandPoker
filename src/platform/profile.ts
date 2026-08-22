@@ -49,7 +49,16 @@ export interface Profile {
    *  (第1關 stays locked). Set on first tutorial entry. */
   tutorialSeen: boolean
   diamonds: number
-  daily: { date: string; pvpDiamonds: number }
+  /** Per-day task flags (reset when `date` changes). Each = reward already granted
+   *  today. `pvpDiamonds` is the retired 3-win field, kept optional for legacy. */
+  daily: {
+    date: string
+    signin?: boolean
+    match?: boolean
+    pvpWin1?: boolean
+    pvpWin2?: boolean
+    pvpDiamonds?: number
+  }
   unlocked: {
     specialCards: Record<string, true>
     avatars: Record<string, true>
@@ -83,7 +92,7 @@ function freshProfile(isAnonymous: boolean, now: number): Record<string, unknown
     progress: { maxStageCleared: null },
     tutorialSeen: false,
     diamonds: 0,
-    daily: { date: todayStr(), pvpDiamonds: 0 },
+    daily: { date: todayStr() },
     unlocked: { specialCards: { [BASELINE_SPECIAL_CARD]: true } },
     equipped: { avatar: DEFAULT_AVATAR, specialCards: [BASELINE_SPECIAL_CARD] },
     stats: {},
@@ -112,7 +121,13 @@ function normalize(raw: any): Profile {
     },
     tutorialSeen: raw?.tutorialSeen ?? false,
     diamonds: raw?.diamonds ?? 0,
-    daily: { date: raw?.daily?.date ?? '', pvpDiamonds: raw?.daily?.pvpDiamonds ?? 0 },
+    daily: {
+      date: raw?.daily?.date ?? '',
+      signin: !!raw?.daily?.signin,
+      match: !!raw?.daily?.match,
+      pvpWin1: !!raw?.daily?.pvpWin1,
+      pvpWin2: !!raw?.daily?.pvpWin2,
+    },
     unlocked: {
       specialCards: raw?.unlocked?.specialCards ?? {},
       avatars: raw?.unlocked?.avatars ?? {},
@@ -269,6 +284,29 @@ export async function grantPvpReward(uid: string, amount: number, date: string, 
     'daily/date': date,
     'daily/pvpDiamonds': dailyTotal,
   })
+}
+
+/**
+ * Grant a daily-task reward atomically (#6): add diamonds + lifetime tally, and
+ * write the full day's task flags (so a new day is reset consistently — the caller
+ * computes the flags). Replaces the old per-win grantPvpReward.
+ */
+export async function grantDailyReward(
+  uid: string,
+  amount: number,
+  daily: { date: string; signin?: boolean; match?: boolean; pvpWin1?: boolean; pvpWin2?: boolean },
+): Promise<void> {
+  const patch: Record<string, unknown> = {}
+  if (amount > 0) {
+    patch.diamonds = increment(amount)
+    patch['stats/diamondsEarned'] = increment(amount)
+  }
+  patch['daily/date'] = daily.date
+  patch['daily/signin'] = !!daily.signin
+  patch['daily/match'] = !!daily.match
+  patch['daily/pvpWin1'] = !!daily.pvpWin1
+  patch['daily/pvpWin2'] = !!daily.pvpWin2
+  await update(ref(db(), `users/${uid}`), patch)
 }
 
 /** Backfill the lifetime-diamonds tally (absolute set). Used once per account to

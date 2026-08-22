@@ -104,7 +104,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
       <Modal open={info} onClose={() => setInfo(false)} title="鑽石取得方式" width={360}>
         <div style={{ fontSize: 14, lineHeight: 1.9, color: 'var(--parch-text)' }}>
           ・通關主線關卡(每關首次過關 +10 鑽)
-          <br />・每日與好友對戰,獲勝最多 3 次、每次 +5 鑽(每日最多 +15 鑽)
+          <br />・完成每日任務可獲得鑽石:每日簽到、完成一場對戰、真人對戰獲勝(上限 2 場),各 +5 鑽,每日最多 +20 鑽。
         </div>
       </Modal>
 

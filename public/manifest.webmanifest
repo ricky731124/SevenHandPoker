@@ -10,6 +10,10 @@
   "background_color": "#3a0d12",
   "theme_color": "#7a1420",
   "lang": "zh-Hant",
+  "prefer_related_applications": false,
+  "related_applications": [
+    { "platform": "webapp", "url": "https://ricky731124.github.io/SevenHandPoker/manifest.webmanifest" }
+  ],
   "icons": [
     {
       "src": "icon-192.png",

@@ -60,9 +60,10 @@ export default function ShowdownModal({
   const foeWild = foe === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
   const tie = showdown.winner === 'both'
   const iWon = tie || showdown.winner === me
+  const outcome = tie ? '平手' : showdown.winner === me ? '你獲勝！' : '對手獲勝！'
 
   return (
-    <Modal open={open} onClose={onClose} locked title={`第 ${showdown.slot + 1} 格・對決！`} width={520} panelClass="modal__panel--showdown">
+    <Modal open={open} onClose={onClose} locked title={`第 ${showdown.slot + 1} 格・對決 - ${outcome}`} width={520} panelClass="modal__panel--showdown">
       <Row label="對手" name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
       <div className="showdown__vs accent">{tie ? '平手・雙方各得' : 'VS'}</div>
       <Row label="你" name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />

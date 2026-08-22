@@ -32,11 +32,15 @@ const MAP = {
   // ---- jingles (stereo, 144k, loudnorm I=-16) ----
   coin: { src: '557115__firediesproductions__fdp-coin-flip-2.wav', jingle: true },
   coinwin: { src: '676401__cjspellsfish__score-1.mp3', jingle: true },
-  showdown: { src: '352655__foolboymedia__piano-notification-5a.mp3', jingle: true, trim: 1.6, fade: [1.45, 0.15] },
+  coinfail: { src: '138490__justinvoke__powerdown-2.wav', jingle: true, trim: 1.6, fade: [1.4, 0.2] }, // 搶金幣失敗(輸家)
+  // 格子裡「牌對牌」的對決 → 原本的鋼琴,裁到 2s
+  showdown: { src: '352655__foolboymedia__piano-notification-5a.mp3', jingle: true, trim: 2.0, fade: [1.8, 0.2] },
+  // 進場「BATTLE」撞擊 → riser-hit,不裁(保留原始長度,只在程式端調音量)
+  battle: { src: '649826__audiopapkin__riser-hit-sfx-044.wav', jingle: true },
   win: { src: '521645__fupicat__winfantasia.wav', jingle: true, trim: 3.0, fade: [2.75, 0.25] },
   lose: { src: '362206__taranp__horn_fail_wahwah_1.wav', jingle: true, trim: 3.0, fade: [2.75, 0.25] },
   special: { src: '853303__tommasomotteran__magic-healing-spell-sfx-fantasy-rpg-restore-effect.wav', jingle: true },
-  reward: { src: '619838__cogfirestudios__achievement-happy-beeps-jingle.wav', jingle: true, trim: 2.5, fade: [2.3, 0.2] },
+  reward: { src: '619838__cogfirestudios__achievement-happy-beeps-jingle.wav', jingle: true, trim: 1.5, fade: [1.3, 0.2] }, // 配合 toast 1.5s
   achievement: { src: '810753__mokasza__level-up-01.mp3', jingle: true },
 }
 

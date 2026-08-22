@@ -7,8 +7,16 @@
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 13px; /* 名稱/頭像 與 公告鈕 之間;把公告鈕再往下推一點 */
+  gap: 13px; /* 上排(名字+公告) 與 每日任務鈕 之間 */
   max-width: 60vw;
+}
+/* Top row: identity/登入 + 公告 side by side, same gap as the right cluster (10px).
+   flex-start so 公告 sits at the TOP (level with the right-cluster buttons at
+   top:12px), not centred against the tall identity pill. #4 */
+.acctbar__top {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 /* 登出 sits in the opposite corner from the identity pill */
 .acctbar-right {
