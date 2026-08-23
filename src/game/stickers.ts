@@ -12,6 +12,8 @@ export interface StickerDef {
   free: boolean
   /** emoji glyph → rendered as text; absent → image sticker at stickers/{id}.png */
   emoji?: string
+  /** 售價(鑽石);未指定 → 用預設 STICKER_PRICE。免費貼圖忽略此欄。 */
+  price?: number
 }
 
 export const STICKERS: StickerDef[] = [
@@ -22,15 +24,20 @@ export const STICKERS: StickerDef[] = [
   { id: 'like', name: '讚', free: true, emoji: '👍' },
   { id: '1', name: '呵呵', free: false },
   { id: '2', name: '!!', free: false },
-  { id: '3', name: '計畫通', free: false },
+  { id: '3', name: '計畫通', free: false, price: 80 },
   { id: '4', name: '...', free: false },
-  { id: '5', name: 'VIP', free: false },
-  { id: '6', name: '等到花兒都謝了', free: false },
-  { id: '7', name: '有趣的推理', free: false },
+  { id: '5', name: '我是貴賓欸', free: false, price: 80 },
+  { id: '6', name: '等到花兒都謝了', free: false, price: 80 },
+  { id: '7', name: '你有證據嗎', free: false, price: 80 },
 ]
 
-/** 一張付費貼圖的價格(鑽石)。 */
+/** 付費貼圖的預設價格(鑽石);個別貼圖可用 StickerDef.price 覆寫。 */
 export const STICKER_PRICE = 60
+
+/** 一張貼圖的實際售價(鑽石)。 */
+export function stickerPrice(s: StickerDef): number {
+  return s.price ?? STICKER_PRICE
+}
 
 /** All purchasable sticker ids (for the test account's unlock-all). */
 export const ALL_PAID_STICKER_IDS = STICKERS.filter((s) => !s.free).map((s) => s.id)

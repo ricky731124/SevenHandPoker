@@ -27,6 +27,39 @@
   max-height: 92vh;
   overflow: auto;
   color: var(--parch-text);
+  /* 木色細滾軸,取代醜白預設 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--parch-edge) transparent;
+}
+.modal__panel::-webkit-scrollbar {
+  width: 9px;
+}
+.modal__panel::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+.modal__panel::-webkit-scrollbar-thumb {
+  background: var(--parch-edge);
+  border-radius: 8px;
+  border: 2px solid var(--parch-2);
+  background-clip: padding-box;
+}
+
+/* Title row: optional「<」back button (left) + centred title on the SAME row.
+   3-col grid keeps the title dead-centre whether or not a back button is present. */
+.modal__titlebar {
+  display: grid;
+  grid-template-columns: 38px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.modal__titlebar .modal__back {
+  grid-column: 1;
+}
+.modal__titlebar .modal__title {
+  grid-column: 2;
+  margin: 0 !important;
 }
 
 .modal__title {

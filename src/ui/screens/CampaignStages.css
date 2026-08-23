@@ -6,25 +6,20 @@
   justify-content: center;
 }
 
-.cstages__back {
-  position: absolute;
-  top: clamp(10px, 2.6vh, 20px);
-  left: clamp(10px, 2.6vh, 20px);
-  z-index: 6;
-  display: flex;
+/* Title row: 返回 (left) + 主線任務 (centred), same row — like the modals. */
+.cstages__titlebar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
   align-items: center;
-  justify-content: center;
-  width: clamp(42px, 7vh, 52px);
-  height: clamp(42px, 7vh, 52px);
-  border-radius: 50%;
-  border: 2px solid var(--wood-edge);
-  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
-  color: var(--wood-text);
-  cursor: pointer;
-  box-shadow: 0 2px 0 var(--wood-edge), 0 4px 7px rgba(0, 0, 0, 0.36);
+  gap: 8px;
+  margin-bottom: 6px;
 }
-.cstages__back:active {
-  transform: translateY(1px);
+.cstages__titlebar .cstages__backbtn {
+  grid-column: 1;
+}
+.cstages__titlebar .cstages__title {
+  grid-column: 2;
 }
 
 .cstages__panel {
@@ -41,8 +36,7 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 .cstages__title {
-  flex: 0 0 auto;
-  margin: 0 0 6px;
+  margin: 0;
   text-align: center;
   font-size: clamp(26px, 5vh, 38px);
   font-weight: 900;
@@ -59,4 +53,16 @@
   /* top/bottom room so the desktop hover-lift (translateY(-2px)) + the buttons'
      3D base aren't clipped by overflow-y. */
   padding: 6px 4px 8px 0;
+  /* 木色細滾軸,不用醜白預設 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--parch-edge) transparent;
+}
+.cstages__list::-webkit-scrollbar {
+  width: 9px;
+}
+.cstages__list::-webkit-scrollbar-thumb {
+  background: var(--parch-edge);
+  border-radius: 8px;
+  border: 2px solid var(--parch-bg, #f0e2c4);
+  background-clip: padding-box;
 }

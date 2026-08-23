@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
-import Button from '../components/Button'
+import BackButton from '../components/BackButton'
 import './Panel.css'
 
 const HAND_ORDER = [
@@ -19,7 +19,10 @@ export default function HowToPlay() {
   const go = useAppStore((s) => s.go)
   return (
     <motion.div className="panel" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <h1 className="panel__h1">如何遊玩</h1>
+      <div className="panel__titlebar">
+        <BackButton onClick={() => go('menu')} />
+        <h1 className="panel__h1">如何遊玩</h1>
+      </div>
       <div className="panel__scroll">
         <section>
           <h3>🎯 獲勝條件</h3>
@@ -61,9 +64,6 @@ export default function HowToPlay() {
           <p>對手選牌時你會即時看到他手牌「哪幾張被推上來」（僅背面）。用放大鏡可查看自己已放的牌，以及對手<b>已翻開</b>的格子——推敲他還握有哪些牌。</p>
         </section>
       </div>
-      <Button size="md" onClick={() => go('menu')}>
-        返回
-      </Button>
     </motion.div>
   )
 }

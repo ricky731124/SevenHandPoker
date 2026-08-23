@@ -28,9 +28,9 @@ const SFX: Record<Name, { file: string; vol: number }> = {
   countdown: { file: 'countdown', vol: 0.16 }, // one tick per second (再 -20% .2→.16)
   // ---- jingles ----
   coin: { file: 'coin', vol: 0.3 }, // opening coin toss (throw + land in one file)
-  coinWin: { file: 'coinwin', vol: 0.21 }, // 搶金幣成功(贏家) (-40% .35→.21)
-  coinFail: { file: 'coinfail', vol: 0.24 }, // 搶金幣失敗(輸家) (-20% .3→.24)
-  showdown: { file: 'showdown', vol: 0.24 }, // 格子裡牌對牌的對決(鋼琴) (-20% .3→.24)
+  coinWin: { file: 'coinwin', vol: 0.15 }, // 搶金幣成功(贏家) (再 -30% .21→.15)
+  coinFail: { file: 'coinfail', vol: 0.18 }, // 搶金幣失敗(輸家) (再 -10% .24→.18)
+  showdown: { file: 'showdown', vol: 0.18 }, // 格子裡牌對牌的對決(鋼琴) (再 -20% .24→.18)
   battle: { file: 'battle', vol: 0.05 }, // 進場「BATTLE」撞擊(riser-hit) (.07→.035→.06→.05)
   win: { file: 'win', vol: 0.3 }, // 最終勝利 (-20% .37→.3)
   lose: { file: 'lose', vol: 0.28 }, // 局末落敗 (-20% .35→.28)

@@ -22,6 +22,20 @@
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
+/* Title row: 返回 (left) + centred title on the same row (like the modals). */
+.panel__titlebar {
+  flex: 0 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+}
+.panel__titlebar .panel__h1 {
+  grid-column: 2;
+  text-align: center;
+}
+
 .panel__scroll {
   overflow-y: auto;
   width: 100%;
@@ -29,6 +43,22 @@
   flex-direction: column;
   gap: 16px;
   padding-right: 6px;
+  /* 木色細滾軸,取代醜白預設(排行榜 .panel--lb 另外把它隱藏,較具體會蓋過此處) */
+  scrollbar-width: thin;
+  scrollbar-color: var(--parch-edge) transparent;
+}
+.panel__scroll::-webkit-scrollbar {
+  width: 9px;
+}
+.panel__scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.panel__scroll::-webkit-scrollbar-thumb {
+  background: var(--parch-edge);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .panel section h3 {

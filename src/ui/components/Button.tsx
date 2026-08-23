@@ -114,6 +114,16 @@ export function IconGlobe() {
     </svg>
   )
 }
+/** Monochrome megaphone (公告). Inherits the button's wood-brown color. */
+export function IconMegaphone() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 10v4a1 1 0 0 0 1 1h2l2.2 3.3a1 1 0 0 0 1.8-.6V6.3a1 1 0 0 0-1.8-.6L7 9H5a1 1 0 0 0-1 1Z" />
+      <path d="M15 8.5a4 4 0 0 1 0 7" />
+      <path d="M7 15v3" />
+    </svg>
+  )
+}
 /** Monochrome calendar (每日任務). Inherits the button's wood-brown color. */
 export function IconCalendar() {
   return (

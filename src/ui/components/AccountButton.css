@@ -245,69 +245,109 @@
   }
 }
 
-/* ---- 公告彈窗 ---- */
+/* ---- 公告彈窗(手風琴,緊貼) ---- */
+.announce-title-ico {
+  font-size: 1.05em;
+  line-height: 1;
+}
+/* 公告彈窗:固定尺寸(不隨展開內容長度變高變寬),外框/標題凍結,只有內層 .announce 可捲。 */
+.modal__panel--announce {
+  overflow: hidden; /* panel 不出現第二條滾軸;內容固定塞得下 */
+}
+@media (min-width: 1024px) {
+  .modal__panel--announce {
+    max-width: 700px !important; /* 桌機再寬一些(更新內容一列字多) */
+  }
+}
 .announce {
+  /* 一個外框,內部日期列緊貼(用分隔線區隔),不留間隔;背景透明 → 統一用彈窗的
+     羊皮紙底(不再有奇怪的白/淺色矩形)。 */
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  font-family: var(--font-body);
-  color: var(--parch-text);
-  /* 高度給足(不擠),未來更新記錄變長超過才自動捲動 */
-  max-height: min(76vh, 640px);
-  overflow-y: auto;
-  padding: 2px;
-}
-.announce__sec {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.announce__head {
-  margin: 0;
+  gap: 0;
+  border: 2px solid var(--parch-edge);
+  border-radius: var(--r-md, 14px);
+  background: transparent;
   font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 20px;
-  color: var(--wood-text);
-  text-align: center;
-  padding-bottom: 4px;
-  border-bottom: 2px solid var(--parch-edge);
+  color: var(--parch-text);
+  /* 固定高度(不隨內容變),超過就在此內層捲動 — 全彈窗唯一的捲動區 */
+  height: min(64vh, 500px);
+  overflow-y: auto;
+  /* 木色細滾軸,取代醜白預設(Firefox) */
+  scrollbar-width: thin;
+  scrollbar-color: var(--parch-edge) transparent;
 }
-.announce__entry {
+/* 木色細滾軸(WebKit) */
+.announce::-webkit-scrollbar {
+  width: 9px;
+}
+.announce::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.announce::-webkit-scrollbar-thumb {
+  background: var(--parch-edge);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.announce::-webkit-scrollbar-thumb:hover {
+  background: var(--wood-edge);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.announce__item + .announce__item {
+  border-top: 1px solid rgba(138, 84, 36, 0.3);
+}
+.announce__toggle {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-display);
+  text-align: left;
 }
-.announce__entry + .announce__entry {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--parch-edge);
+.announce__toggle--static {
+  cursor: default;
+}
+.announce__item--open > .announce__toggle {
+  padding-bottom: 6px;
 }
 .announce__date {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 16px;
+  color: var(--wood-text);
+}
+.announce__item--pinned .announce__date {
+  color: #a5391f;
+}
+.announce__chev {
+  font-size: 13px;
   color: var(--parch-muted);
 }
 .announce__list {
   margin: 0;
-  padding-left: 20px;
+  /* 底部留點空間,別讓最後一點緊貼分隔線/邊框 */
+  padding: 2px 14px 14px 34px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-size: 15px;
   line-height: 1.5;
 }
 .announce__thanks {
   margin: 0;
+  padding: 4px 14px 14px;
   font-size: 15px;
   line-height: 1.7;
   text-align: left;
-}
-/* 公告鈕的 📢 emoji icon */
-.acct-announce-ico {
-  font-size: 1.05em;
-  line-height: 1;
 }
 
 /* Join-confirm popup (deep-link + code entry) */

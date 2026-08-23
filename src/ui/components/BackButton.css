@@ -1,0 +1,19 @@
+/* Shared round wooden back button (mirrors .pz-back). In-flow — the consumer
+   places it (e.g. Modal drops it into the title-row grid's left cell). */
+.backbtn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--wood-edge), 0 4px 7px rgba(0, 0, 0, 0.32);
+}
+.backbtn:active {
+  transform: translateY(1px);
+}

@@ -60,12 +60,14 @@ export interface CampaignStage {
 const DIAMONDS_PER_CLEAR = 10
 
 /** x-1/x-2/x-3 share this shape, differing only in the card/avatar unlocked and
- *  the execution ramp. */
+ *  the execution ramp. `exec` = the three sub-stages' 執行力 (預設 0.6/0.75/0.9);
+ *  第一關被反映太難,單獨調低成 0.5/0.65/0.8 讓新手先過關(其餘關卡不動)。 */
 function subStages(
   stageId: string,
   stageIndex: number,
   card: SpecialCardId,
   avatar: string,
+  exec: [number, number, number] = [0.6, 0.75, 0.9],
 ): SubStage[] {
   const d = DIAMONDS_PER_CLEAR
   return [
@@ -75,7 +77,7 @@ function subStages(
       special: false,
       bestOf: 3,
       winsNeeded: 2,
-      execution: 0.6,
+      execution: exec[0],
       bossCardMode: 'none',
       reward: { diamonds: d },
     },
@@ -85,7 +87,7 @@ function subStages(
       special: true,
       bestOf: 3,
       winsNeeded: 2,
-      execution: 0.75,
+      execution: exec[1],
       bossCardMode: 'signature',
       reward: { card, diamonds: d },
     },
@@ -95,7 +97,7 @@ function subStages(
       special: true,
       bestOf: 5,
       winsNeeded: 3,
-      execution: 0.9,
+      execution: exec[2],
       bossCardMode: 'pool',
       reward: { avatar, diamonds: d },
     },
@@ -123,7 +125,7 @@ export const CAMPAIGN: CampaignStage[] = [
       jokerTiming: 30,
       insight: 20,
     },
-    subStages: subStages('s1', 1, 'peek', 'bird'),
+    subStages: subStages('s1', 1, 'peek', 'bird', [0.5, 0.65, 0.8]),
     nodePositions: NODE_POS,
   },
   {

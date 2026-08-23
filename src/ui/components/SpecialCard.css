@@ -37,6 +37,12 @@
 
 .spc__banner {
   flex: 0 0 auto;
+  /* 明確撐滿整列並置中 — iOS Safari 對 inline <span> flex item 不一定會 stretch,
+     短名(<4 字)會露出右側白邊,故強制 block + width:100%。 */
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
   padding: 4px 2px 5px;
   text-align: center;
   font-size: 14px;

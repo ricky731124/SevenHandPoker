@@ -40,9 +40,9 @@ import { useLeaderboardCache } from './leaderboardCache'
 import { ALL_SPECIAL_CARD_IDS, getSpecialCard } from '../game/specialCards'
 import { subStageOrder } from '../game/campaign'
 import { ALL_AVATAR_IDS, AVATARS } from '../ui/components/PlayerAvatar'
-import { ACHIEVEMENTS, detectUnlocks, type AchMetric, type HandTypeMetric } from '../game/achievements'
+import { ACHIEVEMENTS, detectUnlocks, getAchievement, tierFor, type AchMetric, type HandTypeMetric } from '../game/achievements'
 import { useAchievementStore } from './achievementStore'
-import { STICKER_PRICE, ALL_PAID_STICKER_IDS } from '../game/stickers'
+import { ALL_PAID_STICKER_IDS, getSticker, stickerPrice } from '../game/stickers'
 
 /** First-clear reward for a campaign sub-stage. */
 export interface StageReward {
@@ -526,8 +526,11 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
     if (!uid) return { ok: false, error: '需要帳號' }
     const p = get().profile
     if (p?.unlocked.emojis?.[id]) return { ok: false, error: '已擁有' }
-    if ((p?.diamonds ?? 0) < STICKER_PRICE) return { ok: false, error: '鑽石不足' }
-    await persistBuySticker(uid, id, STICKER_PRICE)
+    const sticker = getSticker(id)
+    if (!sticker) return { ok: false, error: '找不到貼圖' }
+    const price = stickerPrice(sticker)
+    if ((p?.diamonds ?? 0) < price) return { ok: false, error: '鑽石不足' }
+    await persistBuySticker(uid, id, price)
     return { ok: true }
   },
 }))
@@ -582,10 +585,24 @@ function cardFromProfile(p: Profile): CardProfileFields {
     displayName: p.displayName ?? p.username ?? '玩家',
     avatarId: p.equipped.avatar,
     loadout: p.equipped.specialCards ?? [],
-    // 展示成就 = 玩家裝備的成就族 + 其現階(只收已解鎖 tier>0 的)。
-    achievements: (p.equipped.achievements ?? [])
-      .map((id) => ({ id, tier: p.unlocked.achievements?.[id] ?? 0 }))
-      .filter((a) => a.tier > 0),
+    // 展示成就。equipped.achievements 存的是「每面獎章」的複合鍵 `${famId}:${tier}`
+    // (個人化成就頁可同時展示同族不同階,見 Personalize toggle),所以這裡要拆鍵取
+    // famId,再用 stats 即時算的階級驗證(玩家仍達標才顯示;同源於個人化畫面)。
+    // ⚠️ 以前直接把整個鍵當族 id 丟 getAchievement → 永遠 undefined → 全被濾掉 →
+    //    名片成就恆為「無」。相容舊資料:沒有 ':' 的純族 id 則用達標階級。
+    achievements: (() => {
+      const m = statMetrics(s)
+      const out: { id: string; tier: number }[] = []
+      for (const key of p.equipped.achievements ?? []) {
+        const [famId, ts] = String(key).split(':')
+        const fam = getAchievement(famId)
+        if (!fam) continue
+        const earned = tierFor(m[fam.metric], fam.thresholds)
+        const shown = ts != null && ts !== '' ? Number(ts) : earned
+        if (shown >= 1 && earned >= shown) out.push({ id: famId, tier: shown })
+      }
+      return out
+    })(),
     pvp: {
       games: s.pvpGames ?? 0,
       wins: s.pvpWins ?? 0,

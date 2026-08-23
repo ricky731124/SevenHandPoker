@@ -3,7 +3,7 @@ import { useCampaignStore } from '../../state/campaignStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { CAMPAIGN, isStageUnlocked } from '../../game/campaign'
 import Button from '../components/Button'
-import { sfx } from '../../audio/sfx'
+import BackButton from '../components/BackButton'
 import './CampaignStages.css'
 
 /**
@@ -20,14 +20,11 @@ export default function CampaignStages() {
 
   return (
     <div className="cstages">
-      <button className="cstages__back" onClick={() => { sfx.click(); go('menu') }} aria-label="返回" title="返回">
-        <svg viewBox="0 0 24 24" width="26" height="26">
-          <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-
       <div className="cstages__panel">
-        <h2 className="cstages__title">主線任務</h2>
+        <div className="cstages__titlebar">
+          <BackButton onClick={() => go('menu')} className="cstages__backbtn" />
+          <h2 className="cstages__title">主線任務</h2>
+        </div>
         <div className="cstages__list">
           <Button full onClick={() => go('tutorial')}>
             新手教學

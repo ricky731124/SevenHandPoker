@@ -72,7 +72,10 @@ export default function StickerProto() {
             exit={{ opacity: 0, y: 8 }}
             style={{
               position: 'absolute',
-              left: 'clamp(6px, 1.4vw, 20px)',
+              // Follow the 貼圖 button's left edge (same formula) so the picker
+              // clears the iPhone notch too — otherwise the leftmost stickers sit
+              // under the cutout and can't be tapped. env() is 0 off-iPhone.
+              left: 'calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7)',
               bottom: 'calc(clamp(76px, 0.24 * var(--stage-h, 100vh), 150px) + 46px)',
               zIndex: 62,
               display: 'grid',

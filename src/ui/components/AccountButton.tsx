@@ -5,7 +5,7 @@ import { usePlatformStore } from '../../state/platformStore'
 import { isUsernameTaken } from '../../platform/profile'
 import { validateUsername, validatePassword, validateDisplayName, clampDisplayName, DISPLAY_NAME_HINT } from '../../platform/auth'
 import { useToastStore } from '../../state/toastStore'
-import Button, { IconShop, IconCalendar } from './Button'
+import Button, { IconShop, IconCalendar, IconMegaphone } from './Button'
 import Modal from './Modal'
 import JoinConfirm from './JoinConfirm'
 import Shop from './Shop'
@@ -41,6 +41,23 @@ function remember(name: string) {
 
 type Dialog = null | 'gate' | 'register' | 'login' | 'chooseName'
 
+/**
+ * 公告內容(手風琴)。日期項目愈新放愈上面;進來預設展開第 0 筆,點另一筆會關掉
+ * 前一筆(開一關一)。「特別感謝」不在此陣列 — 它固定展開在最下方(見 render)。
+ * 維護方式:每次上版在最上面加一筆 { date, items },舊的(約保留一個月)手動刪。
+ */
+const ANNOUNCEMENTS: { date: string; items: string[] }[] = [
+  { date: '8 / 23', items: ['新增每日任務功能', '牌局增加問號按鈕查看牌型大小', '優化牌局 UI/UX', '修正已知問題'] },
+  { date: '8 / 22', items: ['新增點擊頭像獲取玩家資訊功能', '修正快速配對中離、重連等判勝／敗相關問題', '因應物價通膨，調漲商場貼圖部份售價'] },
+  { date: '8 / 21', items: ['新增公告', '新增在線人數', '修正已知問題及增強相關檢核'] },
+  { date: '8 / 20', items: ['新增快速配對功能', '增加結算發鑽、解成就 toast queue 流程', '優化 UI/UX'] },
+  { date: '8 / 19', items: ['調整各關 boss 出牌風格、skill 與執行力', '新增更多成就', '新增四、五、六關 boss 貼圖', '修正手機版跑版問題'] },
+  { date: '8 / 18', items: ['新增第五關、特殊牌、頭像', '新增第六關、特殊牌、頭像', '音效全改為 CC0 素材音檔'] },
+  { date: '8 / 17', items: ['新增第四關、特殊牌、頭像', '新增新手教學功能', '修正相關已知問題'] },
+  { date: '8 / 16', items: ['新增戰績頁籤', '新增貼圖功能及頁籤', '新增商城功能', '新增成就及展示頁籤', '新增 battle 動畫'] },
+  { date: '8 / 15', items: ['新增第三關、特殊牌、頭像', '新增帳號註冊、登入功能', '新增 OAuth Google 登入串接'] },
+]
+
 function doJoin(code: string) {
   void usePlatformStore.getState().ensureAccount()
   void useNetStore.getState().join(code)
@@ -69,6 +86,8 @@ export default function AccountButton() {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [shopOpen, setShopOpen] = useState(false)
   const [announceOpen, setAnnounceOpen] = useState(false)
+  // Accordion: which dated entry is open (single-open; -1 = all collapsed).
+  const [announceIdx, setAnnounceIdx] = useState(0)
   const [dailyOpen, setDailyOpen] = useState(false)
   const [fromGate, setFromGate] = useState(false)
   const [joinFlow, setJoinFlow] = useState(false)
@@ -242,7 +261,7 @@ export default function AccountButton() {
               登入 / 註冊
             </Button>
           )}
-          <Button size="sm" variant="secondary" icon={<span className="acct-announce-ico">📢</span>} onClick={() => setAnnounceOpen(true)}>
+          <Button size="sm" variant="secondary" icon={<IconMegaphone />} onClick={() => { setAnnounceIdx(0); setAnnounceOpen(true) }}>
             公告
           </Button>
         </div>
@@ -319,27 +338,39 @@ export default function AccountButton() {
       <Shop open={shopOpen} onClose={() => setShopOpen(false)} />
       <DailyTasks open={dailyOpen} onClose={() => setDailyOpen(false)} />
 
-      {/* 公告彈窗 — 維護更新預告 + 特別感謝。未來新的更新日期往上加(保留約一個月),
-          內容變長時 .announce 會自動出現捲軸。 */}
-      <Modal open={announceOpen} onClose={() => setAnnounceOpen(false)} title="📢 公告" width={420}>
+      {/* 公告彈窗 — 手風琴:日期項目愈新愈上、開一關一、進來預設展開第一筆;
+          最下方「特別感謝」固定展開,用於維護例程/相關公告。 */}
+      <Modal open={announceOpen} onClose={() => setAnnounceOpen(false)} onBack={() => setAnnounceOpen(false)} title={<><span className="announce-title-ico">📢</span> 更新公告</>} width={560} panelClass="modal__panel--announce">
         <div className="announce">
-          <section className="announce__sec">
-            <h3 className="announce__head">維護更新預告</h3>
-            <div className="announce__entry">
-              <p className="announce__date">8 / 22</p>
-              <ol className="announce__list">
-                <li>新增關卡第七關</li>
-                <li>新增貼圖</li>
-                <li>新增 battle 畫面成就展示</li>
-              </ol>
-            </div>
-          </section>
-          <section className="announce__sec">
-            <h3 className="announce__head">特別感謝</h3>
+          {ANNOUNCEMENTS.map((a, i) => {
+            const open = announceIdx === i
+            return (
+              <div key={a.date} className={`announce__item${open ? ' announce__item--open' : ''}`}>
+                <button
+                  type="button"
+                  className="announce__toggle"
+                  onClick={() => { sfx.click(); setAnnounceIdx(open ? -1 : i) }}
+                >
+                  <span className="announce__date">{a.date}</span>
+                  <span className="announce__chev" aria-hidden>{open ? '▾' : '▸'}</span>
+                </button>
+                {open && (
+                  <ol className="announce__list">
+                    {a.items.map((it, k) => <li key={k}>{it}</li>)}
+                  </ol>
+                )}
+              </div>
+            )
+          })}
+
+          {/* 固定在最下方、永遠展開的致謝(無標題),用於維護例程/相關公告。 */}
+          <div className="announce__item announce__item--pinned">
             <p className="announce__thanks">
-              水哥、vic、ally、yuying、ttt12345、蛇哥 等人的遊玩與建議，讓遊戲功能得以更加完善。
+              感謝所有參與遊玩、提供建議的朋友們，你們的每一個回饋，都讓這款遊戲一步步變得更完整！希望能在遊戲中帶給你們更多的樂趣。
+              <br />
+              如果有任何想許願的功能、或是遇到 Bug，都歡迎隨時跟我分享，你們的意見對我來說都十分的重要。 🙏
             </p>
-          </section>
+          </div>
         </div>
       </Modal>
 

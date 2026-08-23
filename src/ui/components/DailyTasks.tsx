@@ -22,29 +22,34 @@ export default function DailyTasks({ open, onClose }: { open: boolean; onClose: 
   const registered = !!uid && !isAnonymous
   // Flags only count for today; a stale date = a fresh (all-未完成) day.
   const today = daily?.date === todayStr() ? daily : undefined
+  const doneCount = TASKS.filter((t) => registered && !!today?.[t.key]).length
 
   return (
-    <Modal open={open} onClose={onClose} title="每日任務" width={380}>
-      <p className="dt-note">
-        {registered ? '達成後自動發放鑽石(於遊戲流程中);此處僅供查看進度。' : '訪客無法領取每日任務,登入後即可領取。'}
-      </p>
-      <ul className="dt-list">
-        {TASKS.map((t) => {
-          const done = registered && !!today?.[t.key]
-          return (
-            <li key={t.key} className={`dt-row${done ? ' dt-row--done' : ''}${registered ? '' : ' dt-row--locked'}`}>
-              <span className="dt-row__label">{t.label}</span>
-              <span className="dt-row__reward">
-                +5 <Diamond size={15} />
-              </span>
-              <span className="dt-row__status">
-                {!registered ? '🔒' : done ? '✓ 已完成' : '未完成'}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="dt-foot">真人對戰 = 快速配對 或 對戰好友</p>
+    <Modal open={open} onClose={onClose} onBack={onClose} title={`每日任務（${doneCount} / ${TASKS.length}）`} width={430}>
+      <div className="dt">
+        <p className="dt-note">
+          {registered
+            ? '達成後自動於遊戲中發放鑽石,並彈窗提示;此處僅供查看進度。'
+            : '訪客無法領取每日任務,登入後即可領取。'}
+        </p>
+        <ul className="dt-list">
+          {TASKS.map((t) => {
+            const done = registered && !!today?.[t.key]
+            return (
+              <li key={t.key} className={`dt-row${done ? ' dt-row--done' : ''}${registered ? '' : ' dt-row--locked'}`}>
+                <span className="dt-row__label">{t.label}</span>
+                <span className="dt-row__reward">
+                  +5 <Diamond size={15} />
+                </span>
+                <span className="dt-row__status">
+                  {!registered ? '🔒' : done ? '✓ 已完成' : '未完成'}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="dt-foot">真人對戰 = 快速配對 或 對戰好友</p>
+      </div>
     </Modal>
   )
 }

@@ -4,7 +4,7 @@ import Modal from './Modal'
 import Button from './Button'
 import Diamond from './game/Diamond'
 import { usePlatformStore } from '../../state/platformStore'
-import { STICKERS, STICKER_PRICE, stickerSrc, type StickerDef } from '../../game/stickers'
+import { STICKERS, stickerPrice, stickerSrc, type StickerDef } from '../../game/stickers'
 import { sfx } from '../../audio/sfx'
 import '../screens/Panel.css'
 import '../screens/Personalize.css'
@@ -84,7 +84,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
                       <span style={{ fontSize: 12, color: 'var(--wood-600,#8a6a3e)' }}>已擁有</span>
                     ) : (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 14, fontWeight: 700, color: 'var(--wood-800,#4a3418)' }}>
-                        <Diamond size={15} /> {STICKER_PRICE}
+                        <Diamond size={15} /> {stickerPrice(s)}
                       </span>
                     )}
                   </button>
@@ -114,7 +114,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <img src={stickerSrc(confirm.id)} alt={confirm.name} style={{ width: 180, height: 180, objectFit: 'contain' }} />
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 16, fontFamily: 'var(--font-display)', color: 'var(--parch-text)' }}>
-              付 <Diamond size={17} /> {STICKER_PRICE} 解鎖?
+              付 <Diamond size={17} /> {stickerPrice(confirm)} 解鎖?
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <Button variant="secondary" onClick={() => setConfirm(null)}>取消</Button>

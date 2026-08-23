@@ -1,0 +1,50 @@
+/* 遊戲內「牌型大小」速查 — 標題略小、內容略大、加寬不換行、往下彈避開頂端計時器。 */
+
+/* 往下一點,避開「你的出手時間」計時器(置頂置中);標題略小一點點。 */
+.modal__panel--hands {
+  margin-top: clamp(34px, 9vh, 86px);
+}
+.modal__panel--hands .modal__title {
+  font-size: clamp(18px, 3vw, 21px);
+}
+
+.hands .panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.hands .panel__table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(138, 84, 36, 0.22);
+  white-space: nowrap; /* 一列不換行 */
+}
+.hands .panel__desc {
+  white-space: nowrap;
+}
+.hands__note {
+  /* 只跟「高牌」空一點點 */
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--parch-muted);
+}
+.hands__note b {
+  color: #8a3a12;
+}
+
+/* 手機橫向(矮螢幕):壓縮,確保不碰計時器、整表一頁看完不用捲。 */
+@media (max-height: 480px) {
+  .modal__panel--hands {
+    margin-top: clamp(20px, 5vh, 40px);
+  }
+  .hands .panel__table {
+    font-size: 13px;
+  }
+  .hands .panel__table td {
+    padding: 3px 8px;
+  }
+  .hands__note {
+    margin-top: 6px;
+    font-size: 11px;
+  }
+}

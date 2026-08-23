@@ -1,8 +1,15 @@
+/* One wrapper so the Modal body's 16px gap doesn't apply between note/list/footer
+   — we control the (tighter) spacing here instead. */
+.dt {
+  display: flex;
+  flex-direction: column;
+}
 .dt-note {
+  font-family: var(--font-display);
   font-size: 13px;
-  color: var(--parch-muted, #8a6a3e);
-  margin: 0 0 14px;
-  line-height: 1.6;
+  color: var(--parch-muted, #8a6a42);
+  margin: 0 0 10px;
+  line-height: 1.55;
 }
 .dt-list {
   list-style: none;
@@ -17,44 +24,57 @@
   grid-template-columns: 1fr auto auto;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--parch-edge, #d9c39a);
+  padding: 12px 16px;
+  border-radius: var(--r-md, 14px);
+  background: var(--parch-1, #f7ead0);
+  border: 2px solid var(--parch-edge, #8a5424);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+/* 未完成:明確紅框,一眼看出還沒拿 */
+.dt-row:not(.dt-row--done):not(.dt-row--locked) {
+  border-color: var(--lose, #ff6b6b);
+  background: rgba(255, 107, 107, 0.08);
 }
 .dt-row--done {
-  background: rgba(46, 156, 82, 0.12);
-  border-color: rgba(46, 156, 82, 0.5);
+  background: rgba(75, 208, 122, 0.14);
+  border-color: var(--win, #4bd07a);
 }
 .dt-row--locked {
   opacity: 0.7;
 }
 .dt-row__label {
-  font-weight: 700;
-  color: var(--wood-text, #4a3418);
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--wood-text, #5a2a0c);
+  font-size: 16px;
 }
 .dt-row__reward {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  font-family: var(--font-display);
   font-weight: 800;
-  color: var(--wood-text, #4a3418);
+  color: var(--wood-text, #5a2a0c);
   font-size: 14px;
 }
 .dt-row__status {
+  font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 700;
-  color: var(--parch-muted, #8a6a3e);
+  font-weight: 800;
+  color: var(--lose, #c0392b);
   min-width: 56px;
   text-align: right;
+}
+.dt-row--locked .dt-row__status {
+  color: var(--parch-muted, #8a6a42);
 }
 .dt-row--done .dt-row__status {
   color: #2e9c52;
 }
 .dt-foot {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
+  font-family: var(--font-display);
   font-size: 12px;
-  color: var(--parch-muted, #8a6a3e);
-  text-align: center;
+  color: var(--parch-muted, #8a6a42);
+  text-align: left;
 }

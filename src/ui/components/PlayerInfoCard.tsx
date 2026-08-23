@@ -72,7 +72,7 @@ export default function PlayerInfoCard({
   const hasStats = populated
 
   return (
-    <Modal open onClose={onClose} title="玩家資訊" width={460}>
+    <Modal open onClose={onClose} onBack={onClose} title="玩家資訊" width={480} panelClass="modal__panel--pic">
       {loading ? (
         <p className="pz-hint">載入中…</p>
       ) : (
@@ -89,7 +89,7 @@ export default function PlayerInfoCard({
 
           <div className="pic__decks">
             <div className="pic__deck">
-              <div className="pic__label">預設牌組</div>
+              <div className="pic__label">預設牌組：</div>
               <div className="pic__cards">
                 {loadout.length > 0 ? (
                   loadout.map((id) => {
@@ -103,12 +103,12 @@ export default function PlayerInfoCard({
             </div>
 
             <div className="pic__deck">
-              <div className="pic__label">成就</div>
+              <div className="pic__label">成就展示：</div>
               <div className="pic__cards">
                 {achievements.length > 0 ? (
-                  achievements.map((a) => {
+                  achievements.map((a, i) => {
                     const fam = getAchievement(a.id)
-                    return fam ? <Badge key={a.id} icon={fam.icon} tier={a.tier as AchTier} size={44} /> : null
+                    return fam ? <Badge key={`${a.id}:${a.tier}:${i}`} icon={fam.icon} tier={a.tier as AchTier} size={52} /> : null
                   })
                 ) : (
                   <span className="pic__muted">無</span>

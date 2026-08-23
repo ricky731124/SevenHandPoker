@@ -72,7 +72,13 @@ export default function TopBar() {
         </svg>
       </motion.button>
 
-      <Modal open={open} onClose={close} title={confirmLeave ? '離開遊戲' : '選單'} width={360}>
+      <Modal
+        open={open}
+        onClose={close}
+        onBack={confirmLeave ? () => setConfirmLeave(false) : close}
+        title={confirmLeave ? '離開遊戲' : '選單'}
+        width={360}
+      >
         {confirmLeave ? (
           <>
             <p style={{ textAlign: 'center', color: 'var(--parch-text)', fontWeight: 700, lineHeight: 1.6 }}>

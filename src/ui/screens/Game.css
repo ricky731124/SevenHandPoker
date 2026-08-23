@@ -11,11 +11,31 @@
   min-height: 0;
   /* equal left/right reserve zones so the centre is balanced */
   --reserve: clamp(90px, 14vw, 146px);
+
+  /* Right-side control cluster — 4 same-size round wood buttons, all absolutely
+     placed in THIS (.game) coord system so phone & desktop line up identically
+     (everything scales off --stage-h). Two columns:
+       inner (one gap left): ? (coin-row height) · 花色/大小 field (bottom)
+       outer (screen edge):  暫停 pause · 升降冪 dir — each raised by --sbtn-dy so
+       the inner↔outer pairs form a 30° diagonal (dy = dx·tan30°). */
+  --sbtn: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px); /* unified size */
+  --sbtn-r-out: clamp(6px, 1.4vw, 20px);
+  --sbtn-col-dx: calc(var(--sbtn) + clamp(8px, 1.4vw, 18px)); /* horizontal column offset */
+  --sbtn-r-in: calc(var(--sbtn-r-out) + var(--sbtn-col-dx));
+  --sbtn-gap-y: clamp(77px, calc(0.18 * var(--stage-h, 100vh)), 144px); /* vertical gap (×1.2) */
+  --sbtn-dy: calc(var(--sbtn-col-dx) * 0.7002); /* 35° diagonal drop between columns */
+  /* whole cluster nudged DOWN a touch so 暫停 clears the opponent's「N 張」bubble
+     (mobile once overlapped it) — kept small so the bottom row stays clear of the
+     hand / 送出 (使用者:別移太多)。 */
+  --sbtn-drop: clamp(2px, calc(0.013 * var(--stage-h, 100vh)), 14px);
+  --sbtn-top-q: calc(0.5 * var(--stage-h, 100vh) - var(--sbtn) / 2 + var(--sbtn-drop)); /* inner top (?) */
+  --sbtn-top-out: calc(var(--sbtn-top-q) - var(--sbtn-dy)); /* outer top (pause) — raised for 35° */
 }
 
-/* ---- Round wooden buttons (menu / sort / pause) ---- */
+/* ---- Round wooden buttons (menu / sort / pause / help) ---- */
 .topbar__menu,
 .sortbtn,
+.game__helpbtn,
 .game__pausebtn {
   border: 3px solid var(--wood-edge);
   border-radius: 50%;
@@ -150,8 +170,9 @@
 .game__deck {
   transform: translateY(calc(-0.16 * var(--stage-h, 100vh)));
   /* iPhone notch (landscape): nudge the deck + its count clear of the cutout.
-     env() is 0 on Android/desktop, so the layout there is untouched. */
-  padding-left: env(safe-area-inset-left);
+     env() is 0 on Android/desktop, so the layout there is untouched.
+     使用者:原本推太多,回推一半 → 只吃 0.5× safe-area。 */
+  padding-left: calc(env(safe-area-inset-left) * 0.5);
 }
 /* Fixed grid: seven fixed-width cells spread across a narrowed band. Adding
    cards to a pile never changes cell size, so the board never reflows/jitters. */
@@ -255,22 +276,30 @@
   padding: 1px 8px;
 }
 
-/* ---- Sort buttons (round, diagonal, icon-only) ---- */
-/* two round buttons: field lower-left, direction upper-right (clearly apart) */
+/* ---- Sort buttons (round, icon-only) — now absolutely placed in the .game
+   coord system as the BOTTOM row of the right-side control cluster:
+     花色/大小 field  → inner column (under ?)
+     升降冪 dir       → outer column (under 暫停)
+   Vertical gap ?→field == pause→dir == --sbtn-gap-y. ---- */
 .sortbtns {
-  position: relative;
-  width: 100%;
-  height: clamp(106px, calc(0.21 * var(--stage-h, 100vh)), 154px);
-  margin-top: clamp(52px, calc(0.20 * var(--stage-h, 100vh)), 150px);
-  transform: translate(-10px, 30px); /* nudge the pair left & down (down a touch more, clears the N 張 bubble) */
+  position: static; /* not a positioning context — children anchor to .game */
 }
 .sortbtn {
   position: absolute;
-  width: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
-  height: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px);
+  width: var(--sbtn);
+  height: var(--sbtn);
+  z-index: 46;
 }
-.sortbtn:nth-child(1) { left: 0; bottom: 8px; }          /* field (點數/花色): nudged down a touch */
-.sortbtn:nth-child(2) { right: 0; top: -16px; }          /* direction (大↔小): lifted up */
+.sortbtn:nth-child(1) {
+  /* field (點數/花色) — inner column, bottom */
+  right: var(--sbtn-r-in);
+  top: calc(var(--sbtn-top-q) + var(--sbtn-gap-y));
+}
+.sortbtn:nth-child(2) {
+  /* direction (大↔小) — outer column, bottom (raised --sbtn-dy → 35° with field) */
+  right: var(--sbtn-r-out);
+  top: calc(var(--sbtn-top-out) + var(--sbtn-gap-y));
+}
 
 /* ---- System prompt: black translucent pill centered on the coin row ---- */
 .game__status {
@@ -341,7 +370,7 @@
   /* Parked in the clear left-column gap between the deck (above) and the
      bottom-left avatar (below) so the avatar never covers it. Stage-relative so
      it tracks the bounded-fluid board on both phone and desktop. */
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
   bottom: clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px);
   z-index: 42;
   display: inline-flex;
@@ -372,7 +401,7 @@
    just above the bottom-left avatar (由下到上:頭像→貼圖→特殊牌→發牌). ---- */
 .game__emote-trigger {
   position: absolute;
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
   bottom: clamp(104px, calc(0.31 * var(--stage-h, 100vh)), 190px);
   z-index: 42;
   display: inline-flex;
@@ -404,7 +433,7 @@
    opponent's "N 張" speech bubble. */
 .game__special-tip {
   position: absolute;
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 1.4);
+  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
   bottom: calc(clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px) + 44px);
   z-index: 43;
   background: rgba(0, 0, 0, 0.82);
@@ -478,13 +507,13 @@
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
-/* Pause/resume the turn timer — a round wooden button above the sort pair. */
+/* 暫停 — 右側控制群「外欄・上」(比內欄 ? 高 --sbtn-dy → 35° 斜角)。 */
 .game__pausebtn {
   position: absolute;
-  right: clamp(6px, 1.4vw, 20px);
-  top: clamp(96px, calc(0.33 * var(--stage-h, 100vh)), 208px); /* lowered so it clears the opponent's "N 張" bubble */
-  width: clamp(44px, calc(0.085 * var(--stage-h, 100vh)), 60px);
-  height: clamp(44px, calc(0.085 * var(--stage-h, 100vh)), 60px);
+  right: var(--sbtn-r-out);
+  top: var(--sbtn-top-out);
+  width: var(--sbtn);
+  height: var(--sbtn);
   z-index: 46;
   cursor: pointer;
 }
@@ -494,6 +523,24 @@
 .game__pausebtn--used {
   opacity: 0.4;
   cursor: default;
+}
+
+/* 牌型大小「?」— 右側控制群「內欄・上」,與金幣列齊。 */
+.game__helpbtn {
+  position: absolute;
+  right: var(--sbtn-r-in);
+  top: var(--sbtn-top-q);
+  width: var(--sbtn);
+  height: var(--sbtn);
+  z-index: 46;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(22px, calc(0.048 * var(--stage-h, 100vh)), 32px);
+  line-height: 1;
+  cursor: pointer;
+}
+.game__helpbtn:active {
+  transform: translateY(1px);
 }
 
 /* Sits just below centre over MY slot row so the prompt + 取消 are clear, but kept

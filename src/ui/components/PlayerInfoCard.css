@@ -1,7 +1,14 @@
+/* Desktop: widen a bit more so 預設牌組(3 張) never wraps in its half-column. */
+@media (min-width: 1024px) {
+  .modal__panel--pic {
+    max-width: 560px !important;
+  }
+}
+
 .pic {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 .pic__head {
   display: flex;
@@ -24,6 +31,7 @@
   text-overflow: ellipsis;
 }
 .pic__online {
+  font-family: var(--font-display);
   font-size: 13px;
   color: var(--parch-muted, #8a6a3e);
 }
@@ -32,41 +40,41 @@
   font-weight: 700;
 }
 
+/* 牌組 / 成就 固定各佔一半(對齊下面的兩欄戰績),不因沒牌組或不足 3 張而往左靠。 */
 .pic__decks {
-  display: flex;
-  gap: 22px;
-  flex-wrap: wrap;
-}
-.pic__decks .pic__deck {
-  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 .pic__label {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   color: var(--parch-muted, #8a6a3e);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .pic__cards {
   display: flex;
   gap: 10px;
   align-items: center;
   min-height: 40px;
+  flex-wrap: wrap;
 }
 .pic__muted {
+  font-family: var(--font-display);
   color: var(--parch-muted, #8a6a3e);
 }
 
 .pic__stats {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  flex-wrap: wrap;
 }
 .pic__stat {
-  flex: 1 1 180px;
   background: rgba(0, 0, 0, 0.05);
   border: 1px solid var(--parch-edge, #d9c39a);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 10px 12px;
 }
 .pic__stat-title {
   font-family: var(--font-display);
@@ -76,14 +84,17 @@
 }
 .pic__stat-row {
   display: flex;
-  gap: 14px;
-  font-size: 15px;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 13px;
   font-weight: 700;
   color: var(--wood-text, #4a3418);
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 .pic__stat-sub {
   margin-top: 6px;
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-size: 12px;
   color: var(--parch-muted, #8a6a3e);
+  white-space: nowrap;
 }

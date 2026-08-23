@@ -24,6 +24,7 @@ import VsIntro from '../components/game/VsIntro'
 import PreMatchSpecial from '../components/game/PreMatchSpecial'
 import { SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
 import StickerProto from '../components/game/StickerProto'
+import HandRankModal from '../components/game/HandRankModal'
 import ConfirmSubmit from '../components/game/ConfirmSubmit'
 import ShowdownModal from '../components/game/ShowdownModal'
 import MagnifierModal from '../components/game/MagnifierModal'
@@ -276,6 +277,7 @@ function GameBoard() {
   // (AI/campaign have no card); uid comes from the synced room meta.
   const room = useNetStore((s) => s.room)
   const [foeCardOpen, setFoeCardOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false) // 牌型大小速查 (#5)
   const foeRole = g.online ? (g.online.role === 'host' ? 'guest' : 'host') : null
   const foeUid = foeRole ? ((room?.players?.[foeRole] as { uid?: string | null } | undefined)?.uid ?? null) : null
 
@@ -491,6 +493,21 @@ function GameBoard() {
         </button>
       )}
 
+      {/* 牌型大小速查 (#5) — 木紋圓鈕,右側控制群「內欄・上」(與金幣列齊)。 */}
+      <button
+        type="button"
+        className="game__helpbtn"
+        onClick={() => { sfx.click(); setHelpOpen(true) }}
+        title="牌型大小"
+        aria-label="牌型大小"
+      >
+        ?
+      </button>
+
+      {/* 排序鈕(花色/大小 + 升降冪)— 移出 flex,絕對定位於 .game,與 pause/? 同座標系,
+          手機/桌機對齊一致。 */}
+      <SortButtons mode={g.sortMode} dir={g.sortDir} onToggleMode={g.toggleSortMode} onToggleDir={g.toggleSortDir} />
+
       <div
         className="game__foe-avatar"
         onClick={g.online ? () => { sfx.click(); setFoeCardOpen(true) } : undefined}
@@ -543,9 +560,10 @@ function GameBoard() {
           ))}
         </div>
 
-        <div className="game__sort">
-          <SortButtons mode={g.sortMode} dir={g.sortDir} onToggleMode={g.toggleSortMode} onToggleDir={g.toggleSortDir} />
-        </div>
+        {/* empty right reserve — keeps the band centred; the sort buttons are now
+            positioned absolutely in the .game coord system (below) so they line up
+            with pause/? identically on phone & desktop. */}
+        <div className="game__sort" />
       </div>
 
       {(g.statusOverride ?? statusText) && (
@@ -630,6 +648,8 @@ function GameBoard() {
       )}
 
       <StickerProto />
+
+      <HandRankModal open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {foeCardOpen && (
         <PlayerInfoCard

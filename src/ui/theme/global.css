@@ -76,6 +76,25 @@ body {
     transform: translate(-50%, -50%) rotate(90deg);
     overflow: hidden;
   }
+
+  /* When the app is rendered rotated 90° (above), the VISIBLE stage is
+     100vh wide × 100vw tall. Popups/panels that size themselves with raw vh/vw
+     are measuring the UN-rotated viewport, so they overflow the stage (get
+     clipped) and never gain a scrollbar (主線 can't scroll). Re-express their
+     size against the rotated stage: stage height ⇒ vw, stage width ⇒ vh.
+     Scoped to this portrait-only query (with !important so import order can't
+     defeat it) → landscape/desktop CSS is completely untouched. */
+  .modal__panel {
+    max-height: 92vw !important;
+  }
+  .panel {
+    width: min(94vh, 680px) !important;
+    max-height: 92vw !important;
+  }
+  .panel--wide {
+    width: min(96vh, 900px) !important;
+    height: min(92vw, 680px) !important;
+  }
 }
 
 :focus-visible {
