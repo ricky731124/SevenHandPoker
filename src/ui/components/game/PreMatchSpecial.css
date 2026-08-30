@@ -1,6 +1,7 @@
 .prematch {
   position: absolute;
   inset: 0;
+  height: 100dvh; /* 對齊實際可見區(手機網頁位址列)。全螢幕 no-op */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,7 +14,7 @@
   align-items: center;
   gap: 8px;
   width: min(96vw, 700px);
-  max-height: 94vh;
+  max-height: 94dvh;
   padding: clamp(10px, 2vh, 20px) clamp(16px, 3vw, 30px);
   border-radius: var(--r-lg, 18px);
   background: var(--parch-tex, linear-gradient(180deg, var(--parch-1), var(--parch-2)));

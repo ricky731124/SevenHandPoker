@@ -46,16 +46,17 @@ function isRotated(): boolean {
 }
 
 function calc(): BoardSizes {
-  // Lay the board out against the STABLE layout viewport (clientWidth/Height ==
-  // 100vw/100vh), NOT innerHeight. In a mobile browser tab innerHeight shrinks as
-  // the address bar shows/hides, which used to SQUISH the board (overlapping
-  // buttons). The layout viewport stays constant (URL-bar-hidden size), so the
-  // board is always laid out at "full screen" size — exactly like standalone —
-  // and useFitScale then scales the whole board down to the actually-visible area.
-  // On standalone/desktop clientHeight == innerHeight, so this is a no-op there.
+  // Lay the board out against the FULL-SCREEN viewport, then useFitScale scales
+  // the whole board down to the actually-visible area. Which API reports the full
+  // (address-bar-hidden) size differs by platform — iOS Safari: window.innerHeight;
+  // Android Chrome: documentElement.clientHeight — and each reports the OTHER as
+  // the shrunken visible height. So take the LARGER of the two = the true full
+  // size on either platform. On standalone/desktop both equal the viewport, so
+  // this is a no-op there. (visualViewport = the shrunken visible area, used by
+  // useFitScale as the scale target — never here.)
   const de = typeof document === 'undefined' ? null : document.documentElement
-  const rawW = typeof window === 'undefined' ? 1024 : de?.clientWidth || window.innerWidth
-  const rawH = typeof window === 'undefined' ? 600 : de?.clientHeight || window.innerHeight
+  const rawW = typeof window === 'undefined' ? 1024 : Math.max(window.innerWidth, de?.clientWidth || 0)
+  const rawH = typeof window === 'undefined' ? 600 : Math.max(window.innerHeight, de?.clientHeight || 0)
   const rotated = isRotated()
   const vw = rotated ? rawH : rawW // rotated 90° → swap so the board fills the real space
   const vh = rotated ? rawW : rawH

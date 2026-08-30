@@ -1,8 +1,9 @@
 /* Concurrency readout, pinned bottom-right over everything (shown to everyone). */
 .online-count {
   position: fixed;
-  right: 10px;
-  bottom: 10px;
+  /* 對齊 iPhone 瀏海/圓角 safe-area,與左上/右上按鈕列一致。env() 在無瀏海裝置為 0 */
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
   z-index: 60;
   padding: 7px 15px;
   border-radius: 999px;
