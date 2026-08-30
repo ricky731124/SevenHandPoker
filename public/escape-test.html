@@ -38,7 +38,9 @@
     <a class="m" id="i1">① Safari(href 連結)</a>
     <button class="m" id="i2">② Safari(window.open)</button>
     <a class="m" id="i3">③ Chrome（googlechromes）</a>
-    <a class="m" id="i4">④ x-web-search（迂迴開 Safari）</a>
+    <a class="m" id="i4">④ x-web-search + 完整 https（★ 上次就是這個跳出去了,這次修對網址)</a>
+    <a class="m" id="i5">⑤ x-web-search + 編碼版(備援)</a>
+    <a class="m" id="i6">⑥ x-web-search → 直接開遊戲(成功會看到遊戲畫面)</a>
   </div>
 
   <div id="android">
@@ -80,10 +82,14 @@
   var set=function(id,href){ var el=document.getElementById(id); if(el) el.setAttribute('href',href); };
 
   // iOS
+  var full = location.origin + location.pathname;              // exact case + https, this test page
+  var gameRoot = location.origin + location.pathname.replace(/[^/]*$/, '');  // .../SevenHandPoker/
   set('i1','x-safari-https://'+base);
   document.getElementById('i2').onclick=function(){ window.open('x-safari-https://'+base,'_blank'); };
   set('i3','googlechromes://'+base);
-  set('i4','x-web-search://?'+base);
+  set('i4','x-web-search://?'+full);                            // full https url, raw
+  set('i5','x-web-search://?'+encodeURIComponent(full));        // encoded backup
+  set('i6','x-web-search://?'+gameRoot);                        // straight to the game root
   // Android
   set('a1','intent://'+base+'#Intent;scheme=https;end');
   set('a2','intent://'+base+'#Intent;scheme=https;package=com.android.chrome;end');
