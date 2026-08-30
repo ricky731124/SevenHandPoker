@@ -3,10 +3,8 @@
   flex-direction: column;
   gap: 12px;
   width: min(94vw, 680px);
-  /* dvh = real visible height: in a mobile browser tab the address bar eats
-     ~10–15%, so vh would push the 返回/標題 列 under the chrome. No-op on
-     fullscreen/desktop (dvh == vh). */
-  max-height: 92dvh;
+  /* real visible height (measured; see platform/viewport.ts). No-op fullscreen. */
+  max-height: calc(var(--vvh, 100dvh) * 0.92);
   padding: clamp(14px, 2.6vw, 24px);
   background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
   border: 3px solid var(--parch-edge);

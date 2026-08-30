@@ -1,7 +1,7 @@
 .ccar {
   position: fixed;
   inset: 0;
-  height: 100dvh; /* 對齊實際可見區(手機網頁位址列),否則面板被切、需捲動。全螢幕 no-op */
+  height: var(--vvh, 100dvh); /* 實際可見高(見 platform/viewport.ts)。全螢幕 no-op */
   z-index: 400;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
@@ -12,7 +12,7 @@
 .ccar__panel {
   position: relative;
   width: min(90vw, 340px);
-  max-height: 92dvh;
+  max-height: calc(var(--vvh, 100dvh) * 0.92);
   overflow-y: auto;
   background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
   border: 3px solid var(--parch-edge);
