@@ -3,50 +3,47 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>逃脫測試 v4 · Seven Hand Poker</title>
+<title>逃脫測試 v5 · Seven Hand Poker</title>
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
+  :root { color-scheme: light dark; } * { box-sizing:border-box; }
   body { margin:0; padding:18px; font-family:-apple-system,"Noto Sans TC",system-ui,sans-serif;
     background:#1c1a17; color:#f4ecdd; line-height:1.55; max-width:560px; margin:0 auto; }
-  h1 { font-size:19px; margin:6px 0 12px; } h2 { font-size:15px; margin:18px 0 6px; color:#e6b34d; }
-  .card { background:#2a2622; border:1px solid #4a4038; border-radius:12px; padding:12px 14px; margin:10px 0; }
-  .k { color:#b7a789; font-size:12px; } .env { font-size:20px; font-weight:800; }
-  .ok { color:#6fe08a; } .warn { color:#ffd23e; }
-  a.m, button.m { display:block; width:100%; margin:8px 0; padding:14px; font-size:16px; font-weight:800;
-    border:none; border-radius:11px; background:linear-gradient(180deg,#e6b34d,#c98a24); color:#2a1c06;
-    text-align:center; text-decoration:none; cursor:pointer; }
-  button.m { background:#3a332b; color:#f4ecdd; border:1px solid #5a4e42; }
-  small { color:#b7a789; } .q { color:#ffd23e; font-size:13px; margin:2px 0 0; }
+  h1{font-size:19px;margin:6px 0 10px;} h2{font-size:15px;margin:16px 0 6px;color:#e6b34d;}
+  .card{background:#2a2622;border:1px solid #4a4038;border-radius:12px;padding:12px 14px;margin:10px 0;}
+  .k{color:#b7a789;font-size:12px;} .env{font-size:20px;font-weight:800;}
+  .ok{color:#6fe08a;} .warn{color:#ffd23e;}
+  button.m{display:block;width:100%;margin:8px 0;padding:15px;font-size:16px;font-weight:800;border:none;
+    border-radius:11px;background:linear-gradient(180deg,#e6b34d,#c98a24);color:#2a1c06;cursor:pointer;}
+  small{color:#b7a789;} .hi{background:#3a2f12;border:1px solid #7a5; border-radius:8px; padding:8px 10px; margin:8px 0;}
 </style>
 </head>
 <body>
-  <h1>🧭 逃脫測試 v4(決定性)</h1>
-  <div class="card">
-    <div class="k">目前環境</div><div class="env" id="env">偵測中…</div><div id="verdict"></div>
+  <h1>🧭 逃脫測試 v5(window.open 專測)</h1>
+  <div class="card"><div class="k">目前環境</div><div class="env" id="env">…</div><div id="verdict"></div></div>
+
+  <div class="hi">
+    <b>超重要判斷方式:</b>按下按鈕後,如果 FB 只是多開一個「空白分頁」——<b>先別急著說失敗!</b>
+    請<b>切換 App / 看一下 Safari 或 Chrome 是不是已經在背景打開了我們的頁</b>(x-safari-https 常常是「FB 留一個空白、Safari 另外開」)。
   </div>
 
-  <p><b>用 FB / Messenger 打開這頁</b>,然後照下面測,把每一顆的結果告訴我(開了什麼、是搜尋還是網頁)。</p>
-
   <div id="ios">
-    <h2>iOS</h2>
-    <a class="m" id="A">A. x-web-search → example.com</a>
-    <div class="q">↑關鍵題:它會「開 example.com 網頁」還是「Google 搜尋 example.com」?</div>
-    <a class="m" id="B">B. x-web-search → 我們的頁(正確大小寫)</a>
-    <a class="m" id="C">C. x-safari-https → 我們的頁(對照,通常被擋)</a>
+    <h2>iOS(全部用 window.open,逐一試)</h2>
+    <button class="m" id="i1">① window.open( x-safari-https 我們的頁 , _blank )</button>
+    <button class="m" id="i2">② window.open( x-safari-https 我們的頁 )　不加 _blank</button>
+    <button class="m" id="i3">③ window.open( x-safari-https 遊戲首頁 )</button>
+    <button class="m" id="i4">④ window.open( googlechrome 我們的頁 )　有裝 Chrome 才有效</button>
   </div>
 
   <div id="android">
     <h2>安卓</h2>
-    <a class="m" id="D">D. 改良版 intent(含 fallback)</a>
-    <div class="q">↑看會不會直接開 Chrome、還會不會問「開啟外部程式」?</div>
+    <button class="m" id="a1">A. intent(會跳確認框 → 按「開啟」看是否進 Chrome)</button>
   </div>
 
-  <p><small>逃脫成功=跳到 Safari/Chrome、這頁在真瀏覽器重開(上方變綠字)。</small></p>
+  <p><small>成功=Safari/Chrome 出現、開到我們的頁(上方變綠字「真瀏覽器」)。把「第幾顆 + 開了什麼(Safari/Chrome/空白/沒反應)」告訴我。</small></p>
 
 <script>
-(function () {
-  var ua = navigator.userAgent || '';
+(function(){
+  var ua=navigator.userAgent||'';
   var isIOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   var isAndroid=/Android/i.test(ua);
   var app='browser';
@@ -54,19 +51,19 @@
   else if(/Instagram/i.test(ua))app='Instagram'; else if(/\bLine\//i.test(ua))app='LINE';
   var isInApp=app!=='browser', os=isIOS?'iOS':(isAndroid?'Android':'桌機/其他');
   var envEl=document.getElementById('env'), vd=document.getElementById('verdict');
-  if(isInApp){envEl.innerHTML='<span class="warn">'+app+' 內建瀏覽器</span> · '+os;}
-  else{envEl.innerHTML='<span class="ok">真瀏覽器</span> · '+os;
-    vd.innerHTML='<small class="ok">✓ 已在真瀏覽器(從 App 跳來=成功!)</small>';}
+  if(isInApp) envEl.innerHTML='<span class="warn">'+app+' 內建瀏覽器</span> · '+os;
+  else { envEl.innerHTML='<span class="ok">真瀏覽器</span> · '+os;
+    vd.innerHTML='<small class="ok">✓ 已在真瀏覽器(從 App 跳來=成功!)</small>'; }
 
-  var mine = location.origin + location.pathname;                 // exact case, https, this page
-  var bareMine = location.host + location.pathname;               // no scheme
-  var set=function(id,href){var el=document.getElementById(id); if(el) el.setAttribute('href',href);};
+  var hostPath=location.host+location.pathname;                        // ricky.../SevenHandPoker/escape-test.html
+  var gameRoot=location.host+location.pathname.replace(/[^/]*$/,'');   // ricky.../SevenHandPoker/
+  var on=function(id,fn){var el=document.getElementById(id); if(el) el.onclick=fn;};
 
-  set('A','x-web-search://?example.com');                         // decisive: navigate vs search
-  set('B','x-web-search://?'+bareMine);                           // our page, exact case, bare
-  set('C','x-safari-https://'+bareMine);                          // control (usually blocked in FB)
-  // Android: improved intent with explicit VIEW/BROWSABLE + fallback
-  set('D','intent://'+bareMine+'#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url='+encodeURIComponent(mine)+';end');
+  on('i1',function(){ window.open('x-safari-https://'+hostPath,'_blank'); });
+  on('i2',function(){ window.open('x-safari-https://'+hostPath); });
+  on('i3',function(){ window.open('x-safari-https://'+gameRoot); });
+  on('i4',function(){ window.open('googlechrome://'+hostPath); });
+  on('a1',function(){ window.location.href='intent://'+hostPath+'#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end'; });
 
   if(isIOS) document.getElementById('android').style.opacity=.4;
   if(isAndroid) document.getElementById('ios').style.opacity=.4;
