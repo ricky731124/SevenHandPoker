@@ -20,7 +20,6 @@ import TableBackground from './ui/components/TableBackground'
 import Toast from './ui/components/Toast'
 import AchievementToast from './ui/components/AchievementToast'
 import UpgradePrompt from './ui/components/UpgradePrompt'
-import InAppBrowserGate from './ui/components/InAppBrowserGate'
 import InstallGuide from './ui/components/InstallGuide'
 import OrientationTip from './ui/components/OrientationTip'
 
@@ -92,7 +91,8 @@ export default function App() {
       <UpgradePrompt />
 
       <InstallGuide />
-      <InAppBrowserGate />
+      {/* InAppBrowserGate 已停用:不再硬擋 LINE/FB in-app 瀏覽器,讓人可直接以訪客試玩。
+          Google 登入在 webview 仍會被 Google 擋,之後視測試結果再決定要不要加「用外部瀏覽器開」的軟提示。 */}
       <OrientationTip />
       {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
       {screen === 'menu' && <OnlineCount />}

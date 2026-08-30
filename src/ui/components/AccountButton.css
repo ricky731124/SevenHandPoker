@@ -1,8 +1,10 @@
 /* Account bar: top-left of the menu, over the felt/hero. */
 .acctbar {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  /* Clear the iPhone landscape notch / home-indicator insets so the 每日任務 /
+     登入 buttons never sit under the cutout. env() is 0 off-notch → no change. */
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
   z-index: 20;
   display: inline-flex;
   flex-direction: column;
@@ -21,8 +23,8 @@
 /* 登出 sits in the opposite corner from the identity pill */
 .acctbar-right {
   position: absolute;
-  top: 12px;
-  right: 14px;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
   z-index: 20;
   display: inline-flex;
   align-items: center;

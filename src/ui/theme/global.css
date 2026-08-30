@@ -48,6 +48,12 @@ body {
 .stage {
   position: absolute;
   inset: 0;
+  /* Centre against the ACTUAL visible area, not the layout viewport. In a mobile
+     browser tab the address bar eats 10–15% of the height; without this, centred
+     panels (排行榜/個人化…) sit too low and their 返回/標題 列 hide under the chrome.
+     On fullscreen/standalone & desktop dvh == vh → no-op. The portrait fake-
+     landscape block below resets this (there the rotated #root owns the sizing). */
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,6 +81,12 @@ body {
     transform-origin: center center;
     transform: translate(-50%, -50%) rotate(90deg);
     overflow: hidden;
+  }
+
+  /* In the rotated state the rotated #root owns sizing; let .stage simply fill it
+     (undo the base 100dvh, which would fight the 90° rotation). */
+  .stage {
+    height: 100%;
   }
 
   /* When the app is rendered rotated 90° (above), the VISIBLE stage is

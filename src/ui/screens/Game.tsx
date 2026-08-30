@@ -32,6 +32,7 @@ import EndModal from '../components/game/EndModal'
 import CampaignEndModal from '../components/game/CampaignEndModal'
 import { useCampaignStore } from '../../state/campaignStore'
 import useBoardSizes from '../hooks/useBoardSizes'
+import useFitScale from '../hooks/useFitScale'
 import useSeats from '../hooks/useSeats'
 import { sfx } from '../../audio/sfx'
 import Lobby from './Lobby'
@@ -271,6 +272,9 @@ function GameBoard() {
   const go = useAppStore((s) => s.go)
   const inCampaign = useCampaignStore((s) => s.series !== null)
   const sz = useBoardSizes()
+  // Uniform scale so the whole board fits the ACTUALLY-visible area on mobile web
+  // (address bar steals height). 1 on fullscreen/standalone/desktop → no transform.
+  const fit = useFitScale(sz.stageW, sz.stageH)
   const seats = useSeats()
   const lastPvpReward = usePlatformStore((s) => s.lastPvpReward)
   // Tap the opponent's avatar → their public info card (#5). Online foes only
@@ -454,6 +458,10 @@ function GameBoard() {
       style={{
         width: sz.stageW,
         height: sz.stageH,
+        // Scale the whole board to fit the visible viewport (mobile web). No
+        // transform at all when fit === 1, so fullscreen/desktop is untouched.
+        transform: fit < 1 ? `scale(${fit})` : undefined,
+        transformOrigin: 'center center',
         ['--reserve' as string]: `${sz.reserve}px`,
         ['--reserve-r' as string]: `${sz.rightReserve}px`,
         // stage box size, so vertical vh-based spacing can respect the capped

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import BackButton from './BackButton'
 import './Modal.css'
 
@@ -28,7 +29,12 @@ interface Props {
  */
 export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass, onBack }: Props) {
   if (!open) return null
-  return (
+  // Portal to <body> so a modal is never trapped inside a transformed ancestor
+  // (the game board is scaled with transform on mobile web — a fixed child of a
+  // transformed element is positioned relative to THAT element, not the viewport,
+  // which would shrink the scrim and float it off-centre). At body level the
+  // scrim covers the true visible viewport (see .modal__scrim / 100dvh).
+  return createPortal(
     <motion.div
       className={`modal__scrim${scrimClass ? ` ${scrimClass}` : ''}`}
       initial={{ opacity: 0 }}
@@ -51,6 +57,7 @@ export default function Modal({ open, onClose, title, children, locked, width = 
         )}
         <div className="modal__body">{children}</div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   )
 }

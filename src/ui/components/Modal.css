@@ -1,6 +1,12 @@
 .modal__scrim {
   position: fixed;
   inset: 0;
+  /* Bind the centring context to the ACTUAL visible area (dvh), not the layout
+     viewport. In a mobile BROWSER tab the address/bookmark bar eats 10–15% of the
+     height, so inset:0 (= layout viewport) would centre the panel too low and
+     clip its top under the chrome. On fullscreen/standalone & desktop dvh == vh,
+     so this is a no-op there. */
+  height: 100dvh;
   z-index: 1000; /* above the hand/board */
   background: rgba(20, 4, 8, 0.66);
   backdrop-filter: blur(3px);
@@ -24,7 +30,10 @@
   border-radius: var(--r-lg);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.5);
   padding: clamp(14px, 3vw, 22px);
-  max-height: 92vh;
+  /* dvh = real visible height (see .modal__scrim). vh over-reports in mobile
+     browser tabs → panel taller than the screen → top/bottom cut & the inner
+     scrollbar never engages. No-op on fullscreen/desktop. */
+  max-height: 92dvh;
   overflow: auto;
   color: var(--parch-text);
   /* 木色細滾軸,取代醜白預設 */
@@ -95,7 +104,7 @@
 @media (max-height: 480px) {
   .modal__panel {
     padding: 10px 14px;
-    max-height: 95vh;
+    max-height: 95dvh;
     border-width: 2px;
   }
   .modal__title {
