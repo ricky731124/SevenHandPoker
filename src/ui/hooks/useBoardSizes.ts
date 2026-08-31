@@ -47,17 +47,37 @@ function isRotated(): boolean {
 
 function calc(): BoardSizes {
   // Lay the board out against the FULL-SCREEN viewport, then useFitScale scales
-  // the whole board down to the actually-visible area. Which API reports the full
-  // (address-bar-hidden) size differs by platform — iOS Safari: window.innerHeight;
-  // Android Chrome: documentElement.clientHeight — and each reports the OTHER as
-  // the shrunken visible height. So take the LARGER of the two = the true full
-  // size on either platform. On standalone/desktop both equal the viewport, so
-  // this is a no-op there. (visualViewport = the shrunken visible area, used by
-  // useFitScale as the scale target — never here.)
+  // the whole board down to the actually-visible area. (visualViewport = the
+  // shrunken visible area, used by useFitScale as the scale target — never here.)
   const de = typeof document === 'undefined' ? null : document.documentElement
-  const rawW = typeof window === 'undefined' ? 1024 : Math.max(window.innerWidth, de?.clientWidth || 0)
-  const rawH = typeof window === 'undefined' ? 600 : Math.max(window.innerHeight, de?.clientHeight || 0)
+  let rawW = typeof window === 'undefined' ? 1024 : Math.max(window.innerWidth, de?.clientWidth || 0)
+  let rawH = typeof window === 'undefined' ? 600 : Math.max(window.innerHeight, de?.clientHeight || 0)
   const rotated = isRotated()
+
+  // Mobile browser tab (real landscape): iOS Safari — and Android Chrome — shrink
+  // BOTH innerHeight AND clientHeight down to the address-bar-reduced VISIBLE
+  // height, leaving NO full-height signal at all. (Measured: an iPhone 15 Pro
+  // whose landscape screen is 393 CSS-px tall reports 310 for inner/client/visual
+  // alike in a browser tab — so the old max(inner,client) baseline == the visible
+  // height, and fit came out 310/310 = 1, i.e. no scaling.) The physical screen's
+  // SHORT edge IS the chrome-independent full landscape height (iOS keeps `screen`
+  // portrait-fixed, so screen.width = 393 = the landscape full height), so adopt
+  // it as the layout baseline; useFitScale then scales the whole board down to the
+  // actually-visible visualViewport height (310/393 ≈ 0.79). Standalone (no chrome)
+  // and desktop already report the true full height, so they are excluded and stay
+  // byte-for-byte as tuned (fit = 1). The rotated fake-landscape path is a
+  // different measurement regime (see isRotated / global.css) and is left as-is.
+  if (typeof window !== 'undefined' && typeof screen !== 'undefined' && !rotated) {
+    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches
+    const standalone =
+      !!window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true
+    if (coarse && !standalone) {
+      rawW = Math.max(rawW, Math.max(screen.width, screen.height))
+      rawH = Math.max(rawH, Math.min(screen.width, screen.height))
+    }
+  }
+
   const vw = rotated ? rawH : rawW // rotated 90° → swap so the board fills the real space
   const vh = rotated ? rawW : rawH
 
