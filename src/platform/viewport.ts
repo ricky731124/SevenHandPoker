@@ -20,6 +20,15 @@ export function initViewportVars(): void {
     const w = vv?.width || window.innerWidth
     if (h > 0) de.style.setProperty('--vvh', `${h}px`)
     if (w > 0) de.style.setProperty('--vvw', `${w}px`)
+    // Mobile browser tab (not standalone / desktop): scale every popup down to a
+    // "shrunk" version so panel + images + buttons fit the reduced visible area as
+    // one uniform unit (see .modal__panel / .cstages__panel — transform:scale).
+    // Standalone & desktop stay 1 (byte-for-byte unchanged). Mirrors useMobileWebScale.
+    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches
+    const standalone =
+      !!window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true
+    de.style.setProperty('--mw-scale', coarse && !standalone ? '0.8' : '1')
     return h > 0 && w > 0
   }
 

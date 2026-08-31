@@ -165,12 +165,18 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
         set({ coach: node.text, gate: 'showdown', showdownOpen: false, highlight: null, allowedCardIds: null, allowedSlots: null })
         const gen = get().gen
         setTimeout(() => {
-          if (get().gen === gen && get().gate === 'showdown') set({ showdownOpen: true })
+          if (get().gen !== gen || get().gate !== 'showdown') return
+          set({ showdownOpen: true })
+          // 對標真實對戰:撞擊音 → 0.4s 後贏家「搶金幣成功」/輸家「失敗」。
+          sfx.showdown()
+          const iWon = get().engine.lastShowdown?.winner === 'p1' || get().engine.lastShowdown?.winner === 'both'
+          setTimeout(() => { if (get().gen === gen) (iWon ? sfx.coinWin() : sfx.coinFail()) }, 400)
         }, 800)
         break
       }
       case 'win':
         set({ coach: node.text, gate: 'win', showdownOpen: false, highlight: null, allowedCardIds: null, allowedSlots: null })
+        sfx.win() // 教學通關(對標真實對戰勝利音)
         break
       default:
         set({ coach: '', gate: 'auto', highlight: null, allowedCardIds: null, allowedSlots: null, showdownOpen: false })
@@ -183,19 +189,25 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
           if (get().gen !== gen) return
           const e = get().engine
           let next = e
+          // Match the real game's per-action SFX (gameStore) instead of playing
+          // 發牌 for everything: 推牌出來=deal、放進格子=place、補牌=draw(n)。
           if (node.k === 'oppPick') {
             const total = e.hands.p2.length
             const n = node.ids.length
             set({ foeSel: { total, idx: Array.from({ length: n }, (_, i) => i) } })
             next = oppInject(e, node.ids)
+            sfx.deal() // 對手把牌推出來(發牌滑音)
           } else if (node.k === 'oppPlace') {
             next = applyPlace(e, 'p2', node.slot)
+            sfx.place() // 放進格子
           } else if (node.k === 'draw') {
             next = applyDraw(e)
+            const drew = next.hands.p1.length - e.hands.p1.length
+            if (drew > 0) sfx.draw(drew) // 固定補牌
           } else if (node.k === 'deal') {
             next = dealPlayer(e, node.id)
+            sfx.deal() // 補一張牌
           }
-          sfx.deal()
           set({ engine: next, idx: idx + 1 })
           get().run()
         },
@@ -236,7 +248,7 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
     const sel = get().selected
     if (sel.length !== want.size || !sel.every((id) => want.has(id))) return
     set({ engine: applyPick(get().engine, 'p1', node.ids), selected: [] })
-    sfx.deal()
+    sfx.click() // 送出(對標真實對戰:送出=click)
     get().advance()
   },
 
@@ -245,7 +257,7 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
     const allowed = get().allowedSlots
     if (allowed && !allowed.includes(slot)) return
     set({ engine: applyPlace(get().engine, 'p1', slot), foeSel: null })
-    sfx.deal()
+    sfx.place() // 放進格子
     get().advance()
   },
 
@@ -280,7 +292,7 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
     const node = TUTORIAL_NODES[get().idx]
     if (node.k !== 'swap' || id !== node.target) return
     set({ engine: tutorialSwap(get().engine, node.target, node.result), targeting: null })
-    sfx.deal()
+    sfx.special() // 發動特殊牌(偷天換日)
     get().advance()
   },
 

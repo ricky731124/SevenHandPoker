@@ -26,6 +26,14 @@ export function isMobile(): boolean {
   return isIOS() || isAndroid()
 }
 
+/** Specifically LINE's in-app browser. LINE honours a `?openExternalBrowser=1`
+ *  query param by re-opening the URL in the system browser, so it gets a silent
+ *  redirect (no gate UI) — unlike FB/IG, which need an intent jump (Android) or a
+ *  manual guide (iOS). See InAppBrowserGate. */
+export function isLineInApp(): boolean {
+  return /\bLine\//i.test(ua)
+}
+
 /** True inside an embedded webview (LINE/FB/IG/WeChat/…) — these can't be made
  *  fullscreen and Google blocks OAuth in them, so we gate them out. */
 export function isInAppBrowser(): boolean {

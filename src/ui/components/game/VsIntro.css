@@ -1,6 +1,13 @@
 .vs {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Center within the ACTUAL visible area (--vvh, measured from visualViewport).
+     inset:0 sized to the LARGE iOS viewport, so on mobile web the row (and the
+     player names) dropped below the address bar (名字太貼底). Falls back to dvh
+     pre-measure; no-op on fullscreen/desktop. */
+  height: var(--vvh, 100dvh);
   z-index: 40;
   display: flex;
   flex-direction: column;

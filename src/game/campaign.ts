@@ -61,7 +61,7 @@ const DIAMONDS_PER_CLEAR = 10
 
 /** x-1/x-2/x-3 share this shape, differing only in the card/avatar unlocked and
  *  the execution ramp. `exec` = the three sub-stages' 執行力 (預設 0.6/0.75/0.9);
- *  第一關被反映太難,單獨調低成 0.5/0.65/0.8 讓新手先過關(其餘關卡不動)。 */
+ *  被反映前段太難,單獨下修:第一關 0.35/0.5/0.65、第二關 0.5/0.65/0.8(其餘關卡不動)。 */
 function subStages(
   stageId: string,
   stageIndex: number,
@@ -125,7 +125,7 @@ export const CAMPAIGN: CampaignStage[] = [
       jokerTiming: 30,
       insight: 20,
     },
-    subStages: subStages('s1', 1, 'peek', 'bird', [0.5, 0.65, 0.8]),
+    subStages: subStages('s1', 1, 'peek', 'bird', [0.35, 0.5, 0.65]),
     nodePositions: NODE_POS,
   },
   {
@@ -142,7 +142,7 @@ export const CAMPAIGN: CampaignStage[] = [
       jokerTiming: 20,
       insight: 70,
     },
-    subStages: subStages('s2', 2, 'spy', 'cat2'),
+    subStages: subStages('s2', 2, 'spy', 'cat2', [0.5, 0.65, 0.8]),
     nodePositions: NODE_POS,
   },
   {

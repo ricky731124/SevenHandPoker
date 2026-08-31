@@ -29,8 +29,11 @@
   border-radius: var(--r-lg);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.5);
   padding: clamp(14px, 3vw, 22px);
-  /* real visible height (see .modal__scrim). Falls back to dvh pre-measure. */
-  max-height: calc(var(--vvh, 100dvh) * 0.92);
+  transform-origin: center center; /* framer scales the panel by --mw-scale on mobile web */
+  /* real visible height (see .modal__scrim). Divided by --mw-scale so that AFTER the
+     mobile-web shrink the panel still fills ~0.92 of the visible height (more content
+     fits without scrolling). --mw-scale is 1 on standalone/desktop → unchanged. */
+  max-height: calc(var(--vvh, 100dvh) * 0.92 / var(--mw-scale, 1));
   overflow: auto;
   color: var(--parch-text);
   /* 木色細滾軸,取代醜白預設 */
@@ -101,7 +104,7 @@
 @media (max-height: 480px) {
   .modal__panel {
     padding: 10px 14px;
-    max-height: calc(var(--vvh, 100dvh) * 0.95);
+    max-height: calc(var(--vvh, 100dvh) * 0.95 / var(--mw-scale, 1));
     border-width: 2px;
   }
   .modal__title {

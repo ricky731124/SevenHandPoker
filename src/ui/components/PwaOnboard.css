@@ -36,6 +36,22 @@
   max-width: 20em;
   color: var(--cream);
 }
+/* Points at the FB webview's ⋯ (top-right). Bounces toward the corner so it's
+   obvious where to tap. */
+.iabgate__more-arrow {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold-2);
+  animation: iab-arrow-bounce 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes iab-arrow-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
 .iabgate__muted {
   font-size: 13px;
   color: var(--muted);

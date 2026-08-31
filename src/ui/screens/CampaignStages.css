@@ -1,6 +1,13 @@
 .cstages {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Center within the ACTUAL visible area (--vvh, measured from visualViewport in
+     JS — see platform/viewport.ts). inset:0 would size to the LARGE iOS viewport
+     (address-bar-hidden height), pushing the panel's top/bottom under the browser
+     chrome (主線任務斷頭). Falls back to dvh pre-measure; no-op on fullscreen/desktop. */
+  height: var(--vvh, 100dvh);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -24,7 +31,13 @@
 
 .cstages__panel {
   width: min(560px, 86vw);
-  max-height: 90vh;
+  /* Mobile web: shrink the whole panel (title + buttons) as one unit, like the
+     modals (see useMobileWebScale / --mw-scale). 1 on standalone/desktop. */
+  transform: scale(var(--mw-scale, 1));
+  transform-origin: center center;
+  /* real visible height, not the large iOS viewport (see .cstages); /--mw-scale so
+     the shrunk panel still fills ~0.9 of the visible height. */
+  max-height: calc(var(--vvh, 100dvh) * 0.9 / var(--mw-scale, 1));
   overflow: hidden; /* title stays put; only the list scrolls */
   display: flex;
   flex-direction: column;

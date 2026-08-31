@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import Modal from './Modal'
 import Button from './Button'
 import Diamond from './game/Diamond'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import { usePlatformStore } from '../../state/platformStore'
 import { STICKERS, stickerPrice, stickerSrc, type StickerDef } from '../../game/stickers'
 import { sfx } from '../../audio/sfx'
@@ -28,6 +29,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
   const [confirm, setConfirm] = useState<StickerDef | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<BuyResult | null>(null)
+  const mw = useMobileWebScale()
 
   if (!open) return null
 
@@ -45,7 +47,7 @@ export default function Shop({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <>
       <div className="pz-screen" style={{ zIndex: 300 }} onClick={onClose}>
-      <motion.div className="panel panel--wide" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
+      <motion.div className="panel panel--wide" initial={{ opacity: 0, y: 16, scale: mw }} animate={{ opacity: 1, y: 0, scale: mw }} onClick={(e) => e.stopPropagation()}>
         <div className="pz__topbar">
           <button className="pz-back" onClick={() => { sfx.click(); onClose() }} aria-label="返回" title="返回">
             <svg viewBox="0 0 24 24" width="26" height="26">

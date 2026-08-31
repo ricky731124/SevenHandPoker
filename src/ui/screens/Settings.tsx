@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import Button from '../components/Button'
 import CardBack from '../components/CardBack'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 
@@ -31,9 +32,10 @@ export default function Settings() {
   const go = useAppStore((s) => s.go)
   const settings = useAppStore((s) => s.settings)
   const update = useAppStore((s) => s.updateSettings)
+  const mw = useMobileWebScale()
 
   return (
-    <motion.div className="panel" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+    <motion.div className="panel" initial={{ opacity: 0, y: 20, scale: mw }} animate={{ opacity: 1, y: 0, scale: mw }}>
       <h1 className="panel__h1">設定</h1>
       <div className="panel__scroll">
         <div className="settings__row">

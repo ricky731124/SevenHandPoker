@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import BackButton from '../components/BackButton'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import './Panel.css'
 
 const HAND_ORDER = [
@@ -17,8 +18,9 @@ const HAND_ORDER = [
 
 export default function HowToPlay() {
   const go = useAppStore((s) => s.go)
+  const mw = useMobileWebScale()
   return (
-    <motion.div className="panel" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+    <motion.div className="panel" initial={{ opacity: 0, y: 20, scale: mw }} animate={{ opacity: 1, y: 0, scale: mw }}>
       <div className="panel__titlebar">
         <BackButton onClick={() => go('menu')} />
         <h1 className="panel__h1">如何遊玩</h1>

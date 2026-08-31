@@ -57,7 +57,7 @@ export default function AchievementToast() {
             position: 'fixed',
             top: 'clamp(12px, 3vh, 28px)',
             left: '50%',
-            zIndex: 2000,
+            zIndex: 3500, // above the generic Toast (3000) & every modal — the reward/成就 toast is always topmost
             display: 'flex',
             alignItems: 'center',
             gap: 12,
@@ -97,7 +97,7 @@ export default function AchievementToast() {
             position: 'fixed',
             top: 'clamp(12px, 3vh, 28px)',
             left: '50%',
-            zIndex: 2000, // above modals (scrim = 1000) — the popup auto-dismisses
+            zIndex: 3500, // above the generic Toast (3000) & every modal — the reward/成就 toast is always topmost
             display: 'flex',
             alignItems: 'center',
             gap: 16,

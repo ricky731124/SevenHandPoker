@@ -8,6 +8,7 @@ import { type Board, type LbRow } from '../../platform/leaderboard'
 import { ACHIEVEMENTS } from '../../game/achievements'
 import PlayerAvatar from '../components/PlayerAvatar'
 import PlayerInfoCard from '../components/PlayerInfoCard'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 import './Personalize.css'
@@ -42,6 +43,7 @@ const MEDALS = ['🥇', '🥈', '🥉']
 
 export default function Leaderboard() {
   const go = useAppStore((s) => s.go)
+  const mw = useMobileWebScale()
   const uid = usePlatformStore((s) => s.uid)
   const isAnonymous = usePlatformStore((s) => s.isAnonymous)
   const registered = !!uid && !isAnonymous
@@ -82,8 +84,8 @@ export default function Leaderboard() {
     <div className="pz-screen" onClick={() => go('menu')}>
       <motion.div
         className="panel panel--wide panel--lb"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 16, scale: mw }}
+        animate={{ opacity: 1, y: 0, scale: mw }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pz__topbar">

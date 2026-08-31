@@ -2,9 +2,10 @@
 .acctbar {
   position: absolute;
   /* Clear the iPhone landscape notch / home-indicator insets so the 每日任務 /
-     登入 buttons never sit under the cutout. env() is 0 off-notch → no change. */
+     登入 buttons never sit under the cutout. env() is 0 off-notch → no change.
+     使用者:iOS 安全區保留太多 → 左右只吃 0.5× inset(可接受被瀏海遮一點點)。 */
   top: max(12px, env(safe-area-inset-top));
-  left: max(12px, env(safe-area-inset-left));
+  left: max(12px, calc(env(safe-area-inset-left) * 0.5));
   z-index: 20;
   display: inline-flex;
   flex-direction: column;
@@ -24,7 +25,7 @@
 .acctbar-right {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
-  right: max(14px, env(safe-area-inset-right));
+  right: max(14px, calc(env(safe-area-inset-right) * 0.5)); /* 少吃一半瀏海(見 .acctbar) */
   z-index: 20;
   display: inline-flex;
   align-items: center;

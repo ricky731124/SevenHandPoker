@@ -21,8 +21,8 @@ import Toast from './ui/components/Toast'
 import AchievementToast from './ui/components/AchievementToast'
 import UpgradePrompt from './ui/components/UpgradePrompt'
 import InstallGuide from './ui/components/InstallGuide'
+import InAppBrowserGate from './ui/components/InAppBrowserGate'
 import OrientationTip from './ui/components/OrientationTip'
-import ViewportDebug from './ui/components/ViewportDebug'
 
 const screens = {
   menu: Menu,
@@ -92,11 +92,10 @@ export default function App() {
       <UpgradePrompt />
 
       <InstallGuide />
-      {/* InAppBrowserGate 已停用:不再硬擋 LINE/FB in-app 瀏覽器,讓人可直接以訪客試玩。
-          Google 登入在 webview 仍會被 Google 擋,之後視測試結果再決定要不要加「用外部瀏覽器開」的軟提示。 */}
+      {/* In-app webview 路由門:LINE 靜默轉外部瀏覽器、安卓 FB 跳 Chrome、iOS FB 顯示手動引導。
+          一般瀏覽器/全螢幕/電腦版不受影響(見 InAppBrowserGate)。 */}
+      <InAppBrowserGate />
       <OrientationTip />
-      {/* TEMP:除錯用 viewport 數字覆蓋層,修好縮放後移除 */}
-      <ViewportDebug />
       {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
       {screen === 'menu' && <OnlineCount />}
     </>

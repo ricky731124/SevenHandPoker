@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import BackButton from './BackButton'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import './Modal.css'
 
 interface Props {
@@ -28,6 +29,10 @@ interface Props {
  * (no exit animation) so a throttled rAF can never leave a stuck overlay.
  */
 export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass, onBack }: Props) {
+  // Mobile browser tab: shrink the whole panel (content + art + buttons) to a
+  // proportional "one-screen" version. framer owns `transform`, so the scale has
+  // to be the animate target here rather than CSS. 1 on standalone/desktop.
+  const mw = useMobileWebScale()
   if (!open) return null
   // Portal to <body> so a modal is never trapped inside a transformed ancestor
   // (the game board is scaled with transform on mobile web — a fixed child of a
@@ -44,8 +49,8 @@ export default function Modal({ open, onClose, title, children, locked, width = 
       <motion.div
         className={`modal__panel${panelClass ? ` ${panelClass}` : ''}`}
         style={{ maxWidth: width }}
-        initial={{ scale: 0.85, y: 20, opacity: 0 }}
-        animate={{ scale: 1, y: 0, opacity: 1 }}
+        initial={{ scale: 0.85 * mw, y: 20, opacity: 0 }}
+        animate={{ scale: mw, y: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 340, damping: 28 }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -1,16 +1,32 @@
 /* Full-screen backdrop: clicking outside the panel returns to the menu. */
 .pz-screen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Center within the ACTUAL visible area (--vvh), not the large iOS viewport —
+     otherwise the panel sits too low and its bottom hides under the browser chrome
+     on mobile web. No-op on fullscreen/standalone & desktop. */
+  height: var(--vvh, 100dvh);
+  /* 2vw base side margin (keeps the old min(96vw,…) breathing room) + 使用者:
+     排行榜/個人化/商城 的 iOS 安全區只吃 0.3× inset(比主畫面更省)。
+     env() 是 0 於無瀏海/桌機 → 桌機維持原本 96vw 邊距。 */
+  padding-left: calc(2vw + env(safe-area-inset-left) * 0.3);
+  padding-right: calc(2vw + env(safe-area-inset-right) * 0.3);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .panel--wide {
-  width: min(96vw, 900px);
-  /* Fixed height so switching tabs never resizes the panel (使用者:別跳). */
-  height: min(92vh, 680px);
+  /* 100% (not 96vw) so it respects the .pz-screen safe-area padding above. */
+  width: min(100%, 900px);
+  /* Fixed height so switching tabs never resizes the panel (使用者:別跳). Based on
+     the visible height (--vvh) and divided by --mw-scale so that AFTER the mobile-web
+     shrink the panel fits the visible area. On desktop/fullscreen (--mw-scale=1)
+     this equals the old min(92vh, 680px). */
+  height: min(calc(var(--vvh, 100dvh) * 0.92 / var(--mw-scale, 1)), 680px);
 }
 
 /* Shop 「?」 — a clear, tappable round wood button. */

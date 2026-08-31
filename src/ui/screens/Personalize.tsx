@@ -9,6 +9,7 @@ import SpecialCard, { SpecialCardArt } from '../components/SpecialCard'
 import CardCarousel, { type CarouselSlide } from '../components/CardCarousel'
 import Badge from '../components/Badge'
 import CardBack from '../components/CardBack'
+import useMobileWebScale from '../hooks/useMobileWebScale'
 import { SPECIAL_CARD_LIST, LOADOUT_SIZE, type SpecialCardDef } from '../../game/specialCards'
 import { ACHIEVEMENTS, TIER_NAME_ZH, tierFor, type AchMetric } from '../../game/achievements'
 import { STICKERS, stickerSrc, ownsSticker } from '../../game/stickers'
@@ -40,6 +41,7 @@ export default function Personalize() {
   const saveAvatar = usePlatformStore((s) => s.saveAvatar)
   const saveAchievements = usePlatformStore((s) => s.saveAchievements)
   const [tab, setTab] = useState<Tab>('avatar')
+  const mw = useMobileWebScale()
 
   useEffect(() => {
     void usePlatformStore.getState().ensureAccount()
@@ -51,8 +53,8 @@ export default function Personalize() {
     <div className="pz-screen" onClick={() => go('menu')}>
       <motion.div
         className="panel panel--wide"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 16, scale: mw }}
+        animate={{ opacity: 1, y: 0, scale: mw }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pz__topbar">
