@@ -172,21 +172,28 @@ export default function Tutorial() {
           ))}
         </div>
 
-        <div className={`game__sort${hl('sort')}`}>
-          <SortButtons
-            mode={sortMode}
-            dir={sortDir}
-            onToggleMode={() => {
-              setSortMode((m) => (m === 'rank' ? 'suit' : 'rank'))
-              t.tapSort('mode')
-            }}
-            onToggleDir={() => {
-              setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-              t.tapSort('dir')
-            }}
-          />
-        </div>
+        {/* empty right reserve — keeps the band centred; the sort buttons are
+            positioned absolutely in the .game coord system (below), identical to
+            the real game, so they line up with pause/? instead of anchoring to
+            the shorter .game__mid box (which pushed them onto 送出). */}
+        <div className="game__sort" />
       </div>
+
+      {/* Sort pair — direct child of .game (NOT inside .game__mid) so the absolute
+          .sortbtn children anchor to the full stage via --sbtn-top-q. */}
+      <SortButtons
+        mode={sortMode}
+        dir={sortDir}
+        highlight={t.highlight === 'sort'}
+        onToggleMode={() => {
+          setSortMode((m) => (m === 'rank' ? 'suit' : 'rank'))
+          t.tapSort('mode')
+        }}
+        onToggleDir={() => {
+          setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+          t.tapSort('dir')
+        }}
+      />
 
       {/* Coach message bar (top-center) */}
       {t.coach && (

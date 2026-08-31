@@ -7,6 +7,11 @@ interface Props {
   dir: SortDir
   onToggleMode: () => void
   onToggleDir: () => void
+  /** tutorial spotlight — pulses the two buttons. Uses `sort-hl` (box-shadow +
+   *  transform on the buttons only), NOT `tut-hl`: the latter animates `filter`
+   *  on the container, which would make the static .sortbtns a containing block
+   *  and drop the absolute buttons to the wrong place. */
+  highlight?: boolean
 }
 
 function RoundBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
@@ -28,9 +33,9 @@ function RoundBtn({ onClick, title, children }: { onClick: () => void; title: st
   )
 }
 
-export default function SortButtons({ mode, dir, onToggleMode, onToggleDir }: Props) {
+export default function SortButtons({ mode, dir, onToggleMode, onToggleDir, highlight }: Props) {
   return (
-    <div className="sortbtns">
+    <div className={`sortbtns${highlight ? ' sort-hl' : ''}`}>
       {/* field (upper-left): rank (bars) vs suit (pips) */}
       <RoundBtn onClick={onToggleMode} title="切換排序依據（點數 / 花色）">
         {mode === 'rank' ? (

@@ -108,8 +108,12 @@
 }
 
 /* When the coach points at the sort pair, make the two round buttons obviously
-   glow + breathe so the player knows to tap them. */
-.game__sort.tut-hl .sortbtn {
+   glow + breathe so the player knows to tap them. Deliberately NOT `.tut-hl`:
+   that class animates `filter` on the container, which would turn the static
+   .sortbtns into a containing block and yank the absolute buttons off-screen.
+   Here the pulse (box-shadow + transform) is only on the buttons themselves, so
+   .sortbtns stays a non-positioning box and the buttons keep anchoring to .game. */
+.sortbtns.sort-hl .sortbtn {
   animation: tut-btn-pulse 1s ease-in-out infinite;
 }
 @keyframes tut-btn-pulse {
