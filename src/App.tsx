@@ -22,6 +22,7 @@ import AchievementToast from './ui/components/AchievementToast'
 import UpgradePrompt from './ui/components/UpgradePrompt'
 import InstallGuide from './ui/components/InstallGuide'
 import OrientationTip from './ui/components/OrientationTip'
+import ViewportDebug from './ui/components/ViewportDebug'
 
 const screens = {
   menu: Menu,
@@ -94,6 +95,8 @@ export default function App() {
       {/* InAppBrowserGate 已停用:不再硬擋 LINE/FB in-app 瀏覽器,讓人可直接以訪客試玩。
           Google 登入在 webview 仍會被 Google 擋,之後視測試結果再決定要不要加「用外部瀏覽器開」的軟提示。 */}
       <OrientationTip />
+      {/* TEMP:除錯用 viewport 數字覆蓋層,修好縮放後移除 */}
+      <ViewportDebug />
       {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
       {screen === 'menu' && <OnlineCount />}
     </>
