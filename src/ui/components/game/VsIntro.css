@@ -96,6 +96,13 @@
   /* Trimmed so the two fixed-width name fields below never overflow the row. */
   gap: clamp(20px, 9vw, 110px);
 }
+/* 手機網頁版:整排(頭像+名字)上移約 5% 可見高,名字不再太貼底。只在瀏覽器分頁、
+   觸控裝置生效(全螢幕/桌機不動)。 */
+@media (pointer: coarse) and (display-mode: browser) {
+  .vs__row {
+    transform: translateY(calc(-0.05 * var(--vvh, 100dvh)));
+  }
+}
 .vs__side {
   position: relative;
   z-index: 2;

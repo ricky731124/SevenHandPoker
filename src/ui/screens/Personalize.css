@@ -9,11 +9,15 @@
      on mobile web. No-op on fullscreen/standalone & desktop. */
   height: var(--vvh, 100dvh);
   /* 2vw base side margin (keeps the old min(96vw,…) breathing room) + 使用者:
-     排行榜/個人化/商城 的 iOS 安全區只吃 0.3× inset(比主畫面更省)。
-     env() 是 0 於無瀏海/桌機 → 桌機維持原本 96vw 邊距。 */
-  padding-left: calc(2vw + env(safe-area-inset-left) * 0.3);
-  padding-right: calc(2vw + env(safe-area-inset-right) * 0.3);
+     排行榜/個人化/商城 的 iOS 安全區吃 0.5× inset,但只在「全螢幕/桌機」(--safe-mult=1);
+     手機網頁版彈窗已被縮 0.8、不會卡到瀏海 → --safe-mult=0 關掉。env() 於無瀏海/桌機為 0。 */
+  padding-left: calc(2vw + env(safe-area-inset-left) * 0.5 * var(--safe-mult, 1));
+  padding-right: calc(2vw + env(safe-area-inset-right) * 0.5 * var(--safe-mult, 1));
   box-sizing: border-box;
+  /* 使用者:彈窗後面不能是「正常」背景。給暗色+模糊遮罩(同 .modal__scrim / 開始遊戲),
+     商城疊在主畫面上會糊掉主畫面;排行榜/個人化本來就有紅布,再壓一層暗罩、三者一致。 */
+  background: rgba(20, 4, 8, 0.55);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -28,7 +28,11 @@ export function initViewportVars(): void {
     const standalone =
       !!window.matchMedia?.('(display-mode: standalone)').matches ||
       (navigator as unknown as { standalone?: boolean }).standalone === true
-    de.style.setProperty('--mw-scale', coarse && !standalone ? '0.8' : '1')
+    const mobileWeb = coarse && !standalone
+    de.style.setProperty('--mw-scale', mobileWeb ? '0.8' : '1')
+    // Popup iOS safe-area only applies at full size (fullscreen/desktop). On mobile
+    // web the popup is already shrunk 0.8, so it clears the notch on its own → 0.
+    de.style.setProperty('--safe-mult', mobileWeb ? '0' : '1')
     return h > 0 && w > 0
   }
 

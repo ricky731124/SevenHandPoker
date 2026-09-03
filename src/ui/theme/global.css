@@ -13,6 +13,15 @@ body,
   width: 100%;
 }
 
+/* Stop Android Chrome / Samsung One UI from auto-enlarging text ("font boosting")
+   — that was blowing up the text on a Galaxy S22 so panels overflowed and needed
+   scrolling, while iOS (which doesn't boost) fit fine. 100% = render at the authored
+   size on every device. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--font-body);
   color: var(--cream);

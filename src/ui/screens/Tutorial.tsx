@@ -4,7 +4,7 @@ import { useAppStore } from '../../state/appStore'
 import { useTutorialStore } from '../../state/tutorialStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { getSpecialCard } from '../../game/specialCards'
-import { TUTORIAL_SWAP } from '../../game/tutorial'
+import { TUTORIAL_NODES, TUTORIAL_SWAP } from '../../game/tutorial'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import PlayerAvatar from '../components/PlayerAvatar'
@@ -90,6 +90,11 @@ export default function Tutorial() {
   const placeable = (i: number) => t.gate === 'place' && (t.allowedSlots ?? []).includes(i)
   const hl = (h: typeof t.highlight) => (t.highlight === h ? ' tut-hl' : '')
   const swapDef = getSpecialCard(TUTORIAL_SWAP)
+  const curNode = TUTORIAL_NODES[t.idx]
+  // First placement step carries a「把牌放這格」call-to-action shown inside the slot.
+  const placeDropHint = curNode?.k === 'place' ? curNode.dropHint : undefined
+  // Magnify step: only the OPPONENT's pile is tappable (tapping your own can't advance).
+  const magnifyFoeOnly = t.gate === 'magnify'
 
   const foeCount = t.foeSel ? t.foeSel.total : engine.hands.p2.length
   const foeIdx = t.foeSel ? t.foeSel.idx : []
@@ -166,6 +171,8 @@ export default function Tutorial() {
               onPlace={t.placeSlot}
               onMagnify={t.openMagnifier}
               highlight={t.gate === 'magnify' && (t.allowedSlots ?? []).includes(i)}
+              magnifyOnly={magnifyFoeOnly ? 'p2' : undefined}
+              dropHint={placeable(i) ? placeDropHint : undefined}
               cardW={sz.card}
               coinSize={sz.coin}
             />
@@ -184,7 +191,8 @@ export default function Tutorial() {
       <SortButtons
         mode={sortMode}
         dir={sortDir}
-        highlight={t.highlight === 'sort'}
+        hlMode={t.gate === 'sort' && !t.sortModeTapped}
+        hlDir={t.gate === 'sort' && !t.sortDirTapped}
         onToggleMode={() => {
           setSortMode((m) => (m === 'rank' ? 'suit' : 'rank'))
           t.tapSort('mode')
@@ -242,7 +250,7 @@ export default function Tutorial() {
       )}
 
       {pickMode && (
-        <div className="game__action">
+        <div className={`game__action${canSubmit ? ' tut-action-hl' : ''}`}>
           <Button size="sm" disabled={!canSubmit} onClick={t.submitPick}>
             送出 {t.selected.length}
           </Button>

@@ -19,3 +19,11 @@
   pointer-events: none;
   user-select: none;
 }
+
+/* Desktop: pull inward like the top corner buttons (使用者 #8). */
+@media (min-width: 1024px) {
+  .online-count {
+    right: clamp(24px, 3vw, 64px);
+    bottom: clamp(16px, 2.4vw, 44px);
+  }
+}

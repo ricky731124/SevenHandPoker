@@ -610,6 +610,10 @@
 
 /* ---- Coin toss ---- */
 .cointoss { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+/* 手機網頁版:整塊上移約 5% 可見高,「先攻」字不再太貼底(同 BATTLE 名字)。 */
+@media (pointer: coarse) and (display-mode: browser) {
+  .cointoss { transform: translateY(calc(-0.05 * var(--vvh, 100dvh))); }
+}
 .cointoss__title { font-size: clamp(24px, 6vw, 34px); font-weight: 900; }
 .cointoss__coin { position: relative; width: 148px; height: 148px; }
 .cointoss__face {

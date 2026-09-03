@@ -26,7 +26,7 @@ export type TutorialNode =
   | { k: 'say'; text: string; hl?: Highlight }
   | { k: 'sort'; text: string }
   | { k: 'pick'; text: string; ids: string[]; hl?: Highlight }
-  | { k: 'place'; text: string; slot: number; hl?: Highlight }
+  | { k: 'place'; text: string; slot: number; hl?: Highlight; dropHint?: string }
   | { k: 'magnify'; text: string; slot: number }
   | { k: 'swap'; text: string; target: string; result: string; targetText: string }
   | { k: 'oppPick'; ids: string[] }
@@ -128,11 +128,12 @@ export const TUTORIAL_NODES: TutorialNode[] = [
     text: '重點來了！對手選了 5 張牌（牌會推出來，推出的位置取決於他怎麼排序）。放到哪裡「由你決定」——點目前對手正在發亮的空格（對手的第一格），先幫他擺著（放到空格還不會觸發對決）。',
     slot: 0,
     hl: 'slots',
+    dropHint: '把牌放這格',
   },
   { k: 'draw' },
   {
     k: 'pick',
-    text: '換你出牌。要出幾張是你的策略，不必跟對手一樣多！這次我們只選兩張 K 即可，按「送出」。',
+    text: '換你出牌了！點擊下方「發亮的手牌」把牌選起來，再按右下角「送出」。要出幾張是你的策略，不必跟對手一樣多——這次只選兩張 K 即可。',
     ids: ['H13', 'D13'],
     hl: 'hand',
   },

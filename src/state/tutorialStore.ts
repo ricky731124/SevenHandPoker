@@ -196,7 +196,7 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
             const n = node.ids.length
             set({ foeSel: { total, idx: Array.from({ length: n }, (_, i) => i) } })
             next = oppInject(e, node.ids)
-            sfx.deal() // 對手把牌推出來(發牌滑音)
+            // 對手把牌推出來:無音效(對標真實對戰,電腦推牌出來也沒聲)。
           } else if (node.k === 'oppPlace') {
             next = applyPlace(e, 'p2', node.slot)
             sfx.place() // 放進格子
@@ -206,7 +206,7 @@ export const useTutorialStore = create<TutorialStore>((set, get) => ({
             if (drew > 0) sfx.draw(drew) // 固定補牌
           } else if (node.k === 'deal') {
             next = dealPlayer(e, node.id)
-            sfx.deal() // 補一張牌
+            sfx.draw(1) // 補一張牌(進手牌=補牌音,非發牌)
           }
           set({ engine: next, idx: idx + 1 })
           get().run()

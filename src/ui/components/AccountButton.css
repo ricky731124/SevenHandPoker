@@ -3,9 +3,9 @@
   position: absolute;
   /* Clear the iPhone landscape notch / home-indicator insets so the 每日任務 /
      登入 buttons never sit under the cutout. env() is 0 off-notch → no change.
-     使用者:iOS 安全區保留太多 → 左右只吃 0.5× inset(可接受被瀏海遮一點點)。 */
+     使用者:iOS 安全區左右吃 0.8× inset(比預設省一點,又不會太貼瀏海)。 */
   top: max(12px, env(safe-area-inset-top));
-  left: max(12px, calc(env(safe-area-inset-left) * 0.5));
+  left: max(12px, calc(env(safe-area-inset-left) * 0.8));
   z-index: 20;
   display: inline-flex;
   flex-direction: column;
@@ -25,11 +25,26 @@
 .acctbar-right {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
-  right: max(14px, calc(env(safe-area-inset-right) * 0.5)); /* 少吃一半瀏海(見 .acctbar) */
+  right: max(14px, calc(env(safe-area-inset-right) * 0.8)); /* 0.8× 瀏海(見 .acctbar) */
   z-index: 20;
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Desktop: the table + popups don't fill a wide screen, so pin the corner buttons
+   inward (proportional to width) instead of hugging the far edges — otherwise they
+   sit miles from the centred board. 使用者 #8。Phones/mobile-web keep the tight
+   12px + notch inset above. */
+@media (min-width: 1024px) {
+  .acctbar {
+    left: clamp(24px, 3vw, 64px);
+    top: clamp(16px, 2.4vw, 44px);
+  }
+  .acctbar-right {
+    right: clamp(24px, 3vw, 64px);
+    top: clamp(16px, 2.4vw, 44px);
+  }
 }
 
 /* Register / login / logout buttons: same HEIGHT as the main-menu buttons,

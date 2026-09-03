@@ -28,6 +28,7 @@ import './PwaOnboard.css'
 export default function InstallGuide() {
   const canInstall = usePwaStore((s) => s.canInstall)
   const standalone = usePwaStore((s) => s.standalone)
+  const justInstalled = usePwaStore((s) => s.justInstalled)
   const room = useAppStore((s) => s.pendingRoom)
   const [dismissed, setDismissed] = useState(false) // 只當次隱藏,不寫 localStorage → 下次進來再提示
   // Android only: is the PWA actually installed (WebAPK) even though we're in a
@@ -39,7 +40,30 @@ export default function InstallGuide() {
 
   // Running the installed app, inside an in-app browser (gate handles that), on
   // desktop, or dismissed this session → nothing to do.
-  if (standalone || isInAppBrowser() || !isMobile() || dismissed) return null
+  if (standalone || isInAppBrowser() || !isMobile()) return null
+
+  // Android just finished installing (appinstalled) → the browser tab stays put,
+  // which is confusing ("安裝好了怎麼還在瀏覽器"). Tell them to open from the icon.
+  // Shown even if the install prompt was just dismissed; iOS never reaches here
+  // (no appinstalled event — its guide already says to open from the icon). 使用者 #4。
+  if (justInstalled && isAndroid()) {
+    return portal(
+      <div className="a2hs a2hs--push">
+        <div className="a2hs__title">🎉 安裝完成！</div>
+        <div className="a2hs__text">請回桌面點「七手撲克」圖示開啟遊戲，即可全螢幕遊玩。</div>
+        <button
+          className="a2hs__close"
+          aria-label="關閉"
+          onClick={() => { sfx.click(); usePwaStore.setState({ justInstalled: false }) }}
+          style={{ position: 'absolute', top: 6, right: 8 }}
+        >
+          ✕
+        </button>
+      </div>,
+    )
+  }
+
+  if (dismissed) return null
 
   const soft = Boolean(room)
 
@@ -69,7 +93,7 @@ export default function InstallGuide() {
       return portal(
         <div className="a2hs a2hs--push">
           <div className="a2hs__title">(建議) 用桌面圖示開啟</div>
-          <div className="a2hs__text">建議使用桌面圖示開啟，遊戲體驗較佳。</div>
+          <div className="a2hs__text">偵測到手機已有安裝此遊戲，<br />建議使用桌面圖示開啟，遊戲體驗較佳。</div>
           <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>✕</button>
         </div>,
       )
@@ -125,7 +149,7 @@ export default function InstallGuide() {
         <div className="a2hs a2hs--push">
           <div className="a2hs__title">(建議) 加到主畫面，體驗全螢幕遊玩</div>
           <div className="a2hs__text">
-            點擊下方的分享按鈕 <ShareIcon /> → 往下滑，選「加入主畫面」並加入，之後使用桌面圖示開啟遊戲即可全螢幕遊玩。
+            點擊下方的分享按鈕 <ShareIcon /> → 往下滑，選「加入主畫面」並加入。加入後，請回主畫面點「七手撲克」圖示開啟遊戲，即可全螢幕遊玩。
           </div>
           <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>
             ✕

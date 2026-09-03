@@ -16,6 +16,13 @@ interface Props {
   coinSize: number
   /** tutorial: pulse this slot's revealed pile + lens to say "tap the 🔍 here" */
   highlight?: boolean
+  /** tutorial: only THIS side's pile is magnifiable (the other side's 🔍 is hidden
+   *  / inert). Keeps the new player from tapping their own pile, which can't advance
+   *  the scripted step. Undefined in the real game → both sides magnifiable. */
+  magnifyOnly?: PlayerId
+  /** tutorial: a short call-to-action rendered inside the glowing drop target
+   *  (e.g.「把牌放這格」) on the first placement step. */
+  dropHint?: string
 }
 
 function Pile({
@@ -63,24 +70,28 @@ function Pile({
   )
 }
 
-export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false }: Props) {
+export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false, magnifyOnly, dropHint }: Props) {
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const opened = slot.owner !== null
   const topCards = slot[foe]
   const bottomCards = slot[me]
+  const foeMagnifiable = opened && topCards.length > 0 && (!magnifyOnly || magnifyOnly === foe)
+  const myMagnifiable = bottomCards.length > 0 && (!magnifyOnly || magnifyOnly === me)
 
   return (
     <div className={`slot${highlight ? ' slot--maglight' : ''}`}>
       {/* Top: opponent side — a single glowing frame drop target when placing */}
       {placeable ? (
         <button
-          className="slot__drop"
+          className={`slot__drop${dropHint ? ' slot__drop--hint' : ''}`}
           onClick={() => onPlace(index)}
           aria-label={`放到對手第 ${index + 1} 格`}
           style={{ width: cardW, height: Math.round(cardW * 1.4) }}
-        />
+        >
+          {dropHint && <span className="slot__drop-hint">{dropHint}</span>}
+        </button>
       ) : (
-        <Pile cards={topCards} faceUp={opened} openable={opened && topCards.length > 0} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} />
+        <Pile cards={topCards} faceUp={opened} openable={foeMagnifiable} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} />
       )}
 
       <div className="slot__coin" style={{ height: coinSize }}>
@@ -88,7 +99,7 @@ export default function SlotView({ slot, index, me, placeable, onPlace, onMagnif
       </div>
 
       {/* Bottom: my side — face-down until this slot's showdown; always magnifiable */}
-      <Pile cards={bottomCards} faceUp={opened} openable={bottomCards.length > 0} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} />
+      <Pile cards={bottomCards} faceUp={opened} openable={myMagnifiable} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} />
     </div>
   )
 }

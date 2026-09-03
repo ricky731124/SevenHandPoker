@@ -72,11 +72,15 @@ interface PwaState {
   canInstall: boolean
   /** Running from the installed home-screen icon. */
   standalone: boolean
+  /** Android just fired `appinstalled` this session → show "open from the icon"
+   *  guidance instead of leaving the player staring at the browser tab. */
+  justInstalled: boolean
 }
 
 export const usePwaStore = create<PwaState>(() => ({
   canInstall: false,
   standalone: isStandalone(),
+  justInstalled: false,
 }))
 
 /** Android Chrome only: whether THIS PWA is actually installed (WebAPK), even
@@ -117,7 +121,7 @@ export function initPwa(): void {
 
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null
-    usePwaStore.setState({ canInstall: false })
+    usePwaStore.setState({ canInstall: false, justInstalled: true })
   })
 
   // display-mode can flip (e.g. user installs then opens the icon).

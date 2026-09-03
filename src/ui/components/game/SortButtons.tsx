@@ -7,17 +7,29 @@ interface Props {
   dir: SortDir
   onToggleMode: () => void
   onToggleDir: () => void
-  /** tutorial spotlight — pulses the two buttons. Uses `sort-hl` (box-shadow +
-   *  transform on the buttons only), NOT `tut-hl`: the latter animates `filter`
-   *  on the container, which would make the static .sortbtns a containing block
-   *  and drop the absolute buttons to the wrong place. */
-  highlight?: boolean
+  /** tutorial spotlight — pulses the 依點數/依花色 button until it's been tapped. */
+  hlMode?: boolean
+  /** tutorial spotlight — pulses the 升冪/降冪 button until it's been tapped. */
+  hlDir?: boolean
 }
 
-function RoundBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+function RoundBtn({
+  onClick,
+  title,
+  highlight,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  highlight?: boolean
+  children: React.ReactNode
+}) {
   return (
     <motion.button
-      className="sortbtn"
+      // `sort-hl` (box-shadow + transform on the button only) — NOT `tut-hl`: the
+      // latter animates `filter` on the container, which would make the static
+      // .sortbtns a containing block and drop the absolute buttons to the wrong place.
+      className={`sortbtn${highlight ? ' sort-hl' : ''}`}
       title={title}
       aria-label={title}
       onClick={() => {
@@ -33,11 +45,13 @@ function RoundBtn({ onClick, title, children }: { onClick: () => void; title: st
   )
 }
 
-export default function SortButtons({ mode, dir, onToggleMode, onToggleDir, highlight }: Props) {
+export default function SortButtons({ mode, dir, onToggleMode, onToggleDir, hlMode, hlDir }: Props) {
   return (
-    <div className={`sortbtns${highlight ? ' sort-hl' : ''}`}>
+    <div className="sortbtns">
+      {/* tutorial: label the pair so new players know these two are the thing to tap */}
+      {(hlMode || hlDir) && <span className="sortbtns__label">點這兩顆 👆</span>}
       {/* field (upper-left): rank (bars) vs suit (pips) */}
-      <RoundBtn onClick={onToggleMode} title="切換排序依據（點數 / 花色）">
+      <RoundBtn onClick={onToggleMode} title="切換排序依據（點數 / 花色）" highlight={hlMode}>
         {mode === 'rank' ? (
           <g fill="currentColor">
             <rect x="4" y="13" width="3.6" height="7" rx="1" />
@@ -53,7 +67,7 @@ export default function SortButtons({ mode, dir, onToggleMode, onToggleDir, high
       </RoundBtn>
 
       {/* direction (lower-right, further down): big→small vs small→big */}
-      <RoundBtn onClick={onToggleDir} title="切換排序方向（大↔小）">
+      <RoundBtn onClick={onToggleDir} title="切換排序方向（大↔小）" highlight={hlDir}>
         <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
           {dir === 'desc' ? <path d="M12 4v15M6 13l6 6 6-6" /> : <path d="M12 20V5M6 11l6-6 6 6" />}
         </g>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAchievementStore } from '../../state/achievementStore'
 import { getAchievement, TIER_NAME_ZH, type AchTier } from '../../game/achievements'
@@ -45,7 +46,11 @@ export default function AchievementToast() {
 
   // A one-off reward (e.g. PvP-win diamonds).
   if (front?.kind === 'reward') {
-    return (
+    // Portal to <body>: in portrait the app roots at a rotated #root (transform →
+    // stacking context), which would trap this toast BELOW modals that portal to
+    // body (a z1000 scrim beats a z3500 toast stuck inside #root). At body level the
+    // toast's z-index wins, so 簽到/獎勵 toasts always sit on top of the 每日任務 modal.
+    return createPortal(
       <AnimatePresence>
         <motion.div
           key={`reward-${front.title}-${front.sub ?? ''}`}
@@ -77,12 +82,13 @@ export default function AchievementToast() {
             {front.sub && <div style={{ fontSize: 14, color: 'var(--wood-700, #6a4e2c)', fontFamily: 'var(--font-display)' }}>{front.sub}</div>}
           </div>
         </motion.div>
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body,
     )
   }
 
   const fam = front ? getAchievement(front.id) : undefined
-  return (
+  return createPortal(
     <AnimatePresence>
       {front && fam && (
         <motion.div
@@ -121,7 +127,8 @@ export default function AchievementToast() {
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
 
