@@ -50,7 +50,7 @@ export default function InstallGuide() {
     return portal(
       <div className="a2hs a2hs--push">
         <div className="a2hs__title">🎉 安裝完成！</div>
-        <div className="a2hs__text">請回桌面點「七手撲克」圖示開啟遊戲，即可全螢幕遊玩。</div>
+        <div className="a2hs__text">請回桌面點擊遊戲圖示開啟，即可全螢幕遊玩。</div>
         <button
           className="a2hs__close"
           aria-label="關閉"
@@ -149,7 +149,7 @@ export default function InstallGuide() {
         <div className="a2hs a2hs--push">
           <div className="a2hs__title">(建議) 加到主畫面，體驗全螢幕遊玩</div>
           <div className="a2hs__text">
-            點擊下方的分享按鈕 <ShareIcon /> → 往下滑，選「加入主畫面」並加入。加入後，請回主畫面點「七手撲克」圖示開啟遊戲，即可全螢幕遊玩。
+            點擊下方的分享按鈕 <ShareIcon /> → 往下滑，選「加入主畫面」並加入。加入後，請回主畫面點擊遊戲圖示開啟，即可全螢幕遊玩。
           </div>
           <button className="a2hs__close" aria-label="關閉" onClick={close} style={{ position: 'absolute', top: 6, right: 8 }}>
             ✕

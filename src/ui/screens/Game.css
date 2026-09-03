@@ -290,12 +290,14 @@
   height: var(--sbtn);
   z-index: 46;
 }
-.sortbtn:nth-child(1) {
+/* nth-of-type (not nth-child) so an extra non-button child — e.g. the tutorial's
+   「點擊這兩顆」label span in .sortbtns — doesn't shift these and break the layout. */
+.sortbtn:nth-of-type(1) {
   /* field (點數/花色) — inner column, bottom */
   right: var(--sbtn-r-in);
   top: calc(var(--sbtn-top-q) + var(--sbtn-gap-y));
 }
-.sortbtn:nth-child(2) {
+.sortbtn:nth-of-type(2) {
   /* direction (大↔小) — outer column, bottom (raised --sbtn-dy → 35° with field) */
   right: var(--sbtn-r-out);
   top: calc(var(--sbtn-top-out) + var(--sbtn-gap-y));

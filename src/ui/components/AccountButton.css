@@ -38,12 +38,12 @@
    12px + notch inset above. */
 @media (min-width: 1024px) {
   .acctbar {
-    left: clamp(24px, 3vw, 64px);
-    top: clamp(16px, 2.4vw, 44px);
+    left: clamp(24px, 4vw, 80px);
+    top: clamp(18px, 2.6vw, 50px);
   }
   .acctbar-right {
-    right: clamp(24px, 3vw, 64px);
-    top: clamp(16px, 2.4vw, 44px);
+    right: clamp(24px, 4vw, 80px);
+    top: clamp(18px, 2.6vw, 50px);
   }
 }
 

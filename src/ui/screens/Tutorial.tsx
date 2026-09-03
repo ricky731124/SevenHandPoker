@@ -93,8 +93,15 @@ export default function Tutorial() {
   const curNode = TUTORIAL_NODES[t.idx]
   // First placement step carries a「把牌放這格」call-to-action shown inside the slot.
   const placeDropHint = curNode?.k === 'place' ? curNode.dropHint : undefined
+  // First pick step carries a「點這兩張」call-to-action shown above the hand.
+  const pickHint = curNode?.k === 'pick' ? curNode.pickHint : undefined
   // Magnify step: only the OPPONENT's pile is tappable (tapping your own can't advance).
   const magnifyFoeOnly = t.gate === 'magnify'
+  // Centre status pill (same style + breathing as the real game) telling the player
+  // whose turn it is each round — the tutorial opponent always auto-submits, so it's
+  // just「放對手的牌」when placing and「換你出牌」when picking. 使用者 #4。
+  const centreStatus =
+    t.gate === 'place' ? '對手選完牌了，請選擇格子放置對手的牌' : t.gate === 'pick' ? '輪到你選牌、出牌了' : null
 
   const foeCount = t.foeSel ? t.foeSel.total : engine.hands.p2.length
   const foeIdx = t.foeSel ? t.foeSel.idx : []
@@ -227,6 +234,12 @@ export default function Tutorial() {
           )}
         </motion.div>
       )}
+
+      {/* Centre turn prompt — reuses the real game's status pill + breathing. */}
+      {centreStatus && <div className="game__status game__status--mine">{centreStatus}</div>}
+
+      {/* First pick only: point at the two lit cards, like the sort / drop hints. */}
+      {pickHint && <div className="tut-hand-hint">{pickHint} 👇</div>}
 
       <div className={`game__hand${hl('hand')}`}>
         <Hand

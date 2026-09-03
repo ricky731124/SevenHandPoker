@@ -122,29 +122,60 @@
     transform: scale(1.08);
   }
 }
-/* 「把牌放這格」call-to-action inside the first drop target. */
+/* 「把牌放這格」call-to-action inside the first drop target — vertical (直書) so it
+   fits the tall narrow slot without cramped wrapping. Q 版顯示字體。 */
 .slot__drop-hint {
-  font-size: 10px;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-family: var(--font-display);
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1.2;
-  color: #4a3010;
+  letter-spacing: 1px;
+  line-height: 1.15;
+  color: #fff;
   text-align: center;
-  padding: 2px;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   pointer-events: none;
+}
+
+/* 「點這兩張」pick call-to-action, centred just above the hand (first pick only). */
+.tut-hand-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: clamp(108px, calc(0.22 * var(--stage-h, 100vh)), 182px);
+  z-index: 47;
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--gold-1);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  padding: 5px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+  /* bob keeps the translateX(-50%) centre (own keyframes, not the plain tut-bob). */
+  animation: tut-bob-cx 1.15s ease-in-out infinite;
+}
+@keyframes tut-bob-cx {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-4px); }
 }
 
 /* 「點這兩顆」label above the sort pair (anchors to .game like the buttons). */
 .sortbtns__label {
   position: absolute;
+  /* Sit clear ABOVE the higher (outer/升降冪) button — the pair is on a 35° diagonal,
+     so anchor to --sbtn-top-out, not the lower inner button, or the label overlaps. */
   right: var(--sbtn-r-out, 12px);
-  top: calc(var(--sbtn-top-q) + var(--sbtn-gap-y) - 30px);
+  top: calc(var(--sbtn-top-out) + var(--sbtn-gap-y) - 36px);
   z-index: 47;
   background: rgba(0, 0, 0, 0.78);
   color: var(--gold-1);
-  font-size: 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
   font-weight: 800;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
   white-space: nowrap;
   pointer-events: none;

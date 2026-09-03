@@ -49,7 +49,7 @@ export default function SortButtons({ mode, dir, onToggleMode, onToggleDir, hlMo
   return (
     <div className="sortbtns">
       {/* tutorial: label the pair so new players know these two are the thing to tap */}
-      {(hlMode || hlDir) && <span className="sortbtns__label">點這兩顆 👆</span>}
+      {(hlMode || hlDir) && <span className="sortbtns__label">點擊這兩顆 👇</span>}
       {/* field (upper-left): rank (bars) vs suit (pips) */}
       <RoundBtn onClick={onToggleMode} title="切換排序依據（點數 / 花色）" highlight={hlMode}>
         {mode === 'rank' ? (
