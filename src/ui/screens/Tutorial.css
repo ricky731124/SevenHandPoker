@@ -204,8 +204,10 @@
 }
 
 /* Magnify teaching step: pulse the target slot's revealed pile + enlarge/glow
-   its 🔍 lens so the player clearly sees where to tap to review the cards. */
-.slot--maglight .pile {
+   its 🔍 lens so the player clearly sees where to tap to review the cards. Scoped to
+   `.pile--openable` — during the tutorial only the OPPONENT's pile is openable, so the
+   player's own pile stays normal (使用者:自己的不用發亮,只有對手的發亮可點). */
+.slot--maglight .pile--openable {
   border-radius: 8px;
   animation: tut-mag-pulse 1s ease-in-out infinite;
 }

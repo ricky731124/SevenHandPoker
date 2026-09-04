@@ -4,7 +4,7 @@ import { useAppStore } from '../../state/appStore'
 import { useTutorialStore } from '../../state/tutorialStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { getSpecialCard } from '../../game/specialCards'
-import { TUTORIAL_NODES, TUTORIAL_SWAP } from '../../game/tutorial'
+import { TUTORIAL_SWAP } from '../../game/tutorial'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import PlayerAvatar from '../components/PlayerAvatar'
@@ -90,11 +90,11 @@ export default function Tutorial() {
   const placeable = (i: number) => t.gate === 'place' && (t.allowedSlots ?? []).includes(i)
   const hl = (h: typeof t.highlight) => (t.highlight === h ? ' tut-hl' : '')
   const swapDef = getSpecialCard(TUTORIAL_SWAP)
-  const curNode = TUTORIAL_NODES[t.idx]
-  // First placement step carries a「把牌放這格」call-to-action shown inside the slot.
-  const placeDropHint = curNode?.k === 'place' ? curNode.dropHint : undefined
-  // First pick step carries a「點這兩張」call-to-action shown above the hand.
-  const pickHint = curNode?.k === 'pick' ? curNode.pickHint : undefined
+  // Every placement turn shows「把牌放這」inside the lit slot; every pick turn shows
+  //「點這 N 張，再送出」above the hand (N = how many cards this step wants). 使用者:
+  // 原本只做第一次,改成每回合都做。
+  const placeDropHint = t.gate === 'place' ? '把牌放這' : undefined
+  const pickHint = t.gate === 'pick' ? `點這 ${(t.allowedCardIds ?? []).length} 張，再送出` : undefined
   // Magnify step: only the OPPONENT's pile is tappable (tapping your own can't advance).
   const magnifyFoeOnly = t.gate === 'magnify'
   // Centre status pill (same style + breathing as the real game) telling the player
