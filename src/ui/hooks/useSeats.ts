@@ -21,6 +21,7 @@ export interface Seat {
 const roleDefaultAvatar = (pid: PlayerId) => (pid === 'p1' ? 'cat' : 'bird')
 
 export default function useSeats(): { p1: Seat; p2: Seat } {
+  const spectate = useGameStore((s) => s.spectate)
   const me = useGameStore((s) => s.me)
   const online = useGameStore((s) => s.online)
   const casualFoe = useGameStore((s) => s.casualFoe)
@@ -28,6 +29,9 @@ export default function useSeats(): { p1: Seat; p2: Seat } {
   const profile = usePlatformStore((s) => s.profile)
   const room = useNetStore((s) => s.room)
   const campStage = useCampaignStore((s) => s.stage)
+
+  // 觀戰(§4.3):雙方身分由 spectate 直接給(上=p1 廣播端 / 下=p2 對手)。
+  if (spectate) return { p1: spectate.p1, p2: spectate.p2 }
 
   const foePid: PlayerId = me === 'p1' ? 'p2' : 'p1'
 

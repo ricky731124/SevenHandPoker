@@ -36,6 +36,7 @@ import {
 } from '../platform/profile'
 import { writeLeaderboard } from '../platform/leaderboard'
 import { writeCard, type CardProfileFields } from '../platform/cards'
+import { clearPresence } from '../net/presence'
 import { useLeaderboardCache } from './leaderboardCache'
 import { ALL_SPECIAL_CARD_IDS, getSpecialCard } from '../game/specialCards'
 import { subStageOrder } from '../game/campaign'
@@ -137,7 +138,7 @@ interface PlatformStore {
   recordStageClear: (subId: string, reward: StageReward) => Promise<void>
   /** Tally a finished match: 戰績 (pvp/solo 場次·勝·連勝) + 連勝/場次/勝場成就。
    *  牌型成就改在送出當下即時判定(reportHandPlayed),不在這裡算。 */
-  recordMatchResult: (category: 'pvp' | 'solo', won: boolean) => Promise<void>
+  recordMatchResult: (category: 'pvp' | 'solo', won: boolean, opts?: { silentDaily?: boolean }) => Promise<void>
   /** 每日簽到:今天第一次(有登入、手機需橫向)自動發 +5 鑽並跳 5 秒 toast。冪等。 */
   claimDailySignin: () => Promise<void>
   /** The last PvP win's diamond grant (for the end screen line); null on a loss. */
@@ -299,6 +300,11 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
   },
 
   logout: async () => {
+    // Remove our presence WHILE still authed (owner-write rule) so everyone sees
+    // −1 immediately; after signOut we're unauthenticated and couldn't delete it,
+    // leaving it to expire over ~10 min. Best-effort — never block logout on it.
+    const uid = get().uid
+    if (uid) await clearPresence(uid)
     await authLogout()
   },
 
@@ -392,7 +398,7 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
     if (uid) await persistActiveSeries(uid, series)
   },
 
-  recordMatchResult: async (category, won) => {
+  recordMatchResult: async (category, won, opts) => {
     if (!isFirebaseConfigured()) return
     let uid = get().uid
     if (!uid) {
@@ -400,6 +406,10 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
       uid = get().uid
     }
     if (!uid) return
+    // ⚠️ 防洗戰績:profile 尚未載入時 stats 會讀成空 {},read-modify-write 會把
+    // soloGames/pvpGames… 覆寫成 1/0,洗掉真實累積。未載入就不寫(boot 補判改為等
+    // profile 載入後才呼叫,見 App.whenProfileReady)。
+    if (!get().profile) return
     const s = get().profile?.stats ?? {}
     // Absolute stat values (streak resets → read-modify-write).
     const next: Record<string, number> = {
@@ -420,7 +430,9 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
     //   完成任意一場對戰 +5(pvp/電腦/主線都算)、真人獲勝 1 場 +5、真人獲勝 2 場 +5。
     let reward: PvpReward | null = null
     const p = get().profile
-    if (uid && p && !p.isAnonymous) {
+    // silentDaily:boot 補判(reconcileAbandonedLocal)只記戰績,不發每日獎/不跳 toast——
+    // 背景補判一場「關分頁的敗場」不該算「完成一場對戰」領獎、更不該在重開時莫名跳 toast。
+    if (uid && p && !p.isAnonymous && !opts?.silentDaily) {
       const today = todayStr()
       const d = p.daily?.date === today ? p.daily : undefined
       const day = {

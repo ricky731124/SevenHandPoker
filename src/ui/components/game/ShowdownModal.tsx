@@ -45,31 +45,58 @@ export default function ShowdownModal({
   slot,
   me,
   onClose,
+  names,
 }: {
   open: boolean
   showdown: Showdown | null
   slot: Slot | null
   me: PlayerId
   onClose: () => void
+  /** 觀戰(§4.3):label 用雙方顯示名(非「你/對手」)、勝負標題用名字、隱藏「繼續」。 */
+  names?: { p1: string; p2: string } | null
 }) {
   if (!showdown || !slot) return <Modal open={false} onClose={onClose} children={null} />
+  const spectator = !!names
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
-  const myName = me === 'p1' ? showdown.p1Name : showdown.p2Name
+  const myName = me === 'p1' ? showdown.p1Name : showdown.p2Name // 牌型名(順子/無牌型…)
   const foeName = foe === 'p1' ? showdown.p1Name : showdown.p2Name
   const myWild = me === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
   const foeWild = foe === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
   const tie = showdown.winner === 'both'
   const iWon = tie || showdown.winner === me
-  const outcome = tie ? '平手' : showdown.winner === me ? '你獲勝！' : '對手獲勝！'
+  // 觀戰:標題用勝方名字;遊玩:用「你/對手」。
+  const nameOf = (p: PlayerId) => (p === 'p1' ? names!.p1 : names!.p2)
+  const outcome = tie
+    ? '平手'
+    : spectator
+      ? `${nameOf(showdown.winner as PlayerId)} 獲勝！`
+      : showdown.winner === me
+        ? '你獲勝！'
+        : '對手獲勝！'
+  const foeLabel = spectator ? nameOf(foe) : '對手'
+  const meLabel = spectator ? nameOf(me) : '你'
 
+  // 觀戰時玩家名字較長 → 標題省掉「・對決」,變「第 N 格 - X 獲勝!」(#1)。
+  const title = spectator ? `第 ${showdown.slot + 1} 格 - ${outcome}` : `第 ${showdown.slot + 1} 格・對決 - ${outcome}`
   return (
-    <Modal open={open} onClose={onClose} locked title={`第 ${showdown.slot + 1} 格・對決 - ${outcome}`} width={520} panelClass="modal__panel--showdown">
-      <Row label="對手" name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
+    <Modal
+      open={open}
+      onClose={onClose}
+      locked
+      title={title}
+      width={520}
+      // 觀戰:名字欄固定寬(~8 中文字)→ 兩排的牌起始位置對齊(名字長短不一也不歪,#4)。
+      panelClass={`modal__panel--showdown${spectator ? ' modal__panel--showdown-spec' : ''}`}
+      scrimThrough={spectator}
+    >
+      <Row label={foeLabel} name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
       <div className="showdown__vs accent">{tie ? '平手・雙方各得' : 'VS'}</div>
-      <Row label="你" name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-        <Button onClick={onClose}>繼續</Button>
-      </div>
+      <Row label={meLabel} name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />
+      {!spectator && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
+          <Button onClick={onClose}>繼續</Button>
+        </div>
+      )}
     </Modal>
   )
 }

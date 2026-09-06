@@ -251,9 +251,10 @@ rooms/{roomId}:
 - 加入:輸入房號或帶 `?room=` 進入 → 設 guestId → status=playing → 擲硬幣。
 
 ### 6.5 斷線/重連
-- 逾時 **90 秒**。斷線時對方顯示「對手斷線,等待重連 1:30…」倒數。
+- 逾時 **90 秒**（僅 online：對手等待時間）。斷線時對方顯示「對手斷線,等待重連 1:30…」倒數。
 - 用 Firebase `onDisconnect` 更新 `connected/lastSeen`;同房號重進可接回狀態。
 - 逾時未回 → 判離線,散房回大廳。
+- ⚠️ **中離/判敗/斷線的「五模式統一規則」（含快速配對遇人機、主線、打電腦的判敗與本地補判、以及「判敗線改為『已發牌』」）詳見 [SPECTATE-REPLAY-SPEC.md §3.7](SPECTATE-REPLAY-SPEC.md)。本節（90 秒重連）只涵蓋 online 部分。**
 
 ---
 

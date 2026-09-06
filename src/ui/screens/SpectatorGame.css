@@ -1,0 +1,130 @@
+/* 觀戰畫面(§4.3)。牌桌本體 = 遊玩的 GameBoard(Game.css),這裡只補「全螢幕外殼 +
+   左上 HUD(LIVE/觀戰數/離開觀戰) + 讀取中 + 結算」。設計 token 見 §7。 */
+
+.spectate {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* 蓋住主畫面;低於 Toast/成就佇列 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 0%, var(--felt-glow, #7a1f24) 0%, var(--felt-mid, #5c161b) 42%, var(--felt-deep, #3d0e12) 100%);
+  overflow: hidden;
+}
+
+/* 左上浮動 HUD */
+.spectate__hud {
+  position: absolute;
+  top: clamp(8px, 2vh, 16px);
+  left: clamp(8px, 2vw, 16px);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.spectate__hud-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spectate__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  color: var(--lose, #ff6b6b);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.spectate__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lose, #ff6b6b);
+  box-shadow: 0 0 8px var(--lose, #ff6b6b);
+  animation: spectate-pulse 1.1s ease-in-out infinite;
+}
+@keyframes spectate-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+.spectate__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffe9b0;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* 離開觀戰:portal 到 <body> 的浮動容器,定位右下角。z-index 高於 Modal scrim(1000)
+   → 對決/結算彈窗的遮罩仍在(照使用者要求保留),但這顆按鈕永遠浮在最上、可點(#2/#6)。
+   按鈕本體 = 木紋 Button(與送出鈕同一視覺)。 */
+.spectate__leave-wrap {
+  position: fixed;
+  right: calc(clamp(8px, 1.6vw, 16px) + env(safe-area-inset-right));
+  bottom: calc(clamp(8px, 1.6vh, 16px) + env(safe-area-inset-bottom));
+  z-index: 1100;
+  /* 卡到手牌 → 等比縮小 ~20%,往右下角收(遠離置中的手牌,#2)。 */
+  transform: scale(0.8);
+  transform-origin: bottom right;
+}
+/* 字/寬度也再收一點(在 md 基礎上)。 */
+.spectate__leave-wrap .woodbtn--md {
+  padding: 8px 18px;
+}
+.spectate__leave-wrap .woodbtn--md .woodbtn__label {
+  font-size: 16px;
+}
+
+/* 讀取中 */
+.spectate__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: #ffe9b0;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 700;
+}
+
+/* 結算(唯讀)。portal 到 <body> → 用 fixed 蓋滿視窗;z-index 高於 Modal scrim(1000)、
+   低於離開鈕(1100)→ 蓋過殘留的對決彈窗,但離開鈕仍在最上。 */
+.spectate__end {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 1050;
+}
+.spectate__end-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 40px;
+  border-radius: var(--r-lg, 18px);
+  background: linear-gradient(180deg, var(--parch-1, #f3e2c0), var(--parch-2, #e7d0a2));
+  border: 2px solid var(--wood-edge, #7a5230);
+  box-shadow: var(--shadow-2, 0 12px 40px rgba(0, 0, 0, 0.45));
+  color: var(--parch-text, #4a3721);
+  font-family: var(--font-display, sans-serif);
+}
+.spectate__end-title {
+  font-size: 22px;
+  font-weight: 800;
+}
+.spectate__end-winner {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--wood-2, #8a5a2b);
+}

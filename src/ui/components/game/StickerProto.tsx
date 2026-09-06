@@ -21,9 +21,7 @@ function StickerView({ def, imgW, emojiPx }: { def: StickerDef; imgW: number | s
 
 export default function StickerProto() {
   const emojis = usePlatformStore((s) => s.profile?.unlocked.emojis) ?? {}
-  const online = useGameStore((s) => s.online)
   const incoming = useGameStore((s) => s.incomingEmote)
-  const sendEmote = useGameStore((s) => s.sendEmote)
 
   const owned = ownedStickers(emojis)
   const [tray, setTray] = useState(false)
@@ -35,7 +33,8 @@ export default function StickerProto() {
     sfx.success() // 送出貼圖
     setTray(false)
     setMyShot({ id: def.id, n: Date.now() })
-    if (online) sendEmote(def.id)
+    // 送給對手(online)+ 廣播給觀戰(觀戰也吃到貼圖效果,#6)。
+    useGameStore.getState().broadcastMyEmote(def.id)
   }
 
   const myDef = myShot ? getSticker(myShot.id) : null

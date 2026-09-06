@@ -7,6 +7,7 @@ import JoinConfirm from '../components/JoinConfirm'
 import Button, { Paw, IconRobot, IconDice, IconKey, IconGlobe } from '../components/Button'
 import Modal from '../components/Modal'
 import AccountButton from '../components/AccountButton'
+import LiveBoard from '../components/LiveBoard'
 import { sfx } from '../../audio/sfx'
 import './Menu.css'
 
@@ -59,6 +60,7 @@ export default function Menu() {
   return (
     <div className="menu">
       <AccountButton />
+      <LiveBoard />
 
       {/* Full-bleed hero art (title baked in) */}
       {heroOk ? (

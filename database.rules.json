@@ -30,7 +30,7 @@
       }
     },
     "presence": {
-      ".read": "auth != null",
+      ".read": true,
       "$uid": {
         "$conn": {
           ".write": "auth != null && auth.uid === $uid"
@@ -49,6 +49,30 @@
         "$uid": {
           ".write": "auth != null"
         }
+      }
+    },
+    "bots": {
+      ".read": true,
+      "$botId": {
+        ".write": "auth != null"
+      }
+    },
+    "botLease": {
+      ".read": "auth != null",
+      "$botId": {
+        ".write": "auth != null"
+      }
+    },
+    "liveIndex": {
+      ".read": true,
+      "$code": {
+        ".write": "auth != null"
+      }
+    },
+    "spectate": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null"
       }
     }
   }

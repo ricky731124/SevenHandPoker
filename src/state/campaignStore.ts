@@ -160,8 +160,10 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   },
 
   forfeit: () => {
-    // Record the abandoned match as a loss, persist, then leave to the map.
+    // Record the abandoned match as a loss (series + solo, 對齊自然結束的 solo 統計),
+    // persist, then leave to the map.
     get().reportMatchResult(false)
+    void usePlatformStore.getState().recordMatchResult('solo', false)
     get().exit()
   },
 
@@ -185,6 +187,9 @@ function launchMatch(stage: CampaignStage, sub: SubStage, loadout: SpecialCardId
     aiLoadout: bossCardPool(stage, sub),
     boss,
     onMatchEnd: (winnerIsMe) => useCampaignStore.getState().reportMatchResult(winnerIsMe),
+    // §3.7 本地快照/補判:帶入 subId + 賽前 series 狀態(供關分頁補判 series 敗、重整還原)。
+    subId: sub.id,
+    series: useCampaignStore.getState().series ?? undefined,
   })
 }
 

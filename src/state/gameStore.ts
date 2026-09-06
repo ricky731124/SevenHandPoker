@@ -24,8 +24,14 @@ import type { Suit } from '../game/cards'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
 import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
-import type { Intent, LiveSel } from '../net/sync'
+import type { Intent, LiveSel, SpecExtras } from '../net/sync'
+import type { DanmakuMsg } from '../net/spectate'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
+import { recordBotResult, releaseLeasedBot } from '../net/bots'
+import { startBroadcast, type Broadcaster } from '../net/broadcast'
+import { fetchBotRecord, patchLivePlayerRecord, type LivePlayer } from '../net/liveIndex'
+import { saveLocalMatch, clearLocalMatch, newLocalMatchId, type LocalSnapshot } from '../net/localMatch'
+import type { SeriesState } from '../game/campaign'
 import { aiChooseSpecial } from '../game/ai'
 import { bossChooseSpecial, rollMain, type BossRuntime } from '../game/bossAI'
 import { useToastStore } from './toastStore'
@@ -58,8 +64,95 @@ function settleOnlineResult(code: string, won: boolean): boolean {
  *  so an abandoned match can be reconciled on the next boot. */
 function trackOpenMatch(code: string | undefined, engine: GameState): void {
   if (!code) return
-  const started = engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0)
-  if (started) setOpenMatch(code)
+  // 已發牌(engine 存在)且未結束 → 記為進行中,關分頁後下次開 app 補判該敗。
+  // (改為「發牌就記」,對齊判定線;原本要「放過牌」會漏掉發牌後沒放牌就關的情況。)
+  if (engine.phase !== 'ended') setOpenMatch(code)
+}
+
+/** Live broadcaster for the current CASUAL-BOT match (§4.2). Module-level (a
+ *  non-serializable handle, like netgame's detach fns). Null for online/campaign/
+ *  solo — online broadcasts from the host in netgame instead. */
+let _bcast: Broadcaster | null = null
+
+/** A just-used special-card notice for spectators (§ 特殊牌):誰、哪張、n 去重。 */
+export interface SpecFx {
+  by: PlayerId
+  card: SpecialCardId
+  n: number
+}
+
+/** Build the broadcaster-side spec extras (推牌選取/排序/特殊牌通知) from gameStore state.
+ *  廣播端一律是 p1(casual 本機玩家 / online host),所以 selected = p1 的推牌、sort = p1 排序。
+ *  casual 用 `_bcast?.onExtras`、online 由 netgame 的 subscribe 呼 `bc.onExtras`。 */
+export function specExtrasOf(s: {
+  selected: string[]
+  sortMode: SortMode
+  sortDir: SortDir
+  specFx: SpecFx | null
+  online: OnlineInfo | null
+  onlinePause: PauseState
+  localPause: boolean
+  specEmote: { by: PlayerId; id: string; n: number } | null
+}): SpecExtras {
+  return {
+    p1Sel: s.selected,
+    p1Sort: { mode: s.sortMode, dir: s.sortDir },
+    fx: s.specFx,
+    paused: s.online ? s.onlinePause.active : s.localPause, // 暫停中 → 廣播(#6)
+    emote: s.specEmote, // 貼圖 → 廣播(#6)
+  }
+}
+
+/** Push the latest extras to the casual broadcaster (no-op for online — netgame handles it). */
+function pushCasualExtras(): void {
+  _bcast?.onExtras(specExtrasOf(useGameStore.getState()))
+}
+
+/** Begin mirroring a casual-bot match to `liveIndex`/`spectate` so it can be watched.
+ *  Assembles the two Live-card identities (local player vs bot persona) and fills the
+ *  bot's real win record asynchronously (a network read shouldn't delay the deal). */
+function beginCasualBroadcast(
+  foe: { name: string; avatarId: string; botId?: string },
+  engine: GameState,
+): void {
+  _bcast?.stop() // drop any prior handle (ended cards are kept; live ones are cleaned)
+  const ps = usePlatformStore.getState()
+  const p1: LivePlayer = {
+    name: ps.displayName || '玩家',
+    avatar: ps.profile?.equipped?.avatar || 'cat',
+    uid: ps.uid ?? null,
+    wins: ps.profile?.stats?.pvpWins ?? 0,
+    games: ps.profile?.stats?.pvpGames ?? 0,
+  }
+  // uid 存 botId(人機無真 uid)→ 觀戰者點對手頭像時 PlayerInfoCard 認得出是人機、讀 bots/{botId}(#4)。
+  const p2: LivePlayer = { name: foe.name, avatar: foe.avatarId, uid: foe.botId ?? null, wins: 0, games: 0, isBot: true }
+  _bcast = startBroadcast({ p1, p2, initial: engine, onWatchers: (n) => useGameStore.setState({ broadcastWatchers: n }) })
+  const code = _bcast.code
+  useGameStore.setState({ broadcastCode: code, broadcastWatchers: 0 }) // #8:廣播端訂 danmaku/notice 用;#7:觀戰人數
+  if (foe.botId) void fetchBotRecord(foe.botId).then((r) => patchLivePlayerRecord(code, 'p2', r.wins, r.games))
+}
+
+/** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
+ *  + localStorage marker (close-reconcile). No-op for online / undealt / ended. */
+function persistLocalMatch(s: GameStore): void {
+  if (s.online || !s.engine || s.engine.phase === 'ended' || !s.localMatchId) return
+  const mode = s.casualFoe ? 'casual' : s.campaignSubId ? 'campaign' : 'solo'
+  saveLocalMatch({
+    matchId: s.localMatchId,
+    mode,
+    botId: s.casualFoe?.botId,
+    subId: s.campaignSubId ?? undefined,
+    series: s.campaignSeries ?? undefined,
+    engine: s.engine,
+    coinFirstPicker: s.coinFirstPicker ?? 'p1',
+    me: s.me,
+    special: s.special,
+    loadout: s.loadout,
+    timeLimit: s.timeLimit,
+    aiLoadout: s.aiLoadout,
+    aiBoss: s.aiBoss,
+    casualFoe: s.casualFoe,
+  })
 }
 
 /**
@@ -147,12 +240,34 @@ export interface PauseState {
   active: boolean
 }
 
+/** 觀戰身分(§4.3):非 null = 目前 GameBoard 以「觀戰模式」渲染(全開、無操作)。
+ *  由 SpectatorGame 灌入 spec 串流的 engine + 雙方顯示身分。 */
+export interface SpectateInfo {
+  // uid = 真人的 uid,或人機的 botId(isBotId 可辨識)→ 觀戰者點頭像開 PlayerInfoCard(#4)。null = 無卡可開。
+  p1: { name: string; avatarId: string; uid: string | null }
+  p2: { name: string; avatarId: string; uid: string | null }
+}
+
 interface GameStore {
   mode: GameMode
   me: PlayerId
   engine: GameState | null
   status: Status
   coinFirstPicker: PlayerId | null
+  /** 觀戰中(§4.3):GameBoard 認得它就切成全開唯讀。null = 正常遊玩。 */
+  spectate: SpectateInfo | null
+  /** 觀戰時的即時附加狀態(§ 推牌/特殊牌):p1 推出的牌、p1 排序 → 下方手牌即時 lift + 同排序。 */
+  spectateLive: SpecExtras | null
+  /** 觀戰彈幕(Phase C):收到的彈幕串(append-only,DanmakuLayer 自己認得處理過的);上限裁切。 */
+  spectateDanmaku: DanmakuMsg[]
+  /** 觀戰彈幕送出器(由 SpectatorGame 綁到 joinSpectate handle;null = 尚未就緒)。 */
+  spectateSend: ((text: string) => void) | null
+  /** 本觀眾在本場的顯示名(登入=顯示名、訪客=pool 挑)→ 顯示「觀戰者姓名:XXX」(#3)。 */
+  spectateMyName: string
+  /** 目前觀戰人數(讀 liveIndex.spectators)→ 牌桌內左上 👁 顯示(#5)。 */
+  spectateWatchers: number
+  /** 廣播用:剛用出的特殊牌通知(誰/哪張/n)。玩家自己看的提示走 statusOverride;這個是給觀戰的。 */
+  specFx: SpecFx | null
 
   // UI
   selected: string[]
@@ -177,7 +292,12 @@ interface GameStore {
   /** free-match ("自由匹配") bot opponent identity (fake name + boss avatar), shown
    *  in place of the plain "電腦"; non-null also makes the match count as PvP at
    *  the end (win tally + diamond reward), per 使用者定案「bot 勝全部照算」. */
-  casualFoe: { name: string; avatarId: string } | null
+  casualFoe: { name: string; avatarId: string; botId?: string } | null
+  /** campaign match context — for the local snapshot / close-reconcile of the BO series (§3.7). */
+  campaignSubId: string | null
+  campaignSeries: SeriesState | null
+  /** id of the in-progress LOCAL match (snapshot marker + settled dedup). */
+  localMatchId: string | null
   /** campaign: called once when a match ends, with whether the human won (drives the BO series) */
   onMatchEnd: ((winnerIsMe: boolean) => void) | null
   /** the pre-match pick (B) has been confirmed → proceed to the coin toss */
@@ -194,8 +314,18 @@ interface GameStore {
   timeLimit: number
   /** online shared pause state (Stage C) */
   onlinePause: PauseState
+  /** local(單機/快配人機)暫停旗標。移出 GameBoard 本地 state → 廣播端才能把「暫停中」廣播給觀戰(#6)。 */
+  localPause: boolean
   /** latest sticker the OPPONENT sent (shown from their avatar); null = none */
   incomingEmote: EmoteMsg | null
+  /** 最新一張要廣播給觀戰的貼圖(誰 by + id + n)→ 觀戰也吃到貼圖效果(#6)。 */
+  specEmote: { by: PlayerId; id: string; n: number } | null
+  /** 本端正在廣播的觀戰 code(casual=_bcast.code、online=房號)→ 廣播端訂 danmaku/notice 用(#8)。 */
+  broadcastCode: string | null
+  /** 目前有幾個人在觀戰我這局(#7)→ >0 時玩家左上顯示 👁 數,防作弊提醒。 */
+  broadcastWatchers: number
+  /** 玩家端「觀眾彈幕」開關(#8,使用者要預設開,方便測):開 = 廣播端也看得到觀眾彈幕/進出提示。 */
+  showSpectatorDanmaku: boolean
   /** transient center-status override (e.g. "你已使用了「偷天換日」"); auto-clears */
   statusOverride: string | null
 
@@ -224,7 +354,13 @@ interface GameStore {
     aiLoadout: SpecialCardId[]
     boss: BossRuntime
     onMatchEnd: (winnerIsMe: boolean) => void
+    /** the sub-stage id + pre-match series state — for the local snapshot/reconcile (§3.7) */
+    subId?: string
+    series?: SeriesState
   }) => void
+  /** Resume a LOCAL match from a sessionStorage snapshot on boot (§3.7). Sets engine
+   *  + all match fields; the caller re-wires onMatchEnd / campaign series. */
+  restoreLocal: (snap: LocalSnapshot) => void
   /** free-match bot: start one LOCAL match vs a boss, dressed as a matched player.
    *  Counts as PvP (win tally + reward) via the casualFoe flag at match end. */
   startCasualBotMatch: (opts: {
@@ -233,11 +369,23 @@ interface GameStore {
     loadout: SpecialCardId[]
     aiLoadout: SpecialCardId[]
     boss: BossRuntime
-    foe: { name: string; avatarId: string }
+    foe: { name: string; avatarId: string; botId?: string }
   }) => void
   finishCoinToss: () => void
   finishCoinTossOnline: () => void
   reset: () => void
+  /** 觀戰(§4.3):灌入串流的全開 engine + 雙方身分 + 即時附加狀態(推牌/排序/特殊牌通知)。 */
+  applySpectate: (engine: GameState, info: SpectateInfo, live?: SpecExtras | null) => void
+  /** 離開觀戰 → 清空,回到無對局狀態。 */
+  exitSpectate: () => void
+  /** Phase C:收到一則彈幕 → append(裁切上限)。 */
+  feedDanmaku: (m: DanmakuMsg) => void
+  /** Phase C:綁定/解除彈幕送出器(SpectatorGame 於 join/離場時呼叫)。 */
+  setSpectateSend: (fn: ((text: string) => void) | null) => void
+  /** Phase C:設定本觀眾顯示名(joinSpectate 解析出訪客/顯示名後回呼)。 */
+  setSpectateMyName: (name: string) => void
+  /** #5:更新觀戰人數(SpectatorGame 收到 liveIndex 時)。 */
+  setSpectateWatchers: (n: number) => void
   nextGame: () => void
   startOnlineHost: (o: Omit<OnlineInfo, 'role'>, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[]) => void
   startOnlineGuest: (o: Omit<OnlineInfo, 'role'>, reconnect?: boolean, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[]) => void
@@ -250,6 +398,9 @@ interface GameStore {
    *  right before leaveOnline. `silent` = I only learned I won by leaving myself
    *  (斷線提早離開)→ tally + rewards but NO 勝利音. Returns whether it tallied. */
   forfeitOnline: (iWon: boolean, opts?: { silent?: boolean }) => boolean
+  /** Record a 中離 loss for a LOCAL match (casual 人機 → pvp 敗 + 人機得勝 + 釋放租借;
+   *  一般 AI → solo 敗). Call right before reset()/go('menu'). No-op if not dealt. */
+  forfeitLocal: () => void
   rematchStart: () => void
   agreeRematch: () => void
 
@@ -287,9 +438,18 @@ interface GameStore {
   /** online pause (Stage C): apply synced state / toggle my pause */
   applyPause: (p: PauseState) => void
   togglePauseOnline: () => void
+  /** local(單機/快配)暫停切換/設定(移出 GameBoard,供廣播給觀戰,#6)。 */
+  toggleLocalPause: () => void
+  setLocalPause: (p: boolean) => void
   /** sticker: broadcast mine to the opponent (online); apply one they sent */
   sendEmote: (id: string) => void
   applyEmote: (e: EmoteMsg) => void
+  /** 貼圖:記一張要廣播給觀戰的(本端送出;#6)。也負責 online 的 sendEmote。 */
+  broadcastMyEmote: (id: string) => void
+  /** #8:設定/清除本端廣播的觀戰 code(廣播端訂 danmaku/notice 用)。 */
+  setBroadcastCode: (code: string | null) => void
+  /** #8:切換「觀眾彈幕」開關。 */
+  toggleSpectatorDanmaku: () => void
   /** briefly show a message in the center status area (5s), then revert */
   flashStatus: (msg: string) => void
   /** guest: show a peek/spy result pushed from the host's private info channel */
@@ -321,6 +481,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   engine: null,
   status: 'coinToss',
   coinFirstPicker: null,
+  spectate: null,
+  spectateLive: null,
+  spectateDanmaku: [],
+  spectateSend: null,
+  spectateMyName: '',
+  spectateWatchers: 0,
+  specFx: null,
 
   selected: [],
   confirm: null,
@@ -335,6 +502,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   aiLoadout: [],
   aiBoss: null,
   casualFoe: null,
+  campaignSubId: null,
+  campaignSeries: null,
+  localMatchId: null,
   onMatchEnd: null,
   loadoutReady: false,
   loadoutWaiting: false,
@@ -343,7 +513,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   specialInfo: null,
   timeLimit: 50,
   onlinePause: { active: false },
+  localPause: false,
   incomingEmote: null,
+  specEmote: null,
+  broadcastCode: null,
+  broadcastWatchers: 0,
+  showSpectatorDanmaku: true, // #8:預設開(使用者要求,方便測)
   statusOverride: null,
   online: null,
   foeSelForGuest: null,
@@ -375,6 +550,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       aiLoadout: special ? AI_LOADOUT : [],
       aiBoss: null,
       casualFoe: null,
+      campaignSubId: null,
+      campaignSeries: null,
+      localMatchId: null,
       onMatchEnd: null,
       // Normal room never shows the pre-match pick; a special room shows it once
       // per fresh game (rematch passes ready=true to reuse the same loadout).
@@ -385,7 +563,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
 
-  startCampaignMatch: ({ special, timeLimit, loadout, aiLoadout, boss, onMatchEnd }) => {
+  startCampaignMatch: ({ special, timeLimit, loadout, aiLoadout, boss, onMatchEnd, subId, series }) => {
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     set({
       mode: 'ai',
@@ -394,6 +572,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       engine: null,
       status: 'coinToss',
       coinFirstPicker: firstPicker,
+      campaignSubId: subId ?? null,
+      campaignSeries: series ?? null,
+      localMatchId: null,
       selected: [],
       confirm: null,
       showdownOpen: false,
@@ -438,6 +619,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       aiLoadout,
       aiBoss: boss,
       casualFoe: foe, // shown as the opponent + makes the match count as PvP
+      campaignSubId: null,
+      campaignSeries: null,
+      localMatchId: null,
       onMatchEnd: null, // reward/tally handled by recordMatchStat(pvp) via casualFoe
       loadoutReady: !special,
       specialTrayOpen: false,
@@ -449,11 +633,67 @@ export const useGameStore = create<GameStore>((set, get) => ({
   finishCoinToss: () => {
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing', incomingEmote: null }) // 清掉上一局殘留的貼圖
+    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, localPause: false, localMatchId: newLocalMatchId() }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停
     sfx.deal() // 開局發牌
+    persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
+    const foe = get().casualFoe
+    if (foe) beginCasualBroadcast(foe, engine) // §4.2 快速配對人機局 → 開始廣播(可被觀戰)
   },
 
-  reset: () => set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null }),
+  reset: () => {
+    void releaseLeasedBot() // leaving a casual match → free the leased persona (§3.3)
+    _bcast?.stop() // §5.4 leaving → tear down the Live/spectate nodes (unless已 ended,則留 24h)
+    _bcast = null
+    clearLocalMatch() // §3.7 leaving → drop the local snapshot/marker
+    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
+  },
+
+  applySpectate: (engine, info, live) => {
+    // 觀戰:灌入串流來的全開 engine + 雙方身分 + 即時附加狀態。me='p1' → GameBoard 下=p1(廣播端/
+    // host)、上=p2(對手)(使用者要 host 在下)。online/casualFoe 清空走單機分支;AI/timer/操作
+    // 由 GameBoard 的 spectate gate 擋掉。不動 magnifier(觀戰開放大鏡看牌,牌局更新不該關掉)。
+    set({ spectate: info, spectateLive: live ?? null, engine, me: 'p1', mode: 'ai', online: null, casualFoe: null })
+  },
+  exitSpectate: () => set({ spectate: null, spectateLive: null, spectateDanmaku: [], spectateSend: null, spectateMyName: '', spectateWatchers: 0, engine: null, magnifier: null, showdownOpen: false }),
+  feedDanmaku: (m) => set((s) => ({ spectateDanmaku: [...s.spectateDanmaku, m].slice(-40) })),
+  setSpectateSend: (fn) => set({ spectateSend: fn }),
+  setSpectateMyName: (name) => set({ spectateMyName: name }),
+  setSpectateWatchers: (n) => set({ spectateWatchers: n }),
+
+  restoreLocal: (snap) => {
+    set({
+      mode: 'ai',
+      timeLimit: snap.timeLimit,
+      me: snap.me,
+      engine: snap.engine,
+      status: 'playing',
+      coinFirstPicker: snap.coinFirstPicker,
+      selected: [],
+      confirm: null,
+      showdownOpen: false,
+      endOpen: snap.engine.phase === 'ended',
+      magnifier: null,
+      foeSelection: null,
+      sortMode: 'rank',
+      sortDir: 'asc',
+      special: snap.special,
+      loadout: snap.loadout,
+      aiLoadout: snap.aiLoadout,
+      aiBoss: snap.aiBoss,
+      casualFoe: snap.casualFoe,
+      campaignSubId: snap.subId ?? null,
+      campaignSeries: snap.series ?? null,
+      localMatchId: snap.matchId,
+      onMatchEnd: null, // campaign 由 localResume 於還原 series 後重接
+      loadoutReady: true, // 已在對局中,不再顯示賽前選牌
+      specialTrayOpen: false,
+      specialTargeting: null,
+      specialInfo: null,
+      incomingEmote: null,
+    })
+    // §4.2 重整續玩 casual 局 → 重新開播(前一分頁的 onDisconnect 已清掉舊 liveIndex)。
+    if (snap.casualFoe && snap.engine.phase !== 'ended') beginCasualBroadcast(snap.casualFoe, snap.engine)
+  },
 
   nextGame: () => {
     // Rematch: a special room STILL shows the pre-match pick (after the VS
@@ -599,6 +839,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   finishCoinTossOnline: () => {
     set({ status: 'playing', incomingEmote: null }) // 清掉上一局殘留的貼圖
+    const code = get().online?.code
+    if (code) setOpenMatch(code) // 發牌即記為進行中(host 端;關分頁後補判該敗)
     sfx.deal() // 開局發牌
   },
 
@@ -628,7 +870,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const code = get().online?.code // guest side of online → pvp 戰績(以房號去重)
       if (code) settleOnlineResult(code, won)
     }
-    trackOpenMatch(get().online?.code, engine) // #8: remember a started online match
+    // #8: 已發牌(status='playing')才記為進行中。⚠️ guest 在擲硬幣/賽前選牌階段就會收到
+    // host 的初始 game-view,那時 status 還是 'coinToss' → 不可記 openMatch(否則賽前關分頁誤判敗)。
+    if (get().status === 'playing') trackOpenMatch(get().online?.code, engine)
     // 放牌/補牌音:host 在權威路徑(placeAt/doDraw)發聲,但 guest 只拿到鏡像 engine,
     // 這兩個聲音原本從不觸發(#6:玩家誤以為是手機問題,其實是「當 guest 沒聲」)。
     // 從前後 engine 差異補放:格子多了牌=放牌(雙方放牌都響,同 host);我的手牌變多=我補牌。
@@ -676,6 +920,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     online?.teardown?.()
     set({
       online: null,
+      broadcastCode: null,
+      broadcastWatchers: 0,
+      specEmote: null,
       engine: null,
       status: 'coinToss',
       selected: [],
@@ -694,14 +941,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   forfeitOnline: (iWon, opts) => {
-    const { online, engine } = get()
-    if (!online || !engine || engine.phase === 'ended') return false
-    // 開局前(還沒送出第一張牌)離開 → 雙方不計。用「已放進格子的牌」判定開局:
-    // guest 的鏡像 placementsDone 恆為 0(見 sync.deserializeForGuest),但 slots
-    // 兩端都有真實張數,所以 host 中離時 guest 才能正確拿到判勝 + 真人鑽石。
-    const anyPlaced = engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0)
-    const started = anyPlaced || engine.placementsDone.p1 + engine.placementsDone.p2 > 0 || !!engine.pendingPick
-    if (!started) return false // 開局前離開 → 不判勝、不計場次、不跑任何流程
+    const { online, engine, status } = get()
+    // 判定線 = 「已發牌」(status='playing' 且未結束)。⚠️ 用 status 而非「engine 存在」:
+    // host 在擲硬幣階段 engine 就已存在,只看 engine 會在發牌前就判定(刷牌洞的反面)。
+    if (!online || status !== 'playing' || !engine || engine.phase === 'ended') return false
     if (isMatchSettled(online.code)) return false // 這一局已結算過 → 不重複計(#8 防呆)
     // 判我勝時補勝利音(中離/等滿斷線不走正常 ended,原本無聲)+ 讓勝利音先站穩再放行
     // 💎 佇列。但 silent(我自己提早離開才知道贏)→ 不放勝利音,獎勵在主畫面直接跑。
@@ -713,6 +956,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     clearOpenMatch()
     void usePlatformStore.getState().recordMatchResult('pvp', iWon)
     return true
+  },
+
+  forfeitLocal: () => {
+    const { engine, casualFoe, localMatchId, status } = get()
+    if (status !== 'playing' || !engine || engine.phase === 'ended') return // 未發牌/已結束 → 不計
+    if (casualFoe) {
+      // 快速配對人機:算 pvp 敗;人機 games+1 且得勝;釋放租借。
+      recordMatchStat(true, false)
+      if (casualFoe.botId) void recordBotResult(casualFoe.botId, false)
+      // §5:中離也讓觀戰的 Live 卡翻「已結束・對手(p2/人機)獲勝」,而非直接收攤 → 觀戰者看得到勝方、
+      //     被導回主畫面(reset 的 _bcast.stop() 會因已 ended 而不移除卡)。
+      _bcast?.end('p2')
+    } else {
+      // 建立房打電腦(單機 AI):算 solo 敗。
+      recordMatchStat(false, false)
+    }
+    void releaseLeasedBot()
+    if (localMatchId) markMatchSettled(localMatchId) // 去重:關分頁的次啟動補判不再重計
+    clearLocalMatch()
   },
 
   rematchStart: () => {
@@ -790,9 +1052,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sfx.select()
     }
     get().emitLive() // 情報戰: broadcast my live selection (throttled downstream)
+    pushCasualExtras() // §推牌:casual 局把我的推牌即時鏡射給觀戰
   },
 
-  clearSelection: () => set({ selected: [] }),
+  clearSelection: () => {
+    set({ selected: [] })
+    pushCasualExtras()
+  },
 
   openConfirm: () => {
     const { engine, me, selected } = get()
@@ -829,6 +1095,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     get().submitPick(selected)
     set({ confirm: null, selected: [] })
+    pushCasualExtras() // §推牌:送出後清掉推牌狀態
   },
 
   submitPick: (ids) => {
@@ -889,7 +1156,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   applyEngine: (next) => {
     set({ engine: next })
-    trackOpenMatch(get().online?.code, next) // #8: remember a started online match
+    if (get().status === 'playing') trackOpenMatch(get().online?.code, next) // #8: 已發牌才記
+    persistLocalMatch(get()) // §3.7 本地局每步更新快照(online/已結束為 no-op)
+    _bcast?.onEngine(next) // §4.2 casual 局:每步鏡射全開視角給觀眾(有觀眾時才真寫)
     if (next.phase === 'showdown') {
       // new showdown → require both players to acknowledge before advancing
       set({ acks: { p1: false, p2: false } })
@@ -914,6 +1183,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else if (next.phase === 'ended') {
       setTimeout(() => set({ endOpen: true }), 550)
       const won = next.winner === get().me
+      if (next.winner) _bcast?.end(next.winner) // §5.4 casual 局自然結束 → Live 卡翻 ended(留 24h)
       won ? sfx.win() : sfx.lose()
       useAchievementStore.getState().hold(700) // 勝負音效先站穩,1.8s 後才放行鑽石/成就佇列
       // 戰績:host + 單機在此結算一次(guest 走 applyGuestView 的 ended transition)。
@@ -921,7 +1191,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // (casualFoe)無房號、單一 client 只結一次,照真人算 PvP。
       const on = get().online
       if (on) settleOnlineResult(on.code, won)
-      else recordMatchStat(!!get().casualFoe, won)
+      else {
+        const foe = get().casualFoe
+        recordMatchStat(!!foe, won)
+        // §3.2: a finished human-vs-bot match updates the persona's real record.
+        if (foe?.botId) void recordBotResult(foe.botId, won)
+        // §3.7 本地局自然結束 → 標記已結算 + 清快照/marker(避免下次開 app 誤補判)。
+        const mid = get().localMatchId
+        if (mid) markMatchSettled(mid)
+        clearLocalMatch()
+      }
       // campaign: fold this match into the BO series (the end screen then shows
       // series status / result — wired with the campaign UI).
       get().onMatchEnd?.(won)
@@ -962,10 +1241,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // 排序鍵的 click 由 SortButtons(RoundBtn)播;這裡不再播 hover。
     set({ sortMode: get().sortMode === 'rank' ? 'suit' : 'rank' })
     get().emitLive() // re-sort moves my pushed cards → opponent sees it
+    pushCasualExtras() // §推牌:排序變動 → 觀戰下方手牌同步重排
   },
   toggleSortDir: () => {
     set({ sortDir: get().sortDir === 'desc' ? 'asc' : 'desc' })
     get().emitLive()
+    pushCasualExtras()
   },
 
   // ----- special cards (Phase C) -----
@@ -997,18 +1278,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!online) return
     online.sendPause({ active: !onlinePause.active }) // unlimited; either side toggles
   },
+  // local 暫停:移出 GameBoard → 改動時 pushCasualExtras 把「暫停中」廣播給觀戰(#6)。
+  toggleLocalPause: () => {
+    set({ localPause: !get().localPause })
+    pushCasualExtras()
+  },
+  setLocalPause: (p) => {
+    if (get().localPause === p) return
+    set({ localPause: p })
+    pushCasualExtras()
+  },
 
   sendEmote: (id) => {
     const { online } = get()
     if (!online) return // single-player: local float only (handled in the control)
     online.sendEmote({ by: online.role, id, n: Date.now() })
   },
+  // 本端送貼圖:記 specEmote(by=me=廣播端 p1)→ 廣播給觀戰(#6);online 另送給對手。
+  broadcastMyEmote: (id) => {
+    const { online, me } = get()
+    const n = Date.now()
+    set({ specEmote: { by: me, id, n } })
+    if (online) online.sendEmote({ by: online.role, id, n })
+    pushCasualExtras() // casual 廣播;online 由 netgame subscribe 監 specEmote
+  },
   applyEmote: (e) => {
     // Only surface stickers the OPPONENT sent (ignore my own echo off the ref).
     const { online } = get()
     if (!online || e.by === online.role) return
-    set({ incomingEmote: e })
+    // 對手貼圖 → 我這端顯示 + 廣播給觀戰(by=對手 p2)。
+    set({ incomingEmote: e, specEmote: { by: otherPlayer(get().me), id: e.id, n: e.n } })
   },
+  setBroadcastCode: (code) => set({ broadcastCode: code }),
+  toggleSpectatorDanmaku: () => set({ showSpectatorDanmaku: !get().showSpectatorDanmaku }),
 
   showSpecialInfo: (info) => set({ specialInfo: info, specialTrayOpen: false }),
 
@@ -1043,11 +1345,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const foe = otherPlayer(me)
       const cards = (id === 'peek' ? peekNextDraw(engine, me) : engine.hands[foe]).slice()
       sfx.special()
+      const nextEng = markSpecialUsed(engine, me)
       set({
-        engine: markSpecialUsed(engine, me),
+        engine: nextEng,
         specialTrayOpen: false,
         specialInfo: { kind: id as 'peek' | 'spy', cards },
+        specFx: { by: me, card: id, n: Date.now() }, // §特殊牌:觀戰通知(peek/spy 無視覺變化,只跳提示)
       })
+      _bcast?.onEngine(nextEng)
+      pushCasualExtras()
       get().flashStatus(`你已使用了「${def.name}」`)
       // host: tell the guest (the foe) what happened.
       if (online?.role === 'host') online.sendFx(id === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
@@ -1072,9 +1378,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Swap removes the target and draws a new card → drop the now-gone card from
     // the pick selection so the 送出 count stays correct (clubs keeps the id).
     const validIds = new Set(next.hands[me].map((c) => c.id))
-    set({ engine: next, specialTargeting: null, selected: get().selected.filter((id) => validIds.has(id)) })
+    // §特殊牌:記通知(觀戰跳 toast + 牌面同步)。⚠️ 這條原本用 set({engine}) 直接改,沒經過
+    // applyEngine → casual 廣播端不會鏡射給觀戰(玩家換了牌、觀戰卻沒更新的 bug)。改成也呼廣播。
+    set({
+      engine: next,
+      specialTargeting: null,
+      selected: get().selected.filter((id) => validIds.has(id)),
+      specFx: { by: me, card: specialTargeting, n: Date.now() },
+    })
+    _bcast?.onEngine(next) // casual:牌面變了 → 鏡射
+    pushCasualExtras() // casual:送出通知 + 更新後的推牌狀態
+    persistLocalMatch(get())
     get().flashStatus(`你已使用了「${def?.name}」`)
-    // host: swap/suit don't affect the opponent → generic notice.
+    // host: swap/suit don't affect the opponent → generic notice. (online 由 netgame subscribe 廣播)
     if (online?.role === 'host') online.sendFx('對方似乎使用了特殊牌')
   },
 
@@ -1102,7 +1418,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // picks/placements can act on it (spy → true-strength reads; peek → sure draw-hold).
     if (aiBoss && decision.card === 'spy') set({ aiBoss: { ...aiBoss, spySeen: true, spyHand: next.hands[otherPlayer(ai)] } })
     else if (aiBoss && decision.card === 'peek') set({ aiBoss: { ...aiBoss, peekDraw: peekNextDraw(next, ai) } })
-    set({ engine: next })
+    // §特殊牌:記通知 + 鏡射給觀戰(bot 換牌也要即時更新,否則觀戰看到的牌對不上)。
+    set({ engine: next, specFx: { by: ai, card: decision.card, n: Date.now() } })
+    _bcast?.onEngine(next)
+    pushCasualExtras()
+    persistLocalMatch(get())
     // Visibility (SPEC §15): spy affects me (I'm told); others → a generic notice.
     get().flashStatus(decision.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
     return true

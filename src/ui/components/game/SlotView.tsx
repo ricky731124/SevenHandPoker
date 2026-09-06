@@ -23,6 +23,9 @@ interface Props {
   /** tutorial: a short call-to-action rendered inside the glowing drop target
    *  (e.g.「把牌放這格」) on the first placement step. */
   dropHint?: string
+  /** spectator (§4.3): reveal BOTH piles face-up regardless of `slot.owner`, and
+   *  make both magnifiable. Never placeable. */
+  revealAll?: boolean
 }
 
 function Pile({
@@ -70,12 +73,13 @@ function Pile({
   )
 }
 
-export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false, magnifyOnly, dropHint }: Props) {
+export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false, magnifyOnly, dropHint, revealAll = false }: Props) {
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const opened = slot.owner !== null
+  const faceUp = opened || revealAll // spectator: 兩邊暗牌都翻正
   const topCards = slot[foe]
   const bottomCards = slot[me]
-  const foeMagnifiable = opened && topCards.length > 0 && (!magnifyOnly || magnifyOnly === foe)
+  const foeMagnifiable = faceUp && topCards.length > 0 && (!magnifyOnly || magnifyOnly === foe)
   const myMagnifiable = bottomCards.length > 0 && (!magnifyOnly || magnifyOnly === me)
 
   return (
@@ -91,7 +95,7 @@ export default function SlotView({ slot, index, me, placeable, onPlace, onMagnif
           {dropHint && <span className="slot__drop-hint">{dropHint}</span>}
         </button>
       ) : (
-        <Pile cards={topCards} faceUp={opened} openable={foeMagnifiable} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} />
+        <Pile cards={topCards} faceUp={faceUp} openable={foeMagnifiable} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} />
       )}
 
       <div className="slot__coin" style={{ height: coinSize }}>
@@ -99,7 +103,7 @@ export default function SlotView({ slot, index, me, placeable, onPlace, onMagnif
       </div>
 
       {/* Bottom: my side — face-down until this slot's showdown; always magnifiable */}
-      <Pile cards={bottomCards} faceUp={opened} openable={myMagnifiable} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} />
+      <Pile cards={bottomCards} faceUp={faceUp} openable={myMagnifiable} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} />
     </div>
   )
 }

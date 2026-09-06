@@ -9,6 +9,7 @@ import {
   type Database,
 } from 'firebase/database'
 import { getFirebaseApp } from '../firebaseApp'
+import { withTimeout } from '../net/firebase'
 import { normalizeUsername } from './auth'
 
 /**
@@ -150,19 +151,43 @@ function normalize(raw: any): Profile {
  */
 export async function ensureProfile(uid: string, isAnonymous: boolean): Promise<void> {
   const now = Date.now()
-  // applyLocally:false — don't surface the optimistic first-run value (which is
-  // freshProfile when the node isn't cached yet) to local listeners; only the
-  // committed server value reaches subscribeProfile, so username never flashes null.
-  await runTransaction(
-    ref(db(), `users/${uid}`),
-    (cur) => {
-      if (cur === null) return freshProfile(isAnonymous, now)
-      cur.lastActive = now
-      cur.isAnonymous = isAnonymous
-      return cur
-    },
-    { applyLocally: false },
-  )
+  // ⚠️ 這裡踩過兩顆雷,務必兩顆都避開:
+  //   (雷1)不可用 `applyLocally:false` 的 transaction:當 users/{uid} 有「尚未被伺服器 ack
+  //         的本地寫入」時(剛重開分頁,App boot 的 reconcileAbandonedLocal 剛 `update` 過
+  //         users/{uid} 補判),它會「等一個永遠不來的乾淨伺服器值」→ 永久掛住 → ensureAccount
+  //         掛住 → 配對卡 23 秒。(實測一般 transaction 139ms、這顆 12s+ 不回。)
+  //   (雷2)也不可「拿掉 applyLocally:false 直接跑 transaction」:cache 尚空時(剛開分頁 profile
+  //         還沒載入),`if(cur===null) return freshProfile` 會把樂觀的 freshProfile 丟給
+  //         subscribeProfile → 顯示名/戰績瞬間被清成空 → 主畫面名字消失、變 guest。
+  // 正解:先「讀」(get 在剛重開分頁也正常、很快)。已存在 → 只用 plain `update` bump lastActive
+  //   (不跑 transaction、絕不會冒出 freshProfile);真的缺 → 才建檔。全程 withTimeout + 不外拋。
+  let exists = true // 讀失敗時保守當「已存在」→ 只 bump,永不誤建 freshProfile 蓋掉真檔
+  try {
+    const snap = await withTimeout(get(ref(db(), `users/${uid}`)), 4000, null)
+    if (snap) exists = snap.exists()
+  } catch {
+    /* 讀失敗 → exists 維持 true */
+  }
+  try {
+    if (exists) {
+      await withTimeout(update(ref(db(), `users/${uid}`), { lastActive: now, isAnonymous }).then(() => {}, () => {}), 4000, undefined)
+    } else {
+      // 真的首跑 → 建檔。用 transaction 防「register + onAuth 同時建」互相蓋掉;此時 cache 本就
+      // 該是 null、freshProfile 正是正確初值,樂觀套用無妨。
+      await withTimeout(
+        runTransaction(ref(db(), `users/${uid}`), (cur) => {
+          if (cur === null) return freshProfile(isAnonymous, now)
+          cur.lastActive = now
+          cur.isAnonymous = isAnonymous
+          return cur
+        }).then(() => {}, () => {}),
+        4000,
+        undefined,
+      )
+    }
+  } catch {
+    /* best-effort:絕不因建檔/bump 失敗擋住 ensureAccount/配對 */
+  }
 }
 
 export function subscribeProfile(uid: string, cb: (p: Profile | null) => void): () => void {

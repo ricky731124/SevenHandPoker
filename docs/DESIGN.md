@@ -135,3 +135,4 @@
   - ⚠️ **不可用 localStorage**:它跨分頁共享,guest 加入會覆蓋 host 的指標,導致房主重連失敗(踩過)。
 - 牌局狀態:**host** 在記憶體 + sessionStorage 快照;**guest** 不存牌局,只讀 RTDB guest-view。
 - 指標存在 = 意外斷線 → 接回;按「離開遊戲」會清指標 + 寫 `abandoned` → 不接回。
+- ⚠️ **五模式（主線/打電腦/打真人/快配遇真人/快配遇人機）的判敗規則 + 本地模式的「marker 補判 + sessionStorage 快照續玩」擴充，詳見 [SPECTATE-REPLAY-SPEC.md §3.7](SPECTATE-REPLAY-SPEC.md)。此處的 sessionStorage/localStorage 手法，本地模式(Phase 2)會鏡像沿用。**

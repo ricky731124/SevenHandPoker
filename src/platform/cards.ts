@@ -1,5 +1,6 @@
 import { getDatabase, ref, get, update, type Database } from 'firebase/database'
 import { getFirebaseApp } from '../firebaseApp'
+import { ONLINE_WINDOW_MS } from '../net/presence'
 
 /**
  * Public, world-readable player "name card" (#5). Denormalized so anyone can show
@@ -67,11 +68,18 @@ export async function fetchCard(uid: string): Promise<PlayerCard | null> {
   }
 }
 
-/** Is this uid currently online? (has ≥1 live presence connection) */
+/** Is this uid currently online? (any connection's heartbeat within the window).
+ *  Legacy `true` connections (pre-heartbeat garbage) are NOT treated as online —
+ *  a stale open tab isn't「在線」; a genuinely-live client re-writes lastActive. */
 export async function fetchIsOnline(uid: string): Promise<boolean> {
   try {
     const snap = await get(ref(db(), `presence/${uid}`))
-    return snap.exists() && snap.size > 0
+    const conns = snap.val() as Record<string, { lastActive?: number } | true> | null
+    if (!conns) return false
+    const now = Date.now()
+    return Object.values(conns).some(
+      (c) => c !== true && typeof c?.lastActive === 'number' && now - c.lastActive < ONLINE_WINDOW_MS,
+    )
   } catch {
     return false
   }

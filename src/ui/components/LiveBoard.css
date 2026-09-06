@@ -1,0 +1,282 @@
+/* 主畫面右側 Live 版(§5)。木質/羊皮卡面 + 金框、LIVE 紅點脈動、跑馬燈。tokens 見 §7。 */
+
+.liveboard {
+  position: absolute;
+  /* 右邊界與「在線人數 / 右上按鈕列」對齊(所有模式,非只手機):base 對齊在線人數的
+     max(10px, env-right);桌機拉到 clamp(24px,4vw,80px)(#3)。 */
+  right: max(10px, env(safe-area-inset-right));
+  top: 106px; /* 往上一點,短螢幕(橫向手機)才不會撞到右下在線人數(#3) */
+  z-index: 6;
+  width: min(284px, 48vw); /* 略放寬讓名字容得下 6 個中文字(#1) */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+@media (min-width: 1024px) {
+  .liveboard {
+    right: clamp(24px, 4vw, 80px); /* = 在線人數/右上按鈕的桌機右邊界 */
+    top: 140px; /* 整體再往下一些些(#1) */
+    /* 只有電腦版整體(含內容/編號/圓點)放大 20%;origin top-right → 右邊界不變、不超出規範(#1)。 */
+    transform: scale(1.2);
+    transform-origin: top right;
+  }
+}
+
+.liveboard__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 800;
+  font-size: 17px;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.liveboard__title-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff; /* 白色閃點(#1) */
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+  animation: liveboard-pulse 1.1s ease-in-out infinite;
+}
+.liveboard__count {
+  margin-left: auto;
+  font-size: 15px; /* x 場進行中 放大(#1) */
+  font-weight: 800;
+  color: #ffe1a6;
+  background: rgba(0, 0, 0, 0.32);
+  border-radius: var(--r-sm, 8px);
+  padding: 3px 9px;
+}
+@keyframes liveboard-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.65); }
+}
+
+.liveboard__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 跑馬燈舞台:主卡置中放大,左右鄰卡絕對定位露一小截淡化(圖六疊卡) */
+/* 單卡跑馬燈(圖一):舞台放主卡 + 圖內箭頭 + 頂部編號 */
+.liveboard__stage {
+  position: relative;
+  width: 100%;
+}
+.liveboard__slot--main {
+  position: relative;
+  z-index: 2;
+}
+
+/* 編號:完整放進卡片框內、與 LIVE/眼睛 同一列齊平(#1);頂部置中(左 LIVE、右眼睛,中間空) */
+.liveboard__num {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold-2, #e6b954), var(--gold-4, #a97b28));
+  border: 2px solid #fff3d0;
+  color: #4a3517;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 900;
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* 箭頭:圖內左右緣、黑色大字;無圓圈底。對齊頭像列——箭頭「底緣」≈ 頭像下緣齊平(#3)。
+   頭像:card padding-top 10 + head 16 + gap 7 + players padding-top 2 = 35 起,高 58 → 下緣 ≈ 93;
+   箭頭高 48、top 45 → 底緣 ≈ 93。左右留間隔。 */
+.liveboard__arrow {
+  position: absolute;
+  top: 43px; /* 箭頭底緣 ≈ 頭像下緣齊平、不低過(#1) */
+  z-index: 3;
+  width: 34px; /* 觸發點加大,手機好按(#1) */
+  height: 58px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: #1c1c1c;
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(255, 244, 214, 0.6);
+  -webkit-tap-highlight-color: transparent;
+}
+.liveboard__arrow--prev { left: 6px; } /* 離邊界 6px(#1) */
+.liveboard__arrow--next { right: 6px; }
+
+/* 頁碼點 */
+.liveboard__dots {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.liveboard__dot {
+  width: 9px; /* 放大 → 更看得出有其它場(#1) */
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.34);
+}
+.liveboard__dot--on {
+  background: var(--gold-2, #e6b954);
+  box-shadow: 0 0 5px var(--gold-2, #e6b954);
+}
+
+/* --- 單張卡 --- */
+.livecard {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 10px 12px;
+  border-radius: var(--r-md, 12px);
+  background: linear-gradient(180deg, var(--parch-1, #f3e2c0), var(--parch-2, #e7d0a2));
+  border: 2px solid var(--gold-3, #c99a3e);
+  box-shadow: var(--shadow-1, 0 6px 18px rgba(0, 0, 0, 0.35));
+  color: var(--parch-text, #4a3721);
+  min-width: 0;
+  /* 固定高度:head/players/foot 三列都定高(見各自 min-height/height)→ live/ended 完全同高、
+     跑馬燈切換不跳(#1)。這裡再給一個 floor 保險。 */
+  min-height: 191px;
+  justify-content: flex-start;
+}
+.livecard--ended {
+  filter: saturate(0.7);
+  border-color: var(--wood-edge, #7a5230);
+}
+
+.livecard__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px; /* 固定 → live(LIVE+dot 16px)與 ended(已結束)同高,不跳(#1) */
+}
+.livecard__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  color: var(--lose, #ff6b6b);
+}
+.livecard__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lose, #ff6b6b);
+  box-shadow: 0 0 6px var(--lose, #ff6b6b);
+  animation: liveboard-pulse 1.1s ease-in-out infinite;
+}
+.livecard__ended-tag {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--parch-muted, #8a745a);
+}
+.livecard__watchers {
+  margin-left: auto;
+  font-size: 18px; /* 眼睛/數量再大,與 LIVE 齊平(#1) */
+  font-weight: 800;
+  color: var(--wood-2, #8a5a2b);
+  line-height: 1;
+}
+
+/* 左右留白 = 讓開圖內箭頭,頭像不貼邊(#3) */
+.livecard__players {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 14px 0; /* 收窄左右內距 → 名字欄更寬,容得下 6 字(#1) */
+}
+.livecard__vs {
+  font-family: var(--font-display, sans-serif);
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--gold-4, #a97b28);
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.liveside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+/* 名字全顯示(不截斷):玩家名上限 15 byte(7中文),欄夠寬 → 直接完整呈現(#1)。 */
+.liveside__name {
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+}
+/* 勝場 x (xx%) 置中於頭像正下方(原本偏左,#1)。 */
+.liveside__stat {
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--parch-muted, #8a745a); /* 勝場數改用勝率同色,較明顯(#1) */
+  white-space: nowrap;
+}
+.liveside__rate { color: var(--parch-muted, #8a745a); }
+
+/* 底列固定高度 → live(加入觀戰鈕)與 ended(結束字)同高 → 跑馬燈切換不跳(#1)。 */
+.livecard__join,
+.livecard__mine,
+.livecard__result {
+  margin-top: auto;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.livecard__join {
+  width: 100%;
+  border: 2px solid var(--gold-3, #c99a3e);
+  border-radius: var(--r-sm, 8px);
+  background: linear-gradient(180deg, var(--wood-2, #8a5a2b), var(--wood-3, #6d451f));
+  color: #ffe9b0;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+.livecard__join:active { transform: translateY(1px); }
+
+.livecard__mine,
+.livecard__result {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--parch-muted, #8a745a);
+}
+
+/* 窄螢幕(直式/小視窗):再收窄一點避免破版。右邊界沿用 base 的 max(10px, env-right)。 */
+@media (max-width: 640px) {
+  .liveboard {
+    width: min(240px, 62vw);
+    top: 96px;
+  }
+}

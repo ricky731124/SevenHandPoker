@@ -7,9 +7,10 @@ import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
 import { setPlayerMeta } from '../../net/room'
 import { aiPick, aiPlace } from '../../game/ai'
-import { otherPlayer, suitTargets, swapTargets } from '../../game/state'
+import { otherPlayer, suitTargets, swapTargets, type GameState } from '../../game/state'
 import { getSpecialCard, ALL_SPECIAL_CARD_IDS, type SpecialCardId } from '../../game/specialCards'
 import { SUIT_SYMBOL } from '../../game/cards'
+import { sortHand } from '../../game/sort'
 import Button from '../components/Button'
 import PlayerAvatar from '../components/PlayerAvatar'
 import PlayerInfoCard from '../components/PlayerInfoCard'
@@ -24,6 +25,10 @@ import VsIntro from '../components/game/VsIntro'
 import PreMatchSpecial from '../components/game/PreMatchSpecial'
 import { SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
 import StickerProto from '../components/game/StickerProto'
+import DanmakuBar from '../components/game/DanmakuBar'
+import DanmakuLayer from '../components/game/DanmakuLayer'
+import SpecEmoteLayer from '../components/game/SpecEmoteLayer'
+import BroadcasterDanmaku from '../components/game/BroadcasterDanmaku'
 import HandRankModal from '../components/game/HandRankModal'
 import ConfirmSubmit from '../components/game/ConfirmSubmit'
 import ShowdownModal from '../components/game/ShowdownModal'
@@ -131,11 +136,10 @@ function OnlineGame({ mode, roomId }: { mode: 'host' | 'guest'; roomId?: string 
   // + tryReconnect / reconcileAbandonedMatch),對手那邊仍靠斷線 90 秒判定照常記勝。
   // 這局有沒有「真的開打」(有出牌被判勝場/場次)。全部判勝/發鑽/流程都以此為前提。
   const engine = useGameStore((s) => s.engine)
-  const matchStarted =
-    !!engine &&
-    (engine.slots.some((s) => s.p1.length > 0 || s.p2.length > 0) ||
-      engine.placementsDone.p1 + engine.placementsDone.p2 > 0 ||
-      !!engine.pendingPick)
+  const gameStatus = useGameStore((s) => s.status)
+  // 「已發牌」= status 進到 playing(過了擲硬幣)且未結束。⚠️ host 在擲硬幣階段 engine
+  // 就已存在(startOnlineHost),所以必須用 status 而非「engine 存在」,否則對手會在發牌前判勝。
+  const matchStarted = gameStatus === 'playing' && !!engine && engine.phase !== 'ended'
   const foeAbandoned = room?.abandoned === (mode === 'host' ? 'guest' : 'host')
   const forfeitedRef = useRef(false)
   const [dcWin, setDcWin] = useState(false) // 斷線等滿 90 秒、判我勝的彈窗
@@ -264,12 +268,26 @@ function DisconnectOverlay({
   )
 }
 
-function GameBoard() {
+/** 觀戰狀態列口吻(§4.3):旁觀者看到「誰在做什麼」,不是「你的回合」。 */
+function spectatorStatusText(engine: GameState, p1Name: string, p2Name: string): string {
+  if (engine.phase === 'showdown') return '對決中…'
+  if (engine.phase === 'pick') return `${engine.turn === 'p1' ? p1Name : p2Name} 思考中…`
+  if (engine.phase === 'place') {
+    const placer = engine.pendingPick ? (engine.pendingPick.by === 'p1' ? p2Name : p1Name) : ''
+    return placer ? `${placer} 放置中…` : ''
+  }
+  if (engine.phase === 'draw') return '抽牌中…'
+  return ''
+}
+
+export function GameBoard() {
   const g = useGameStore()
+  const spec = g.spectate // 非 null = 觀戰模式(§4.3):全開、拿掉操作、關互動
   const engine = g.engine!
   const me = g.me
   const foe = otherPlayer(me)
   const go = useAppStore((s) => s.go)
+  const closeSpectate = useAppStore((s) => s.closeSpectate) // 觀戰:牌桌內「離開觀戰」鈕(#5)
   const inCampaign = useCampaignStore((s) => s.series !== null)
   const sz = useBoardSizes()
   // Uniform scale so the whole board fits the ACTUALLY-visible area on mobile web
@@ -281,6 +299,8 @@ function GameBoard() {
   // (AI/campaign have no card); uid comes from the synced room meta.
   const room = useNetStore((s) => s.room)
   const [foeCardOpen, setFoeCardOpen] = useState(false)
+  // 觀戰(#4):觀戰者點任一方頭像 → 開該玩家的 PlayerInfoCard(uid=真人 uid 或人機 botId)。
+  const [specCard, setSpecCard] = useState<{ uid: string | null; name: string; avatarId: string } | null>(null)
   const [helpOpen, setHelpOpen] = useState(false) // 牌型大小速查 (#5)
   const foeRole = g.online ? (g.online.role === 'host' ? 'guest' : 'host') : null
   const foeUid = foeRole ? ((room?.players?.[foeRole] as { uid?: string | null } | undefined)?.uid ?? null) : null
@@ -289,8 +309,9 @@ function GameBoard() {
   // single-player is a local toggle. While paused, no move may be made — only
   // resuming (and, later, emoji) is allowed. Declared up here so the action
   // gates below (submit / place / hand / special) can all respect it.
-  const [paused, setPaused] = useState(false) // single-player local pause
-  const isPaused = g.online ? g.onlinePause.active : paused
+  // 暫停:online=共享旗標;單機/快配=gameStore.localPause(移出本地 state → 廣播端才能把「暫停中」
+  // 廣播給觀戰,#6);觀戰=讀廣播來的 spectateLive.paused。
+  const isPaused = spec ? !!g.spectateLive?.paused : g.online ? g.onlinePause.active : g.localPause
   // Special-card one-shot: after it's spent the button stays (greyed); tapping
   // or hovering it flashes a small bubble explaining it's used up (like 鳥鳥's
   // "N 張" bubble) instead of silently doing nothing.
@@ -326,22 +347,42 @@ function GameBoard() {
   }
 
   // ----- AI driver (single-player only) -----
+  // 一場最多一次「長考」的旗標(§3.5),每場(coinToss)重置。
+  const longThinkUsedRef = useRef(false)
   useEffect(() => {
     if (!engine) return
+    if (spec) return // 觀戰:不跑任何 AI(對局由廣播端推進,這裡只渲染)
     if (g.online) return // online: the opponent is a human, no AI
+    if (engine.phase === 'coinToss') longThinkUsedRef.current = false // fresh match
     if (g.showdownOpen || g.endOpen) return
     let timer: ReturnType<typeof setTimeout> | undefined
+    // 快速配對人機(casualFoe)的擬人節奏(避免「秒下=機器人」破綻,被觀戰時也像人):
+    //   選牌(出牌)要思考 → 1–3.5 秒;15% 機率長考(只在選牌、一場最多一次)→ 6–8 秒。
+    //   放牌不需思考(決策即時算出) → 只加 0–1 秒避免瞬間貼上,不疊加思考時間。
+    // 其餘 AI(主線/一般)維持 850ms。
+    const casual = !!g.casualFoe
+    const rand = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1))
     if (engine.phase === 'pick' && engine.turn !== me) {
+      let delay = 850
+      if (casual) {
+        if (!longThinkUsedRef.current && Math.random() < 0.15) {
+          longThinkUsedRef.current = true
+          delay = rand(6000, 8000) // 一場一次的長考
+        } else {
+          delay = rand(1500, 4000)
+        }
+      }
       timer = setTimeout(() => {
         // The AI may spend its one-shot special before picking (#13). If it
         // does, the engine changes → this effect re-runs (now specialUsed) and
         // the pick fires on the next pass, giving a natural beat between them.
         if (g.aiMaybeSpecial()) return
         g.submitPick(aiPick(engine, engine.turn, g.aiBoss ?? undefined))
-      }, 850)
+      }, delay)
     } else if (engine.phase === 'place') {
       const placer = otherPlayer(engine.pendingPick!.by)
-      if (placer !== me) timer = setTimeout(() => g.placeAt(aiPlace(engine, placer, g.aiBoss ?? undefined)), 850)
+      const delay = casual ? rand(0, 1000) : 850 // 放牌不思考,只加 0–1 秒
+      if (placer !== me) timer = setTimeout(() => g.placeAt(aiPlace(engine, placer, g.aiBoss ?? undefined)), delay)
     }
     return () => timer && clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -384,15 +425,16 @@ function GameBoard() {
   const inPlay = !g.showdownOpen && !g.endOpen && engine.phase !== 'ended'
   // Show the countdown on my turn always; on the opponent's turn only online
   // (single-player AI acts instantly — a flashing counter would be pointless).
-  const timed = !!activePicker && inPlay && (isMyActionTurn || !!g.online)
+  const timed = !!activePicker && inPlay && (isMyActionTurn || !!g.online) && !spec
   const turnDuration = engine.phase === 'place' ? 30 : g.timeLimit
   const turnKey = `${engine.phase}:${engine.turn}:${engine.placementsDone.p1}:${engine.placementsDone.p2}`
   const [secsLeft, setSecsLeft] = useState(turnDuration)
   const showPause = g.online ? inPlay : isMyActionTurn && inPlay
-  const onPauseClick = g.online ? g.togglePauseOnline : () => setPaused((p) => !p)
+  const onPauseClick = g.online ? g.togglePauseOnline : g.toggleLocalPause
   const pausedRef = useRef(false)
   pausedRef.current = isPaused
-  useEffect(() => setPaused(false), [turnKey]) // single-player: fresh turn → resume
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!spec) g.setLocalPause(false) }, [turnKey]) // 單機/快配:換回合自動解除暫停(觀戰不動)
   // 暫停/繼續都用「成功音」,雙方都聽到:online 兩端都由 onlinePause.active 推導 isPaused,
   // 各自的 effect 會觸發;單機則是本地 toggle。用「變化」驅動,不論誰按下都只響一次。
   const prevPausedRef = useRef(isPaused)
@@ -452,6 +494,30 @@ function GameBoard() {
   const oCount = foeSel ? foeSel.total : engine.hands[foe].length
   const oSelected = foeSel ? foeSel.idx : []
 
+  // ---- 觀戰(§推牌):把 picker「已選未放」的牌插回其手牌 lift(否則觀戰看到牌憑空消失),
+  //      並喊「N 張」對話框(雙方都喊——含廣播端自己,以前自己的沒做)。 ----
+  const specPend = spec && engine.pendingPick ? engine.pendingPick : null
+  const specPendIds = specPend ? new Set(specPend.cards.map((c) => c.id)) : null
+  // 下方 = me = p1(廣播端):排序/推牌用串流來的;place 階段把 pending 插回 lift。
+  const meSortMode = spec ? (g.spectateLive?.p1Sort?.mode ?? 'rank') : g.sortMode
+  const meSortDir = spec ? (g.spectateLive?.p1Sort?.dir ?? 'asc') : g.sortDir
+  let meHandCards = engine.hands[me]
+  let meSelected: string[] = spec ? (g.spectateLive?.p1Sel ?? []) : targeting ? [] : g.selected
+  if (spec && specPend?.by === me) {
+    meHandCards = [...engine.hands[me], ...specPend.cards]
+    meSelected = specPend.cards.map((c) => c.id)
+  }
+  const meBubble = spec ? (specPend?.by === me ? specPend.cards.length : g.spectateLive?.p1Sel?.length ?? 0) : 0
+  // 上方 = foe = p2(對手/人機):固定 rank/asc(人機無排序);place 階段插回 pending lift。
+  let foeHandCards = spec ? sortHand(engine.hands[foe], 'rank', 'asc') : []
+  let foeSelIdx: number[] = []
+  let foeBubble = 0
+  if (spec && specPend?.by === foe && specPendIds) {
+    foeHandCards = sortHand([...engine.hands[foe], ...specPend.cards], 'rank', 'asc')
+    foeSelIdx = foeHandCards.map((c, i) => (specPendIds.has(c.id) ? i : -1)).filter((i) => i >= 0)
+    foeBubble = specPend.cards.length
+  }
+
   return (
     <div
       className="game"
@@ -470,7 +536,26 @@ function GameBoard() {
         ['--stage-h' as string]: `${sz.stageH}px`,
       }}
     >
-      <TopBar />
+      {!spec && <TopBar />}
+
+      {/* 玩家端:這局有人觀戰時,選單鈕右邊顯示 👁 數(防作弊提醒,#7)。host 由廣播算、guest 讀
+          liveIndex.spectators(#4)→ 雙人對戰兩邊都看得到;沒人觀戰(watchers=0)不顯示。 */}
+      {!spec && g.broadcastWatchers > 0 && (
+        <div className="game__watch-indicator" title="有人正在觀戰這局">
+          👁 {g.broadcastWatchers}
+        </div>
+      )}
+
+      {/* 觀戰左上 HUD:取代 TopBar 選單鈕的位置(stage 相對,各平台一致,#5)。LIVE + 👁 觀戰數。 */}
+      {spec && (
+        <div className="spec-hud">
+          <span className="spec-hud__live">
+            <span className="spec-hud__dot" aria-hidden="true" />
+            LIVE
+          </span>
+          <span className="spec-hud__eye" title="觀戰人數">👁 {g.spectateWatchers}</span>
+        </div>
+      )}
 
       {timed && (
         <div className={`game__timer${secsLeft <= 10 && !isPaused ? ' game__timer--low' : ''}`}>
@@ -480,7 +565,7 @@ function GameBoard() {
       {/* 暫停中:大字蓋在對手牌區(指示框與計時器之間),半透明 → 仍看得到對手的牌;
           pointer-events:none → 點對手格子的牌能穿透開放大鏡;z 高於牌桌、低於彈窗 (#6)。 */}
       {isPaused && inPlay && <div className="game__paused">暫停中</div>}
-      {showPause && (
+      {showPause && !spec && (
         <button
           type="button"
           className="game__pausebtn"
@@ -501,50 +586,74 @@ function GameBoard() {
         </button>
       )}
 
-      {/* 牌型大小速查 (#5) — 木紋圓鈕,右側控制群「內欄・上」(與金幣列齊)。 */}
-      <button
-        type="button"
-        className="game__helpbtn"
-        onClick={() => { sfx.click(); setHelpOpen(true) }}
-        title="牌型大小"
-        aria-label="牌型大小"
-      >
-        ?
-      </button>
+      {/* 牌型大小速查 (#5) — 木紋圓鈕,右側控制群「內欄・上」(與金幣列齊)。觀戰隱藏。 */}
+      {!spec && (
+        <button
+          type="button"
+          className="game__helpbtn"
+          onClick={() => { sfx.click(); setHelpOpen(true) }}
+          title="牌型大小"
+          aria-label="牌型大小"
+        >
+          ?
+        </button>
+      )}
 
       {/* 排序鈕(花色/大小 + 升降冪)— 移出 flex,絕對定位於 .game,與 pause/? 同座標系,
-          手機/桌機對齊一致。 */}
-      <SortButtons mode={g.sortMode} dir={g.sortDir} onToggleMode={g.toggleSortMode} onToggleDir={g.toggleSortDir} />
+          手機/桌機對齊一致。觀戰隱藏(觀戰不排序)。 */}
+      {!spec && <SortButtons mode={g.sortMode} dir={g.sortDir} onToggleMode={g.toggleSortMode} onToggleDir={g.toggleSortDir} />}
 
       <div
         className="game__foe-avatar"
-        onClick={g.online ? () => { sfx.click(); setFoeCardOpen(true) } : undefined}
-        style={g.online ? { cursor: 'pointer' } : undefined}
+        onClick={
+          spec
+            ? () => { sfx.click(); setSpecCard({ uid: spec.p2.uid, name: seats[foe].name, avatarId: seats[foe].avatarId }) }
+            : g.online || g.casualFoe
+              ? () => { sfx.click(); setFoeCardOpen(true) }
+              : undefined
+        }
+        style={spec || g.online || g.casualFoe ? { cursor: 'pointer' } : undefined}
       >
         <div className={`avatar-wrap${foeActive ? ' avatar-wrap--active' : ''}`}>
           <PlayerAvatar avatarId={seats[foe].avatarId} size={sz.avatar} />
         </div>
         <div style={nameStyle}>{seats[foe].name}</div>
       </div>
-      {foeSel && (foeSel.idx?.length ?? 0) > 0 && (
+      {(spec ? foeBubble > 0 : !!foeSel && (foeSel.idx?.length ?? 0) > 0) && (
         <motion.div
           className="foe-bubble"
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 400, damping: 22 }}
         >
-          {foeSel.idx.length} 張
+          {spec ? foeBubble : foeSel!.idx.length} 張
         </motion.div>
       )}
-      <div className="game__me-avatar">
+      <div
+        className="game__me-avatar"
+        onClick={spec ? () => { sfx.click(); setSpecCard({ uid: spec.p1.uid, name: seats[me].name, avatarId: seats[me].avatarId }) } : undefined}
+        style={spec ? { cursor: 'pointer' } : undefined}
+      >
         <div className={`avatar-wrap${myActive ? ' avatar-wrap--active' : ''}`}>
           <PlayerAvatar avatarId={seats[me].avatarId} size={sz.avatar} />
+          {/* 觀戰:廣播端(下方)「N 張」→ 對齊頭像方框左上角(#3)。 */}
+          {spec && meBubble > 0 && (
+            <div className="spec-bubble" aria-hidden="true">
+              <span>{meBubble} 張</span>
+            </div>
+          )}
         </div>
         <div style={nameStyle}>{seats[me].name}</div>
       </div>
 
       <div className="game__ohand">
-        <OpponentHand count={oCount} selectedIdx={oSelected} cardW={sz.card} maxWidth={sz.handMax} />
+        {spec ? (
+          // 觀戰:上方玩家(對手/人機)手牌全開,固定 rank/asc;place 階段把已選未放的牌插回、lift
+          // (foeHandCards/foeSelIdx 已在上面重建)→ 觀戰看得到對手推了哪幾張、幾張,不會憑空消失(#3)。
+          <OpponentHand count={0} cards={foeHandCards} selectedIdx={foeSelIdx} cardW={sz.card} maxWidth={sz.handMax} />
+        ) : (
+          <OpponentHand count={oCount} selectedIdx={oSelected} cardW={sz.card} maxWidth={sz.handMax} />
+        )}
       </div>
 
       <div className="game__mid">
@@ -559,11 +668,12 @@ function GameBoard() {
               slot={slot}
               index={i}
               me={me}
-              placeable={placeableSlot(i)}
+              placeable={!spec && placeableSlot(i)}
               onPlace={g.placeAt}
               onMagnify={g.openMagnifier}
               cardW={sz.card}
               coinSize={sz.coin}
+              revealAll={!!spec}
             />
           ))}
         </div>
@@ -574,11 +684,11 @@ function GameBoard() {
         <div className="game__sort" />
       </div>
 
-      {(g.statusOverride ?? statusText) && (
+      {(spec ? spectatorStatusText(engine, seats.p1.name, seats.p2.name) : (g.statusOverride ?? statusText)) && (
         // 只在「輪到我動作」(選牌 / 放對手的牌)時讓提示框微微呼吸,提醒玩家該他了;
-        // 對手思考/確認中不呼吸(我沒決定權)。#5
-        <div className={`game__status${myActive && !isPaused ? ' game__status--mine' : ''}`}>
-          {g.statusOverride ?? statusText}
+        // 對手思考/確認中不呼吸(我沒決定權)。觀戰無「我」→ 不呼吸。#5
+        <div className={`game__status${myActive && !isPaused && !spec ? ' game__status--mine' : ''}`}>
+          {spec ? spectatorStatusText(engine, seats.p1.name, seats.p2.name) : (g.statusOverride ?? statusText)}
         </div>
       )}
       {/* online: I confirmed the showdown, waiting for the opponent to confirm too */}
@@ -596,14 +706,16 @@ function GameBoard() {
 
       <div className="game__hand">
         <Hand
-          cards={engine.hands[me]}
-          selected={targeting ? [] : g.selected}
-          sortMode={g.sortMode}
-          sortDir={g.sortDir}
+          // 觀戰(§推牌):下方 = 廣播端(p1)。pick 階段用串流的推牌選取;place 階段把已選未放的牌
+          // 插回 lift(meHandCards/meSelected 已重建)。排序同廣播端 → 和玩家看到的完全一致。
+          cards={spec ? meHandCards : engine.hands[me]}
+          selected={meSelected}
+          sortMode={meSortMode}
+          sortDir={meSortDir}
           // 特殊牌指定(偷天換日/花色)一旦進入 targeting 就不受暫停凍結——否則玩家
           // 在指定過程中按到暫停/切分頁,手牌會變成不可點,只剩「取消」→ 看起來卡死(使用者回報#8)。
-          // 一般選牌(iPick)仍受暫停凍結。
-          interactive={!!targeting || (iPick && !isPaused)}
+          // 一般選牌(iPick)仍受暫停凍結。觀戰:全開、不可點。
+          interactive={!spec && (!!targeting || (iPick && !isPaused))}
           onToggle={targeting ? g.activateSpecialTarget : g.toggleCard}
           targetableIds={targetableIds}
           cardW={sz.card}
@@ -614,7 +726,7 @@ function GameBoard() {
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on
           hover/tap explaining it's used up (rather than a silent no-op). */}
-      {showSpecialBtn && (
+      {showSpecialBtn && !spec && (
         <>
           {spentTip && <div className="game__special-tip">本場特殊牌已使用完畢</div>}
           <button
@@ -640,7 +752,7 @@ function GameBoard() {
         </>
       )}
 
-      {iPick && !targeting && (
+      {iPick && !targeting && !spec && (
         <div className="game__action">
           <Button size="sm" disabled={g.selected.length === 0 || isPaused} onClick={g.openConfirm}>
             送出 {g.selected.length}
@@ -648,35 +760,74 @@ function GameBoard() {
         </div>
       )}
 
-      {g.special && (
+      {g.special && !spec && (
         <>
           <SpecialTray />
           <SpecialInfoModal />
         </>
       )}
 
-      <StickerProto />
+      {spec ? (
+        <>
+          {/* 觀戰者名字:直接放在原本「特殊牌」鈕的位置、用該鈕的對齊(左靠),不加 label(#1)。 */}
+          <div className="spec-watcher" title={g.spectateMyName}>{g.spectateMyName || '—'}</div>
+          {/* 發訊息鈕:放在原本「貼圖」鈕的位置(DanmakuBar 內用 game__emote-trigger 定位)。 */}
+          <DanmakuBar />
+        </>
+      ) : (
+        <StickerProto />
+      )}
+
+      {/* 觀戰彈幕顯示層(右側中間 7 行 5 秒上推,Phase C)+ 觀戰吃到雙方貼圖(#6)。 */}
+      {spec && <DanmakuLayer feed={g.spectateDanmaku} />}
+      {spec && <SpecEmoteLayer />}
+
+      {/* 廣播端(玩家):看觀眾彈幕/進出提示(開關預設開,#8)。 */}
+      {!spec && <BroadcasterDanmaku />}
+
+      {/* 觀戰「離開觀戰」鈕:取代送出鈕的位置(stage 相對,各平台一致,#5),樣式同送出、放大 30%(#2)。 */}
+      {spec && (
+        <div className="spec-leave">
+          <Button size="md" onClick={() => { sfx.click(); closeSpectate() }}>離開觀戰</Button>
+        </div>
+      )}
 
       <HandRankModal open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {foeCardOpen && (
         <PlayerInfoCard
-          uid={foeUid}
+          uid={foeUid ?? g.casualFoe?.botId ?? null}
           fallback={{ name: seats[foe].name, avatarId: seats[foe].avatarId }}
           onClose={() => setFoeCardOpen(false)}
         />
       )}
 
+      {/* 觀戰(#4):點頭像開的玩家資訊卡(雙方皆可)。 */}
+      {specCard && (
+        <PlayerInfoCard
+          uid={specCard.uid}
+          fallback={{ name: specCard.name, avatarId: specCard.avatarId }}
+          onClose={() => setSpecCard(null)}
+        />
+      )}
+
       <ConfirmSubmit data={g.confirm} onConfirm={g.confirmPick} onCancel={g.cancelConfirm} />
       <ShowdownModal
-        open={g.showdownOpen}
+        open={spec ? engine.phase === 'showdown' : g.showdownOpen}
         showdown={engine.lastShowdown}
         slot={engine.lastShowdown ? engine.slots[engine.lastShowdown.slot] : null}
         me={me}
-        onClose={g.dismissShowdown}
+        onClose={spec ? () => {} : g.dismissShowdown}
+        names={spec ? { p1: seats.p1.name, p2: seats.p2.name } : null}
       />
-      <MagnifierModal target={g.magnifier} engine={engine} me={me} onClose={g.closeMagnifier} />
-      {inCampaign ? (
+      <MagnifierModal
+        target={g.magnifier}
+        engine={engine}
+        me={me}
+        onClose={g.closeMagnifier}
+        names={spec ? { p1: seats.p1.name, p2: seats.p2.name } : null}
+      />
+      {spec ? null : inCampaign ? (
         <CampaignEndModal open={g.endOpen} winner={engine.winner} me={me} />
       ) : (
         <EndModal
@@ -691,6 +842,7 @@ function GameBoard() {
           onRematch={g.online ? g.agreeRematch : g.nextGame}
           onLeave={() => {
             if (g.online) g.leaveOnline()
+            else g.reset() // 本地(含快配人機):釋放人機租借 + 清本地對局檔
             go('menu')
           }}
         />

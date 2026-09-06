@@ -1,5 +1,5 @@
 import { get, onValue, onDisconnect, ref, remove, runTransaction, serverTimestamp, set as dbSet } from 'firebase/database'
-import { getDb } from './firebase'
+import { getDb, waitForConnected, withTimeout } from './firebase'
 import { useNetStore } from '../state/netStore'
 import type { RoomType } from './room'
 
@@ -16,7 +16,10 @@ import type { RoomType } from './room'
  * the claimed peer's entry; the peer sees it and joins.
  */
 
-const TIMEOUT_MS = 30_000
+/** Bot fallback fires at a RANDOM point in 16–23s (never before 16s), so pairing
+ *  doesn't always land at an obvious fixed time. Humans can still claim/insert any
+ *  time before then (0–15s is effectively human-only; 16–23s is human-or-bot). */
+const botFallbackDelay = () => 16_000 + Math.floor(Math.random() * 7_000) // [16000, 22999]
 const FREE_MATCH_TIME_LIMIT = 99 // fixed (使用者定案:自由匹配不選秒數)
 
 interface QueueEntry {
@@ -61,9 +64,26 @@ export function joinMatchmaking(
   const leaveQueue = () => void remove(myRef).catch(() => {})
 
   // 1) Enqueue, and auto-remove if this tab dies while still searching.
-  void dbSet(myRef, { uid: me.uid, name: me.name, avatar: me.avatar, ts: serverTimestamp() })
-    .then(() => onDisconnect(myRef).remove().catch(() => {}))
-    .catch(() => {})
+  //    ⚠️ 剛重開的分頁常繼承「半死」socket:寫入會「無限掛住」(不 resolve 也不 reject)→ 我的
+  //    entry 永遠沒進佇列 → 對手找不到我(真人也配不到)。所以:先強制重連(waitForConnected),
+  //    再用「逾時 + 重試」寫入,每次重試前重新確保連線。寫成功才 arm onDisconnect。
+  void (async () => {
+    const entry = { uid: me.uid, name: me.name, avatar: me.avatar, ts: serverTimestamp() }
+    for (let i = 0; i < 3 && !done; i++) {
+      await waitForConnected()
+      const ok = await withTimeout(
+        dbSet(myRef, entry).then(() => true, () => false),
+        4000,
+        false, // 寫入掛住 → 當作失敗,下一輪先重連再試
+      )
+      if (ok) {
+        onDisconnect(myRef).remove().catch(() => {})
+        return
+      }
+      // 失敗可能是 auth token 還在附掛(重開分頁還原登入中)→ 隔一下再試,讓它 settle。
+      await new Promise((r) => setTimeout(r, 1200))
+    }
+  })()
 
   // 2) As the CLAIMED side: when a claimer writes a room code onto my entry, join it.
   unsubMine = onValue(myRef, (snap) => {
@@ -129,14 +149,14 @@ export function joinMatchmaking(
   // Re-scan whenever the queue changes (someone new joined / freed up).
   unsubList = onValue(listRef, () => void tryClaim(), () => {})
 
-  // 4) Timeout → fall back to a bot.
+  // 4) Bot fallback at a random 16–23s (human claim above still wins if one lands first).
   timer = setTimeout(() => {
     if (done) return
     done = true
     stop()
     leaveQueue()
     handlers.onTimeout()
-  }, TIMEOUT_MS)
+  }, botFallbackDelay())
 
   // Cancel handle.
   return () => {

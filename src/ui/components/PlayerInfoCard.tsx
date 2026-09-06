@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchCard, fetchIsOnline, type PlayerCard } from '../../platform/cards'
+import { isBotId, fetchBotCard } from '../../net/bots'
 import { getSpecialCard, type SpecialCardId } from '../../game/specialCards'
 import { getAchievement, type AchTier } from '../../game/achievements'
 import Modal from './Modal'
@@ -49,12 +50,22 @@ export default function PlayerInfoCard({
     }
     let alive = true
     setLoading(true)
-    void Promise.all([fetchCard(uid), fetchIsOnline(uid)]).then(([c, on]) => {
-      if (!alive) return
-      setCard(c)
-      setOnline(on)
-      setLoading(false)
-    })
+    if (isBotId(uid)) {
+      // 固定人機:讀 bots/{botId}(戰績+假的牌組/成就展示),永遠顯示線上。
+      void fetchBotCard(uid).then((c) => {
+        if (!alive) return
+        setCard(c as PlayerCard | null)
+        setOnline(true)
+        setLoading(false)
+      })
+    } else {
+      void Promise.all([fetchCard(uid), fetchIsOnline(uid)]).then(([c, on]) => {
+        if (!alive) return
+        setCard(c)
+        setOnline(on)
+        setLoading(false)
+      })
+    }
     return () => {
       alive = false
     }

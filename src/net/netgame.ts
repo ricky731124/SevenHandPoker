@@ -20,9 +20,13 @@ import {
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
 import { usePlatformStore } from '../state/platformStore'
-import { useGameStore, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
+import { useGameStore, specExtrasOf, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
+import { startBroadcast, type Broadcaster } from './broadcast'
+import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
+import { fetchCard } from '../platform/cards'
 import { applySuit, applySwap, markSpecialUsed, peekNextDraw } from '../game/state'
+import type { GameState } from '../game/state'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import type { Card } from '../game/cards'
 
@@ -147,11 +151,67 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     saveHostSnapshot(code, snapOf(s0))
   }
 
+  // §4.2/§5.4 spectator broadcast (真人局): the host also mirrors a全開 spec view and
+  // owns this room's `liveIndex` card. Created lazily on the first DEALT (playing)
+  // frame — not during the coin toss (host engine exists early) — and re-created on
+  // a rematch (same room code overwrites the spent card). Driven off the same engine
+  // ticks as writeGame; spec is only actually written when a watcher is present.
+  let bc: Broadcaster | null = null
+  let bcEnded = false
+  const startLive = (engine: GameState) => {
+    bc?.stop()
+    const room = useNetStore.getState().room
+    const hostMeta = room?.players?.host
+    const guestMeta = room?.players?.guest
+    const ps = usePlatformStore.getState()
+    const p1: LivePlayer = {
+      name: hostMeta?.name || ps.displayName || '玩家',
+      avatar: hostMeta?.avatarId || ps.profile?.equipped?.avatar || 'cat',
+      uid: hostMeta?.uid ?? ps.uid ?? null,
+      wins: ps.profile?.stats?.pvpWins ?? 0,
+      games: ps.profile?.stats?.pvpGames ?? 0,
+    }
+    const p2: LivePlayer = {
+      name: guestMeta?.name || '玩家',
+      avatar: guestMeta?.avatarId || 'cat',
+      uid: guestMeta?.uid ?? null,
+      wins: 0,
+      games: 0,
+    }
+    bc = startBroadcast({ code, p1, p2, initial: engine, onWatchers: (n) => useGameStore.setState({ broadcastWatchers: n }) })
+    bcEnded = false
+    useGameStore.setState({ broadcastCode: code, broadcastWatchers: 0 }) // #8:host 也是廣播端;#7:觀戰人數
+    const guestUid = guestMeta?.uid
+    if (guestUid) void fetchCard(guestUid).then((c) => c && patchLivePlayerRecord(code, 'p2', c.pvp.wins, c.pvp.games))
+  }
+  const liveTick = (status: string, engine: GameState) => {
+    if (status !== 'playing') return
+    if (!bc || (bcEnded && engine.phase !== 'ended')) startLive(engine) // first deal, or a fresh rematch
+    bc?.onEngine(engine)
+    if (engine.phase === 'ended' && engine.winner && !bcEnded) {
+      bc?.end(engine.winner)
+      bcEnded = true
+    }
+  }
+  if (s0.engine) liveTick(s0.status, s0.engine)
+
   const unsubStore = useGameStore.subscribe((s, prev) => {
     if (s.online?.role !== 'host' || !s.engine) return
     if (s.engine !== prev.engine || s.foeSelForGuest !== prev.foeSelForGuest) {
       writeGame(code, serializeForGuest(s.engine, s.foeSelForGuest))
       saveHostSnapshot(code, snapOf(s)) // persist locally so a reload can restore
+    }
+    if (s.engine !== prev.engine || s.status !== prev.status) liveTick(s.status, s.engine)
+    // §推牌/特殊牌:host 的推牌選取/排序/特殊牌通知變動 → 鏡射給觀戰(spec 只在有觀眾時才真寫)。
+    if (
+      s.selected !== prev.selected ||
+      s.sortMode !== prev.sortMode ||
+      s.sortDir !== prev.sortDir ||
+      s.specFx !== prev.specFx ||
+      s.onlinePause !== prev.onlinePause ||
+      s.specEmote !== prev.specEmote
+    ) {
+      bc?.onExtras(specExtrasOf(s))
     }
   })
 
@@ -182,7 +242,8 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           ? applySuit(e, 'p2', intent.targetId ?? '', def.suit)
           : applySwap(e, 'p2', intent.targetId ?? '')
         if (next === e) return // illegal target
-        useGameStore.setState({ engine: next }) // → subscription writes the guest view
+        // §特殊牌:記通知(by:p2 guest)→ subscribe 會把 specFx 廣播給觀戰;engine 變動也鏡射新牌面。
+        useGameStore.setState({ engine: next, specFx: { by: 'p2', card: intent.card, n: Date.now() } })
         useGameStore.getState().flashStatus('對方似乎使用了特殊牌') // host is the foe
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
@@ -192,7 +253,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           cards: cleanCards(cards),
           id: Date.now(),
         })
-        useGameStore.setState({ engine: markSpecialUsed(e, 'p2') })
+        useGameStore.setState({ engine: markSpecialUsed(e, 'p2'), specFx: { by: 'p2', card: intent.card, n: Date.now() } })
         useGameStore.getState().flashStatus(intent.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
       }
     }
@@ -251,6 +312,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     unsubReady()
     unsubPause()
     unsubEmote()
+    bc?.stop() // §5.4 host detach → tear down the Live/spectate nodes (ended cards stay 24h)
   }
 }
 
@@ -344,6 +406,13 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       useGameStore.getState().showSpecialInfo({ kind: info.kind, cards: info.cards })
     }
   })
+  // guest 也是這場的一員:設 broadcastCode = 房號 → ①選單有「觀眾彈幕」開關 ②BroadcasterDanmaku
+  // 訂 spectate/{房號}/danmaku 收觀眾彈幕(觀戰彈幕推在房號的 spectate 樹,host/guest 同一棵,#guest)。
+  useGameStore.setState({ broadcastCode: code })
+  // #4:guest 端也要知道被幾個人觀戰(只 host 廣播算得到,guest 讀 liveIndex.spectators)→ 顯示 👁 數。
+  const unsubWatchers = onValue(ref(getDb(), `liveIndex/${code}/spectators`), (snap) => {
+    useGameStore.setState({ broadcastWatchers: (snap.val() as number | null) ?? 0 })
+  })
   return () => {
     unsubGame()
     unsubLive()
@@ -353,6 +422,8 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
     unsubEmote()
     unsubFx()
     unsubInfo()
+    unsubWatchers()
+    useGameStore.setState({ broadcastWatchers: 0, broadcastCode: null })
   }
 }
 
@@ -399,7 +470,7 @@ export async function reconcileAbandonedMatch(): Promise<void> {
   clearOpenMatch()
   if (isMatchSettled(code)) return
   markMatchSettled(code)
-  await usePlatformStore.getState().recordMatchResult('pvp', false)
+  await usePlatformStore.getState().recordMatchResult('pvp', false, { silentDaily: true }) // 補判不發每日獎/toast
 }
 
 export async function tryReconnect(): Promise<boolean> {

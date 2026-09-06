@@ -22,18 +22,18 @@ export default function TopBar() {
   const forfeit = useCampaignStore((s) => s.forfeit)
   const exitCampaign = useCampaignStore((s) => s.exit)
   const clearedAt = usePlatformStore((s) => s.profile?.progress.stageClearedAt)
-  // Online mid-match (已開打、未結束) → leaving forfeits it as a loss.
-  const onlineLoss = useGameStore(
-    (s) =>
-      !!s.online &&
-      !!s.engine &&
-      s.engine.phase !== 'ended' &&
-      (s.engine.placementsDone.p1 + s.engine.placementsDone.p2 > 0 || !!s.engine.pendingPick),
-  )
+  // 「已發牌」= status 進到 playing(過了擲硬幣)且未結束 → 中途離開一律判該場敗。
+  // ⚠️ 用 status:host 在擲硬幣階段 engine 已存在,只看 engine 會在發牌前就判敗。
+  const dealt = useGameStore((s) => s.status === 'playing' && !!s.engine && s.engine.phase !== 'ended')
+  // #8:正在被觀戰(有廣播 code)才顯示「觀眾彈幕」開關;預設開。
+  const broadcastCode = useGameStore((s) => s.broadcastCode)
+  const showDanmaku = useGameStore((s) => s.showSpectatorDanmaku)
+  const toggleDanmaku = useGameStore((s) => s.toggleSpectatorDanmaku)
 
   const inCampaign = !!series
   const curCleared = series ? !!clearedAt?.[series.subId] : false
-  const leaveIsLoss = (inCampaign && !curCleared) || onlineLoss
+  // 已通關的主線「重打」不判敗;其餘(主線未通關/打電腦/打真人/快速配對)發牌後離開都判敗。
+  const leaveIsLoss = dealt && !(inCampaign && curCleared)
 
   const close = () => {
     setOpen(false)
@@ -41,18 +41,23 @@ export default function TopBar() {
   }
 
   const doLeave = () => {
+    const gs = useGameStore.getState()
+    const isDealt = gs.status === 'playing' && !!gs.engine && gs.engine.phase !== 'ended'
     if (inCampaign) {
-      // forfeit records a loss (only meaningful when not yet cleared); a cleared
-      // replay just exits — both land on the stage map.
-      if (leaveIsLoss) forfeit()
+      // 未通關 + 已發牌 → forfeit(series + solo 敗);已通關重打或未發牌 → 只離開。
+      if (isDealt && !curCleared) forfeit()
       else exitCampaign()
       return
     }
-    const gs = useGameStore.getState()
     if (gs.online) {
-      gs.forfeitOnline(false) // 主動離開 → 判敗(guarded: 開局前/已結束不計)
+      gs.forfeitOnline(false) // 主動離開 → 判敗(guarded: 未發牌/已結束不計);對手會判勝
       gs.leaveOnline()
+      go('menu')
+      return
     }
+    // 本地非主線(建立房打電腦 / 快速配對人機):發牌後離開 → forfeitLocal 判敗。
+    if (isDealt) gs.forfeitLocal()
+    gs.reset()
     go('menu')
   }
 
@@ -105,6 +110,14 @@ export default function TopBar() {
                 {settings.sfx ? '開' : '關'}
               </button>
             </div>
+            {broadcastCode && (
+              <div className="settings__row">
+                <label>觀眾彈幕</label>
+                <button className={`settings__chip${showDanmaku ? ' settings__chip--on' : ''}`} onClick={() => { toggleDanmaku(); sfx.click() }}>
+                  {showDanmaku ? '開' : '關'}
+                </button>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
               <Button variant="secondary" onClick={() => (leaveIsLoss ? setConfirmLeave(true) : doLeave())}>
                 離開遊戲

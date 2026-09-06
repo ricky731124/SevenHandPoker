@@ -1,0 +1,45 @@
+/* 彈幕層(§4.6 / #4):右側中間(對手「N 張」對話框下方)、最多 7 行、往上推堆疊。半透明深底
+   淺字、圓角小條(§7)。z 很高「永遠在最上面」,但 pointer-events:none → 可穿透點到底下按鈕。 */
+.danmaku-layer {
+  position: absolute;
+  top: clamp(120px, 0.335 * var(--stage-h, 100vh), 222px); /* 只比原本往上一些些(#2),仍在對手「N 張」下方 */
+  right: clamp(8px, 2vw, 22px);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  max-width: min(56%, 340px);
+  pointer-events: none;
+}
+
+.danmaku-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 11px;
+  border-radius: var(--r-sm, 8px);
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: #f6efe0;
+  font-size: clamp(12px, 1.9vw, 15px); /* 改回原本大小(#2) */
+  line-height: 1.25;
+}
+.danmaku-by {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: #ffdf9e;
+}
+.danmaku-text {
+  min-width: 0;
+  word-break: break-word;
+}
+/* 進出場提示:灰字、無名字前綴,和一般彈幕區隔(#4/#8)。 */
+.danmaku-line--sys {
+  background: rgba(0, 0, 0, 0.48);
+  font-style: italic;
+}
+.danmaku-line--sys .danmaku-text {
+  color: #ffe1a6;
+}

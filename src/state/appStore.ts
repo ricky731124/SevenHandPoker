@@ -43,6 +43,9 @@ interface AppState {
   /** Room type chosen for 自由匹配; non-null = the matchmaking OVERLAY is showing
    *  (rendered on top of the menu, not a separate screen). */
   matchType: 'normal' | 'special' | null
+  /** Live code being spectated; non-null = the SpectatorGame overlay is showing
+   *  (full-open read-only table on top of the menu). §4.3 */
+  spectateCode: string | null
   /** A room code from a /?room= deep link, held until the identity gate resolves. */
   pendingRoom: string | null
   /** Room type of a deep-linked room (from ?type=), shown before joining. */
@@ -63,6 +66,9 @@ interface AppState {
   openMatchmaking: (type: 'normal' | 'special') => void
   /** Close the free-match overlay (manual 取消 → back to the menu underneath). */
   closeMatchmaking: () => void
+  /** Open/close the spectate overlay for a live code (§4.3). */
+  openSpectate: (code: string) => void
+  closeSpectate: () => void
   setPendingRoom: (code: string | null, type?: 'normal' | 'special' | null, time?: number | null) => void
   updateSettings: (patch: Partial<Settings>) => void
   askUpgrade: () => void
@@ -80,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: loadSettings(),
   pendingGame: null,
   matchType: null,
+  spectateCode: null,
   pendingRoom: null,
   pendingRoomType: null,
   pendingRoomTime: null,
@@ -90,6 +97,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   launchGame: (cfg) => set({ pendingGame: cfg, screen: 'game' }),
   openMatchmaking: (type) => set({ matchType: type }),
   closeMatchmaking: () => set({ matchType: null }),
+  openSpectate: (code) => set({ spectateCode: code }),
+  closeSpectate: () => set({ spectateCode: null }),
   setPendingRoom: (code, type = null, time = null) =>
     set({ pendingRoom: code, pendingRoomType: type, pendingRoomTime: time }),
   askUpgrade: () => set({ upgradePrompt: true }),
