@@ -1,9 +1,10 @@
 /* Concurrency readout, pinned bottom-right over everything (shown to everyone). */
 .online-count {
   position: fixed;
-  /* 對齊 iPhone 瀏海/圓角 safe-area,與左上/右上按鈕列一致。env() 在無瀏海裝置為 0 */
-  right: max(10px, env(safe-area-inset-right));
-  bottom: max(10px, env(safe-area-inset-bottom));
+  /* 對齊主畫面右上按鈕列(.acctbar-right)/LiveBoard 的手機瀏海手法:max(14px, env * 0.8)。
+     原本全吃 1.0×/10px、比按鈕列更貼邊,現統一 0.8×/14px。env() 在無瀏海裝置為 0。 */
+  right: max(14px, calc(env(safe-area-inset-right) * 0.8));
+  bottom: max(14px, calc(env(safe-area-inset-bottom) * 0.8));
   z-index: 60;
   padding: 7px 15px;
   border-radius: 999px;

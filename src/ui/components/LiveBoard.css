@@ -2,9 +2,10 @@
 
 .liveboard {
   position: absolute;
-  /* 右邊界與「在線人數 / 右上按鈕列」對齊(所有模式,非只手機):base 對齊在線人數的
-     max(10px, env-right);桌機拉到 clamp(24px,4vw,80px)(#3)。 */
-  right: max(10px, env(safe-area-inset-right));
+  /* 右邊界對齊主畫面右上按鈕列(.acctbar-right)的手機瀏海手法:max(14px, env-right * 0.8)。
+     之前 LiveBoard 用 max(10px, env-right) 全吃 1.0× → 比按鈕列更貼瀏海、更往中間,沒對齊。
+     改 0.8× 後與右上按鈕齊,順帶少往中間 ~9px、和按鈕群更有餘裕。桌機另見 clamp(下方 media)。 */
+  right: max(14px, calc(env(safe-area-inset-right) * 0.8));
   top: 106px; /* 往上一點,短螢幕(橫向手機)才不會撞到右下在線人數(#3) */
   z-index: 6;
   width: min(284px, 48vw); /* 略放寬讓名字容得下 6 個中文字(#1) */
@@ -12,6 +13,12 @@
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
+  /* 等比縮小整塊(iOS/安卓 × 網頁/全螢幕 都一致):由右上角縮 → 右邊界(對齊在線人數/瀏海)
+     不動、只往中間收,和置中按鈕群拉開間距、增加各機型容錯。用最壞的 iOS 安全區(~44px)反推,
+     安卓(≈0)自動更寬鬆,不必各別調。裡面文字/頭像/箭頭一起等比縮(同桌機 scale 1.2 的做法)。
+     窄機(mini/SE)再多縮一階見 @max-width:812;桌機放大見 @min-width:1024。 */
+  transform: scale(0.82);
+  transform-origin: top right;
 }
 @media (min-width: 1024px) {
   .liveboard {
@@ -273,10 +280,11 @@
   color: var(--parch-muted, #8a745a);
 }
 
-/* 窄螢幕(直式/小視窗):再收窄一點避免破版。右邊界沿用 base 的 max(10px, env-right)。 */
-@media (max-width: 640px) {
+/* 窄機橫向(mini 812 / SE 667 …)與小視窗:base 的 0.82 對這些寬度仍偏擠,再多縮一階。
+   只覆蓋 transform(origin 沿用 base 的 top right,右邊界不動);寬度不再另外收,全交給等比縮,
+   避免「縮寬 + 縮 scale」疊加把卡片壓太小。桌機(≥1024)有自己的 scale 1.2,不受影響。 */
+@media (max-width: 812px) {
   .liveboard {
-    width: min(240px, 62vw);
-    top: 96px;
+    transform: scale(0.74);
   }
 }
