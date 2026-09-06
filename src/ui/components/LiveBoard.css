@@ -6,7 +6,10 @@
      之前 LiveBoard 用 max(10px, env-right) 全吃 1.0× → 比按鈕列更貼瀏海、更往中間,沒對齊。
      改 0.8× 後與右上按鈕齊,順帶少往中間 ~9px、和按鈕群更有餘裕。桌機另見 clamp(下方 media)。 */
   right: max(14px, calc(env(safe-area-inset-right) * 0.8));
-  top: 106px; /* 往上一點,短螢幕(橫向手機)才不會撞到右下在線人數(#3) */
+  /* top 依真實可見高度(--vvh,同 .stage 座標系)自適應:網頁版(iOS/安卓)瀏覽器列吃掉高度時
+     卡片自動上移,下緣才不撞貼底的在線人數;全螢幕(--vvh 滿)維持 106。夾在 62(清右上按鈕列
+     下緣 ~55)~106 之間。252 = 卡片視覺高 ~197 + 在線人數區 ~46 + 間距;narrow(≤812)卡更矮更寬鬆。 */
+  top: clamp(62px, calc(var(--vvh, 100dvh) - 252px), 106px);
   z-index: 6;
   width: min(284px, 48vw); /* 略放寬讓名字容得下 6 個中文字(#1) */
   display: flex;
