@@ -2,6 +2,7 @@ import type { GameState, PlayerId } from '../game/state'
 import type { BossRuntime } from '../game/bossAI'
 import type { SpecialCardId } from '../game/specialCards'
 import type { SeriesState } from '../game/campaign'
+import type { Move } from '../game/replay'
 
 /**
  * 本地對局（主線 / 建立房打電腦 / 快速配對遇人機）的存檔（見 docs/SPECTATE-REPLAY-SPEC.md §3.7）。
@@ -29,6 +30,8 @@ export interface LocalSnapshot {
   aiLoadout: SpecialCardId[]
   aiBoss: BossRuntime | null
   casualFoe: { name: string; avatarId: string; botId?: string } | null
+  /** §6 賽事精華:重整續玩要保留棋譜,打完才有完整回放(重整前的動作不遺失)。 */
+  moveLog?: Move[]
 }
 
 /** localStorage marker：關分頁後補判用（不含完整 engine，只留補判所需）。 */

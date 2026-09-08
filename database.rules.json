@@ -74,6 +74,22 @@
         ".read": true,
         ".write": "auth != null"
       }
+    },
+    "replays": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['seed', 'moves'])"
+      }
+    },
+    "userReplays": {
+      "$uid": {
+        ".read": true,
+        "$id": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['seed', 'moves'])"
+        }
+      }
     }
   }
 }

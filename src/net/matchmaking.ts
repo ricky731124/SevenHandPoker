@@ -132,7 +132,7 @@ export function joinMatchmaking(
       done = true
       stop()
       try {
-        await useNetStore.getState().create(roomType, FREE_MATCH_TIME_LIMIT)
+        await useNetStore.getState().create(roomType, FREE_MATCH_TIME_LIMIT, 'match') // §6 快速配對來源
         const code = useNetStore.getState().code
         if (!code) throw new Error('no code')
         await dbSet(ref(db, `matchmaking/${roomType}/${target.uid}/room`), code)

@@ -151,6 +151,7 @@
 
 /* --- 單張卡 --- */
 .livecard {
+  position: relative; /* 錨定右上角的結束時間(絕對定位,不撐高卡片) */
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -206,6 +207,24 @@
   font-weight: 800;
   color: var(--wood-2, #8a5a2b);
   line-height: 1;
+}
+/* 已結束卡右上:結束時間。兩行(日期/時間)、絕對定位在卡片右上角 → 放大到 11px 也不撐高卡片
+   (卡片高度固定、手機網頁版卡死不能動)。 */
+.livecard__ended-time {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  font-size: 11px;
+  line-height: 1.12;
+  font-weight: 700;
+  color: var(--parch-muted, #8a745a);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* 左右留白 = 讓開圖內箭頭,頭像不貼邊(#3) */

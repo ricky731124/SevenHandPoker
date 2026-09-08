@@ -1,0 +1,13 @@
+/* 賽事回放(§6.4)。牌桌本體 = 觀戰的 GameBoard;控制在 ReplayControls(stage 相對)。
+   這裡只留全螢幕外殼。設計 token 見 §7。 */
+
+.replay {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* 同觀戰:蓋住主畫面、低於 Toast */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 0%, var(--felt-glow, #7a1f24) 0%, var(--felt-mid, #5c161b) 42%, var(--felt-deep, #3d0e12) 100%);
+  overflow: hidden;
+}

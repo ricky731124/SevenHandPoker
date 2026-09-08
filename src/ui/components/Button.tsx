@@ -124,6 +124,16 @@ export function IconMegaphone() {
     </svg>
   )
 }
+/** Monochrome film strip (賽事精華/回放). Inherits the button's wood-brown color. */
+export function IconFilm() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M7.5 4.5v15M16.5 4.5v15" />
+      <path d="M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21" strokeWidth="1.6" />
+    </svg>
+  )
+}
 /** Monochrome calendar (每日任務). Inherits the button's wood-brown color. */
 export function IconCalendar() {
   return (

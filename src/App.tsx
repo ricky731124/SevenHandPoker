@@ -19,6 +19,7 @@ import CampaignMap from './ui/screens/CampaignMap'
 import CampaignStages from './ui/screens/CampaignStages'
 import Matchmaking from './ui/screens/Matchmaking'
 import SpectatorGame from './ui/screens/SpectatorGame'
+import ReplayViewer from './ui/screens/ReplayViewer'
 import TableBackground from './ui/components/TableBackground'
 import Toast from './ui/components/Toast'
 import AchievementToast from './ui/components/AchievementToast'
@@ -62,6 +63,7 @@ export default function App() {
   const screen = useAppStore((s) => s.screen)
   const matchType = useAppStore((s) => s.matchType)
   const spectateCode = useAppStore((s) => s.spectateCode)
+  const replayData = useAppStore((s) => s.replayData)
   const Current = screens[screen]
   const uid = usePlatformStore((s) => s.uid)
 
@@ -118,6 +120,7 @@ export default function App() {
 
       {matchType && <Matchmaking />}
       {spectateCode && <SpectatorGame />}
+      {replayData && <ReplayViewer />}
       <Toast />
       <AchievementToast />
       <UpgradePrompt />
@@ -128,7 +131,7 @@ export default function App() {
       <InAppBrowserGate />
       <OrientationTip />
       {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
-      {screen === 'menu' && !spectateCode && <OnlineCount />}
+      {screen === 'menu' && !spectateCode && !replayData && <OnlineCount />}
     </>
   )
 }

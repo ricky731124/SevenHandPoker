@@ -45,6 +45,8 @@ export interface Room {
   roomType?: RoomType
   /** Host-chosen per-turn seconds; absent ⇒ default. */
   timeLimit?: number
+  /** 房間來源:'match'=快速配對(系統配)、'friend'=開房找朋友;absent ⇒ 'friend'(舊房)。§6 回放配對方式用。 */
+  origin?: 'match' | 'friend'
   players: { host: PlayerPresence; guest?: PlayerPresence }
   /** set to the role that intentionally left ("離開遊戲") → the other side stops
    *  waiting to reconnect and shows "opponent left". Distinct from a mere drop. */
@@ -119,6 +121,7 @@ export async function createRoom(
   hostUid: string | null = null,
   roomType: RoomType = 'normal',
   timeLimit = 50,
+  origin: 'match' | 'friend' = 'friend',
 ): Promise<{ code: string }> {
   const me = getClientId()
   void sweepStaleRooms() // reap dead rooms opportunistically; don't await
@@ -133,6 +136,7 @@ export async function createRoom(
         hostUid: hostUid ?? null,
         roomType,
         timeLimit,
+        origin,
         guestId: null,
         players: { host: { connected: true, lastSeen: serverTimestamp() as unknown as number } },
       }

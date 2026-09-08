@@ -5,7 +5,8 @@ import { usePlatformStore } from '../../state/platformStore'
 import { isUsernameTaken } from '../../platform/profile'
 import { validateUsername, validatePassword, validateDisplayName, clampDisplayName, DISPLAY_NAME_HINT } from '../../platform/auth'
 import { useToastStore } from '../../state/toastStore'
-import Button, { IconShop, IconCalendar, IconMegaphone } from './Button'
+import Button, { IconShop, IconCalendar, IconMegaphone, IconFilm } from './Button'
+import HighlightList from '../screens/HighlightList'
 import Modal from './Modal'
 import JoinConfirm from './JoinConfirm'
 import Shop from './Shop'
@@ -89,6 +90,7 @@ export default function AccountButton() {
   // Accordion: which dated entry is open (single-open; -1 = all collapsed).
   const [announceIdx, setAnnounceIdx] = useState(0)
   const [dailyOpen, setDailyOpen] = useState(false)
+  const [highlightsOpen, setHighlightsOpen] = useState(false)
   const [fromGate, setFromGate] = useState(false)
   const [joinFlow, setJoinFlow] = useState(false)
   // Whether the chooser shows 訪客 (deep-link / first-launch) or not (the menu
@@ -279,6 +281,19 @@ export default function AccountButton() {
         >
           每日任務
         </Button>
+
+        {/* 賽事回放(§6):置於每日任務下方,膠捲 icon。點開 → 精華/我的 兩頁籤清單 → 選一場看回放。 */}
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<IconFilm />}
+          onClick={() => {
+            sfx.click()
+            setHighlightsOpen(true)
+          }}
+        >
+          賽事回放
+        </Button>
       </div>
 
       {/* Top-right: ? → 商城 → 登出 (設定 已併入個人化設置的頁籤). */}
@@ -337,6 +352,7 @@ export default function AccountButton() {
 
       <Shop open={shopOpen} onClose={() => setShopOpen(false)} />
       <DailyTasks open={dailyOpen} onClose={() => setDailyOpen(false)} />
+      <HighlightList open={highlightsOpen} onClose={() => setHighlightsOpen(false)} />
 
       {/* 公告彈窗 — 手風琴:日期項目愈新愈上、開一關一、進來預設展開第一筆;
           最下方「特別感謝」固定展開,用於維護例程/相關公告。 */}

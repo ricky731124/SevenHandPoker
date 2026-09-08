@@ -33,10 +33,26 @@ function LiveCard({ entry, myUid }: { entry: LiveEntry; myUid: string | null }) 
         ) : (
           <span className="livecard__ended-tag">已結束</span>
         )}
-        {live && (
+        {live ? (
           <span className="livecard__watchers" title="觀戰人數">
             👁 {entry.spectators ?? 0}
           </span>
+        ) : (
+          // 已結束卡右上:結束時間(讓別人知道這是何時玩的)。長度不夠 → 兩行(日期/時間),不動卡片尺寸。
+          entry.endedAt ? (
+            <span className="livecard__ended-time" title="結束時間">
+              {(() => {
+                const d = new Date(entry.endedAt)
+                const p = (n: number) => String(n).padStart(2, '0')
+                return (
+                  <>
+                    <span>{d.getFullYear()}/{p(d.getMonth() + 1)}/{p(d.getDate())}</span>
+                    <span>{p(d.getHours())}:{p(d.getMinutes())}:{p(d.getSeconds())}</span>
+                  </>
+                )
+              })()}
+            </span>
+          ) : null
         )}
       </div>
 

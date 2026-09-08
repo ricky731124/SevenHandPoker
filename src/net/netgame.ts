@@ -26,6 +26,8 @@ import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
 import { fetchCard } from '../platform/cards'
 import { applySuit, applySwap, markSpecialUsed, peekNextDraw } from '../game/state'
+import { recordingRng } from '../game/replay'
+import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import type { Card } from '../game/cards'
@@ -178,7 +180,19 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       wins: 0,
       games: 0,
     }
-    bc = startBroadcast({ code, p1, p2, initial: engine, onWatchers: (n) => useGameStore.setState({ broadcastWatchers: n }) })
+    bc = startBroadcast({
+      code,
+      p1,
+      p2,
+      initial: engine,
+      onWatchers: (n) => useGameStore.setState({ broadcastWatchers: n }),
+      // §6 配對方式:房間 origin='match'(快速配對) / 'friend'(對戰好友);舊房缺 → friend。
+      buildReplay: () => ({
+        special: useGameStore.getState().special,
+        matchType: (useNetStore.getState().room?.origin ?? 'friend') as MatchType,
+        moves: useGameStore.getState().moveLog,
+      }),
+    })
     bcEnded = false
     useGameStore.setState({ broadcastCode: code, broadcastWatchers: 0 }) // #8:host 也是廣播端;#7:觀戰人數
     const guestUid = guestMeta?.uid
@@ -238,12 +252,15 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       const def = getSpecialCard(intent.card)
       if (!def) return
       if (def.needsTarget) {
+        // §6 棋譜:swap 錄 rng(唯一非決定性);花色類決定性,不需 rng。host 端錄 guest 這一步。
+        const rec = def.suit ? null : recordingRng()
         const next = def.suit
           ? applySuit(e, 'p2', intent.targetId ?? '', def.suit)
-          : applySwap(e, 'p2', intent.targetId ?? '')
+          : applySwap(e, 'p2', intent.targetId ?? '', rec!.rng)
         if (next === e) return // illegal target
         // §特殊牌:記通知(by:p2 guest)→ subscribe 會把 specFx 廣播給觀戰;engine 變動也鏡射新牌面。
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: intent.card, n: Date.now() } })
+        useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: intent.card, targetId: intent.targetId, rng: rec?.out })
         useGameStore.getState().flashStatus('對方似乎使用了特殊牌') // host is the foe
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
@@ -254,6 +271,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           id: Date.now(),
         })
         useGameStore.setState({ engine: markSpecialUsed(e, 'p2'), specFx: { by: 'p2', card: intent.card, n: Date.now() } })
+        useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: intent.card }) // §6 棋譜:peek/spy 不改牌面
         useGameStore.getState().flashStatus(intent.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
       }
     }
@@ -435,6 +453,7 @@ function snapOf(s: ReturnType<typeof useGameStore.getState>): HostSnapshot {
     special: s.special,
     loadout: s.loadout,
     timeLimit: s.timeLimit,
+    moveLog: s.moveLog, // §6:host 重整續玩保留棋譜
   }
 }
 

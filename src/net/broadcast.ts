@@ -2,7 +2,10 @@ import { onValue, onDisconnect, ref, remove, set as dbSet } from 'firebase/datab
 import { getDb } from './firebase'
 import { serializeForSpectator, type SpecExtras } from './sync'
 import { writeLiveEntry, flipLiveEnded, writeSpectatorCount, removeLiveEntry, type LivePlayer } from './liveIndex'
+import { pushHighlight, pushUserReplay, type MatchType, type ReplayRecord } from './replays'
+import { currentUser } from '../platform/auth'
 import type { GameState } from '../game/state'
+import type { Move } from '../game/replay'
 
 /**
  * Broadcaster for a spectatable match (§4.2). Mirrors the全開 engine to
@@ -27,6 +30,8 @@ export interface Broadcaster {
   onExtras: (extras: SpecExtras) => void
   /** Natural end → flip the Live card to ended (kept 24h), leave the final spec up. */
   end: (winner: 'p1' | 'p2') => void
+  /** 手動中離(未自然結束)→ 只推「我的賽事」(不進精華),winner=對手。casual 專用。 */
+  abandon: (winner: 'p1' | 'p2') => void
   /** Abandon/leave → tear the live+spectate nodes down (unless already ended). */
   stop: () => void
 }
@@ -40,6 +45,8 @@ export function startBroadcast(opts: {
   initial: GameState
   /** 觀戰人數變動回呼(#7:讓廣播端玩家知道自己被幾個人監控)。 */
   onWatchers?: (n: number) => void
+  /** §6 賽事回放:取這場的棋譜(+房型/配對方式)→ push。回 null / 空 → 不 push。 */
+  buildReplay?: () => { special: boolean; matchType: MatchType; moves: Move[] } | null
 }): Broadcaster {
   const code = opts.code ?? randomCode()
   const db = getDb()
@@ -55,7 +62,7 @@ export function startBroadcast(opts: {
   let stopped = false
 
   const writeSpec = (engine: GameState) => {
-    if (stopped) return
+    if (stopped || !currentUser()) return // 沒 auth → 寫不進 spectate 且會卡佇列重送(§洪水修正)
     void dbSet(specNode, serializeForSpectator(engine, lastExtras)).catch(() => {})
   }
 
@@ -93,10 +100,49 @@ export function startBroadcast(opts: {
       ended = true
       if (watchers > 0) writeSpec(lastEngine) // final全開 state for anyone still watching
       void flipLiveEnded(code, winner)
+      // §6 賽事回放:只有「自然結束」(引擎真的走到 ended)才 push。casual 的「中離判敗」也走
+      //   end('p2') 但那時 engine.phase !== 'ended' → 走下面的 abandon 路徑(只進我的賽事)。
+      if (opts.buildReplay && lastEngine.phase === 'ended' && lastEngine.winner) {
+        const r = opts.buildReplay()
+        if (r) {
+          const rec: Omit<ReplayRecord, 'v' | 'endedAt'> = {
+            seed: lastEngine.seed,
+            firstPicker: lastEngine.firstPicker,
+            special: r.special,
+            matchType: r.matchType,
+            p1: { name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
+            p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },
+            winner,
+            moves: r.moves,
+          }
+          void pushHighlight(rec) // 精華賽事(全站)
+          if (opts.p1.uid) void pushUserReplay(opts.p1.uid, rec) // 我的賽事:雙方真人各一份
+          if (opts.p2.uid && !opts.p2.isBot) void pushUserReplay(opts.p2.uid, rec)
+        }
+      }
       // Keep the ended card (24h sweep) → cancel the crash-cleanup onDisconnect.
       void onDisconnect(liveNode).cancel().catch(() => {})
       void onDisconnect(spectateNode).cancel().catch(() => {})
       unsubWatch()
+    },
+    abandon: (winner) => {
+      // 手動中離:棋譜未走到 ended,但已完整記到離開那步 → 只進「我的賽事」(不進精華),abandoned:true。
+      if (ended || stopped || !opts.buildReplay) return
+      const r = opts.buildReplay()
+      if (!r || !r.moves.length) return
+      const rec: Omit<ReplayRecord, 'v' | 'endedAt'> = {
+        seed: lastEngine.seed,
+        firstPicker: lastEngine.firstPicker,
+        special: r.special,
+        matchType: r.matchType,
+        abandoned: true,
+        p1: { name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
+        p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },
+        winner,
+        moves: r.moves,
+      }
+      if (opts.p1.uid) void pushUserReplay(opts.p1.uid, rec)
+      if (opts.p2.uid && !opts.p2.isBot) void pushUserReplay(opts.p2.uid, rec)
     },
     stop: () => {
       if (stopped) return

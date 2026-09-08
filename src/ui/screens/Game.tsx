@@ -27,6 +27,7 @@ import { SpecialTray, SpecialInfoModal } from '../components/game/SpecialControl
 import StickerProto from '../components/game/StickerProto'
 import DanmakuBar from '../components/game/DanmakuBar'
 import DanmakuLayer from '../components/game/DanmakuLayer'
+import ReplayControls from '../components/game/ReplayControls'
 import SpecEmoteLayer from '../components/game/SpecEmoteLayer'
 import BroadcasterDanmaku from '../components/game/BroadcasterDanmaku'
 import HandRankModal from '../components/game/HandRankModal'
@@ -283,11 +284,13 @@ function spectatorStatusText(engine: GameState, p1Name: string, p2Name: string):
 export function GameBoard() {
   const g = useGameStore()
   const spec = g.spectate // 非 null = 觀戰模式(§4.3):全開、拿掉操作、關互動
+  const replay = g.replay // 回放(§6.4):也走 spectate,但收起即時觀戰專屬 UI(改由 ReplayViewer 疊 transport)
   const engine = g.engine!
   const me = g.me
   const foe = otherPlayer(me)
   const go = useAppStore((s) => s.go)
   const closeSpectate = useAppStore((s) => s.closeSpectate) // 觀戰:牌桌內「離開觀戰」鈕(#5)
+  const closeReplay = useAppStore((s) => s.closeReplay) // 回放:同位置的「離開」鈕(§6.4)
   const inCampaign = useCampaignStore((s) => s.series !== null)
   const sz = useBoardSizes()
   // Uniform scale so the whole board fits the ACTUALLY-visible area on mobile web
@@ -546,8 +549,9 @@ export function GameBoard() {
         </div>
       )}
 
-      {/* 觀戰左上 HUD:取代 TopBar 選單鈕的位置(stage 相對,各平台一致,#5)。LIVE + 👁 觀戰數。 */}
-      {spec && (
+      {/* 觀戰左上 HUD:取代 TopBar 選單鈕的位置(stage 相對,各平台一致,#5)。LIVE + 👁 觀戰數。
+          回放不顯示(非即時、無觀戰數)。 */}
+      {spec && !replay && (
         <div className="spec-hud">
           <span className="spec-hud__live">
             <span className="spec-hud__dot" aria-hidden="true" />
@@ -768,29 +772,37 @@ export function GameBoard() {
       )}
 
       {spec ? (
-        <>
-          {/* 觀戰者名字:直接放在原本「特殊牌」鈕的位置、用該鈕的對齊(左靠),不加 label(#1)。 */}
-          <div className="spec-watcher" title={g.spectateMyName}>{g.spectateMyName || '—'}</div>
-          {/* 發訊息鈕:放在原本「貼圖」鈕的位置(DanmakuBar 內用 game__emote-trigger 定位)。 */}
-          <DanmakuBar />
-        </>
+        // 回放(replay)不顯示觀戰者名字/訊息鈕(那是即時觀戰專屬);觀戰才顯示。
+        replay ? null : (
+          <>
+            {/* 觀戰者名字:直接放在原本「特殊牌」鈕的位置、用該鈕的對齊(左靠),不加 label(#1)。 */}
+            <div className="spec-watcher" title={g.spectateMyName}>{g.spectateMyName || '—'}</div>
+            {/* 發訊息鈕:放在原本「貼圖」鈕的位置(DanmakuBar 內用 game__emote-trigger 定位)。 */}
+            <DanmakuBar />
+          </>
+        )
       ) : (
         <StickerProto />
       )}
 
-      {/* 觀戰彈幕顯示層(右側中間 7 行 5 秒上推,Phase C)+ 觀戰吃到雙方貼圖(#6)。 */}
-      {spec && <DanmakuLayer feed={g.spectateDanmaku} />}
-      {spec && <SpecEmoteLayer />}
+      {/* 觀戰彈幕顯示層(右側中間 7 行 5 秒上推,Phase C)+ 觀戰吃到雙方貼圖(#6)。回放不顯示。 */}
+      {spec && !replay && <DanmakuLayer feed={g.spectateDanmaku} />}
+      {spec && !replay && <SpecEmoteLayer />}
 
       {/* 廣播端(玩家):看觀眾彈幕/進出提示(開關預設開,#8)。 */}
       {!spec && <BroadcasterDanmaku />}
 
-      {/* 觀戰「離開觀戰」鈕:取代送出鈕的位置(stage 相對,各平台一致,#5),樣式同送出、放大 30%(#2)。 */}
+      {/* 觀戰/回放的「離開」鈕:取代送出鈕的位置(stage 相對,各平台一致,#5)。回放也用同一位置。 */}
       {spec && (
         <div className="spec-leave">
-          <Button size="md" onClick={() => { sfx.click(); closeSpectate() }}>離開觀戰</Button>
+          <Button size="md" onClick={() => { sfx.click(); replay ? closeReplay() : closeSpectate() }}>
+            {replay ? '離開' : '離開觀戰'}
+          </Button>
         </div>
       )}
+
+      {/* 回放控制(§6.4):中央上下步/播放、右側倍速、流程字幕、進度軸 — 全在 stage 內相對定位。 */}
+      {replay && <ReplayControls />}
 
       <HandRankModal open={helpOpen} onClose={() => setHelpOpen(false)} />
 
