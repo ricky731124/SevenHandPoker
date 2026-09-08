@@ -102,10 +102,12 @@ export default function HighlightList({ open, onClose }: { open: boolean; onClos
                   <div className="rp-hmatch">
                     <img className="rp-hava" src={avatarSrc(r.p1?.avatar || 'cat')} alt="" />
                     <span className="rp-hname">{r.p1?.name || '玩家1'}</span>
-                    {r.winner === 'p1' && <span className="rp-hwin">WIN</span>}
+                    <span className="rp-hspace" />
+                    <span className={r.winner === 'p1' ? 'rp-hwin' : 'rp-hlose'}>{r.winner === 'p1' ? '勝' : '敗'}</span>
                     <span className="rp-hvs">VS</span>
-                    {r.winner === 'p2' && <span className="rp-hwin">WIN</span>}
-                    <span className="rp-hname">{r.p2?.name || '玩家2'}</span>
+                    <span className={r.winner === 'p2' ? 'rp-hwin' : 'rp-hlose'}>{r.winner === 'p2' ? '勝' : '敗'}</span>
+                    <span className="rp-hspace" />
+                    <span className="rp-hname rp-hname--right">{r.p2?.name || '玩家2'}</span>
                     <img className="rp-hava" src={avatarSrc(r.p2?.avatar || 'bird')} alt="" />
                   </div>
                   <div className="rp-hmeta">

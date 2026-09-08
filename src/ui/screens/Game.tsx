@@ -290,7 +290,6 @@ export function GameBoard() {
   const foe = otherPlayer(me)
   const go = useAppStore((s) => s.go)
   const closeSpectate = useAppStore((s) => s.closeSpectate) // 觀戰:牌桌內「離開觀戰」鈕(#5)
-  const closeReplay = useAppStore((s) => s.closeReplay) // 回放:同位置的「離開」鈕(§6.4)
   const inCampaign = useCampaignStore((s) => s.series !== null)
   const sz = useBoardSizes()
   // Uniform scale so the whole board fits the ACTUALLY-visible area on mobile web
@@ -792,16 +791,15 @@ export function GameBoard() {
       {/* 廣播端(玩家):看觀眾彈幕/進出提示(開關預設開,#8)。 */}
       {!spec && <BroadcasterDanmaku />}
 
-      {/* 觀戰/回放的「離開」鈕:取代送出鈕的位置(stage 相對,各平台一致,#5)。回放也用同一位置。 */}
-      {spec && (
+      {/* 觀戰「離開觀戰」鈕:取代送出鈕的位置(stage 相對,#5)。回放的「離開」改由 ReplayControls
+          放進 body 傳送門(z 比對決彈窗高),故這裡只給觀戰用。 */}
+      {spec && !replay && (
         <div className="spec-leave">
-          <Button size="md" onClick={() => { sfx.click(); replay ? closeReplay() : closeSpectate() }}>
-            {replay ? '離開' : '離開觀戰'}
-          </Button>
+          <Button size="md" onClick={() => { sfx.click(); closeSpectate() }}>離開觀戰</Button>
         </div>
       )}
 
-      {/* 回放控制(§6.4):中央上下步/播放、右側倍速、流程字幕、進度軸 — 全在 stage 內相對定位。 */}
+      {/* 回放控制(§6.4):舞台層感應 + body 傳送門(離開/上下步/播放/倍速/進度軸/流程字幕)。 */}
       {replay && <ReplayControls />}
 
       <HandRankModal open={helpOpen} onClose={() => setHelpOpen(false)} />

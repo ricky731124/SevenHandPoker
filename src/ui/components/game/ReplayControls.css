@@ -1,127 +1,154 @@
-/* 賽事回放控制(§6.4)。全部 stage 相對定位(絕對定位於 .game 舞台內)。Reels 風:播放乾淨、
-   點畫面才浮出中央控制+進度軸;倍速/流程字幕常駐。設計 token 見 §7。 */
+/* 賽事回放控制(§6.4)。舞台層感應(rp-tap)+ body 傳送門控制(rp-ui,貼齊 .game 舞台 rect、
+   z 比對決彈窗高)。子元素用舞台百分比定位 → 電腦版舞台置中留白也不跑版(#4)。§7 token。 */
 
-/* 點畫面切換播放/暫停的透明層(在牌之上、控制之下)。 */
+/* ---- 舞台層:點畫面切換播放/暫停 ---- */
 .rp-tap {
   position: absolute;
   inset: 0;
-  z-index: 44;
   cursor: pointer;
 }
+.rp-tap--playing {
+  z-index: 48; /* 蓋過牌桌 → 播放中到處點都暫停 */
+}
+.rp-tap--paused {
+  z-index: -1; /* 沉到牌堆/頭像(z≥0)下面 → 點放大鏡開放大鏡、點頭像開資訊都不解暫停;只有空白felt(在它之上)點到=繼續 */
+}
 
-/* 流程字幕(常駐,右側垂直置中):第 N 步 / 誰 / 動作。 */
+/* ---- body 傳送門:貼齊舞台 rect(inline style 給 left/top/width/height),只有控制本體吃點擊 ---- */
+.rp-ui {
+  z-index: 1100; /* 比 Modal scrim(1000)高 → 離開/上下步/播放/進度軸/流程字 都在對決彈窗之上(#5/#8) */
+  pointer-events: none;
+}
+.rp-ui > * {
+  pointer-events: auto;
+}
+.rp-ui .rp-flow {
+  pointer-events: none; /* 純文字 */
+}
+
+/* 離開:舞台右下(同送出/離開觀戰區)。 */
+.rp-leave {
+  position: absolute;
+  right: 2%;
+  bottom: 3%;
+}
+.rp-leave .woodbtn {
+  padding: 9px 18px;
+}
+
+/* 流程字幕(舞台右側、倍速下方):第N步：/ 誰 / 動作。全圓體 Huninn(#8)。 */
 .rp-flow {
   position: absolute;
-  top: 50%;
-  right: clamp(6px, 1.4vw, 18px);
-  transform: translateY(-50%);
-  z-index: 48;
-  pointer-events: none;
-  max-width: 34vw;
-  text-align: right;
+  right: 2%;
+  top: 41%;
+  width: 7em; /* 內容 7 中文字 */
   font-family: var(--font-display, sans-serif);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
+/* 第X步：圓體、黑、置中、6 中文字寬、加冒號(#8/#1) */
 .rp-flow__step {
+  width: 6em;
+  margin: 0 auto 6px; /* 置中 + 步→名字 間隔 */
+  text-align: center;
   font-weight: 900;
-  font-size: clamp(13px, 2vw, 18px);
-  color: var(--gold-1, #ffe89a);
+  font-size: clamp(15px, 2.4vw, 19px);
+  color: #1a1208;
+  text-shadow: 0 1px 2px rgba(255, 240, 200, 0.5);
 }
+/* 玩家名字:置左、6 中文字寬、比之前小一點點 */
 .rp-flow__who {
+  width: 6em;
+  text-align: left;
   font-weight: 800;
-  font-size: clamp(13px, 2vw, 18px);
+  font-size: clamp(14px, 2.1vw, 18px);
   color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-bottom: 5px; /* 名字→內容 間隔 */
 }
+/* 內容:置左、7 中文字寬、金色、超過換行 */
 .rp-flow__act {
+  width: 7em;
+  text-align: left;
   font-weight: 700;
-  font-size: clamp(12px, 1.7vw, 16px);
+  font-size: clamp(14px, 2vw, 17px);
+  line-height: 1.3;
   color: #ffe9b0;
 }
 
-/* 倍速(常駐,右側、對手頭像下方)。木紋鈕 + 專屬字型,選中有壓下感。 */
+/* 倍速(舞台右側、對手「N 張」下方一點,較靠近張數)。木紋鈕 + 選中壓下感,點了只改速度不暫停。 */
 .rp-speed {
   position: absolute;
-  top: clamp(56px, 15vh, 118px);
-  right: clamp(6px, 1.4vw, 18px);
-  z-index: 48;
+  right: 2%;
+  top: 30%;
   display: flex;
   gap: 6px;
 }
 .rp-speed__btn {
-  min-width: 40px;
-  padding: 5px 10px;
+  min-width: 42px;
+  padding: 6px 11px;
   border-radius: var(--r-sm, 8px);
-  border: 2px solid var(--parch-edge, #c9a25f);
-  background: rgba(255, 255, 255, 0.35);
-  color: #fff;
+  border: 2px solid var(--wood-edge, #6d3f1c);
+  background: linear-gradient(180deg, var(--wood-1, #f0cf94), var(--wood-2, #dcab63));
+  color: var(--wood-text, #5a2a0c);
   font-family: var(--font-display, sans-serif);
   font-weight: 800;
   font-size: clamp(13px, 1.9vw, 16px);
   cursor: pointer;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  opacity: 0.72;
 }
 .rp-speed__btn--on {
-  background: linear-gradient(180deg, var(--wood-1, #f0cf94), var(--wood-2, #dcab63));
-  color: var(--wood-text, #5a2a0c);
-  border-color: var(--wood-edge, #6d3f1c);
-  box-shadow: inset 0 2px 4px rgba(90, 42, 12, 0.5); /* 壓下感 */
-  text-shadow: none;
+  opacity: 1;
+  box-shadow: inset 0 3px 5px rgba(90, 42, 12, 0.6);
 }
 
-/* 暫停時的中央控制:壓在下方玩家格子上(避開正中的狀態提示)。 */
+/* 暫停時的中央控制:壓在下方玩家牌上,更透(看得到牌),三顆統一、無外框、跟箭頭同色。 */
 .rp-center {
   position: absolute;
   left: 50%;
-  bottom: clamp(78px, 21%, 150px);
+  bottom: 9%;
   transform: translateX(-50%);
-  z-index: 48;
   display: flex;
   align-items: center;
-  gap: clamp(18px, 5vw, 40px);
+  gap: clamp(20px, 6vw, 46px);
 }
 .rp-cbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(38px, 8vw, 48px);
-  height: clamp(38px, 8vw, 48px);
+  width: clamp(34px, 7vw, 42px);
+  height: clamp(34px, 7vw, 42px);
+  border: none;
   border-radius: 50%;
-  border: 2px solid rgba(255, 225, 160, 0.55);
-  background: rgba(20, 12, 8, 0.42);
-  color: #ffe9b0;
-  font-size: clamp(14px, 2.4vw, 18px);
-  font-weight: 800;
+  background: rgba(8, 5, 3, 0.14); /* 更透 */
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+  color: #ffe9b0; /* 跟前進/後退 icon 同色 */
+  font-size: clamp(13px, 2.2vw, 16px);
   cursor: pointer;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
   transition: transform 0.08s ease;
 }
 .rp-cbtn:active {
   transform: scale(0.9);
 }
 .rp-cbtn:disabled {
-  opacity: 0.35;
+  opacity: 0.28;
   cursor: default;
 }
 .rp-cbtn--play {
-  width: clamp(50px, 11vw, 62px);
-  height: clamp(50px, 11vw, 62px);
-  font-size: clamp(18px, 3vw, 24px);
-  border-color: var(--gold-2, #f6c945);
-  background: linear-gradient(180deg, rgba(246, 201, 69, 0.92), rgba(215, 154, 36, 0.92));
-  color: #4a2c07;
+  width: clamp(46px, 10vw, 58px);
+  height: clamp(46px, 10vw, 58px);
+  font-size: clamp(17px, 3vw, 22px);
+  background: rgba(8, 5, 3, 0.16);
 }
 
-/* 暫停時的超細超透進度軸(可拖)。避開右下的離開鈕。 */
+/* 暫停時的進度軸:舞台底部細、黃、半透明、可拖,避開右下離開鈕。 */
 .rp-scrub {
   position: absolute;
-  left: clamp(8px, 3vw, 30px);
-  right: clamp(88px, 14vw, 130px);
-  bottom: clamp(6px, 1.4vh, 12px);
-  z-index: 48;
+  left: 3%;
+  right: 13%;
+  bottom: 3%;
 }
 .rp-scrub input[type='range'] {
   width: 100%;

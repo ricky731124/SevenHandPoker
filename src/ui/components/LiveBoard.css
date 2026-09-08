@@ -218,8 +218,8 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0;
-  font-size: 11px;
-  line-height: 1.12;
+  font-size: 13px;
+  line-height: 1.1;
   font-weight: 700;
   color: var(--parch-muted, #8a745a);
   font-variant-numeric: tabular-nums;

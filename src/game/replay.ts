@@ -59,6 +59,9 @@ export function replayRng(values: number[] | undefined): () => number {
 // ---- 回放:棋譜 → 一幀一幀的牌桌(§6.4)。每幀就是一個真 GameState,回放畫面直接餵進
 //      觀戰的 GameBoard(applySpectate)。節奏由播放器決定,「當時想很久」在回放只是一步。 ----
 
+/** 前進到某幀時要放的音效(§10:以下方玩家 p1 角度)。undefined = 靜音(選牌、對手補牌)。 */
+export type ReplaySound = 'deal' | 'place' | 'showdown-win' | 'showdown-lose' | 'draw' | 'special' | 'win' | 'lose'
+
 /** 回放的一「幀」= 一個牌桌狀態 + 說明。播放器在 frames 之間前進/後退/拖拉。
  *  流程字幕拆成 `actor`(誰)/`action`(做什麼) 兩行(§6.4:第N步 / 誰 / 動作);
  *  `caption` = 兩者合併(給不需拆行的地方用)。 */
@@ -67,8 +70,12 @@ export interface ReplayFrame {
   caption: string
   /** 誰(顯示名);開局/結束等沒有明確行動者的幀為 undefined。 */
   actor?: string
-  /** 做什麼(如「出 3 張」「放第 4 格」「第 4 格開牌・同花 甲勝」「獲勝(四幣)」)。 */
+  /** 做什麼(如「出 3 張」「將對手牌放第 4 格」「第 4 格開牌・同花 甲勝」「獲勝(四幣)」)。 */
   action: string
+  /** §10:前進到這幀時放的音效(只在自動播/下一步時響,拖拉/上一步靜音)。 */
+  sound?: ReplaySound
+  /** draw 音效要放幾聲(補幾張)。 */
+  drawN?: number
 }
 
 /** buildFrames 的輸入(不綁 net 層的 ReplayRecord,保持 game/ 純淨)。 */
@@ -103,15 +110,15 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
   // 且錄製當時的結果已由 moves 決定 → 回放用 firstPicker 對應的預設即可(不影響一般局)。
   let g = createGame(input.seed, input.firstPicker)
   const frames: ReplayFrame[] = []
-  const add = (state: GameState, actor: string | undefined, action: string) => {
-    frames.push({ state, actor, action, caption: actor ? `${actor} ${action}` : action })
+  const add = (state: GameState, actor: string | undefined, action: string, sound?: ReplaySound, drawN?: number) => {
+    frames.push({ state, actor, action, caption: actor ? `${actor} ${action}` : action, sound, drawN })
   }
-  add(g, undefined, '開局發牌')
+  add(g, undefined, '開局發牌', 'deal')
 
   const pushEndedIfDone = (): boolean => {
     if (g.phase === 'ended' && g.winner) {
       const why = g.winReason ? `(${WIN_REASON_ZH[g.winReason] ?? ''})` : ''
-      add(g, name(g.winner), `獲勝${why}`)
+      add(g, name(g.winner), `獲勝${why}`, g.winner === 'p1' ? 'win' : 'lose')
       return true
     }
     return false
@@ -120,7 +127,7 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
   for (const m of input.moves) {
     if (m.t === 'pick') {
       g = applyPick(g, m.by, m.ids)
-      add(g, name(m.by), `出 ${m.ids.length} 張`)
+      add(g, name(m.by), `出 ${m.ids.length} 張`) // 選牌無音效
     } else if (m.t === 'special') {
       const def = getSpecialCard(m.card)
       const before = m.targetId ? g.hands[m.by].find((c) => c.id === m.targetId) : undefined
@@ -128,27 +135,28 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
         g = applySuit(g, m.by, m.targetId, def.suit)
         const after = g.hands[m.by].find((c) => c.id === m.targetId)
         const detail = before && after ? `:${cardFace(before)}→${cardFace(after)}` : ''
-        add(g, name(m.by), `使用「${def.name}」${detail}`)
+        add(g, name(m.by), `使用「${def.name}」${detail}`, 'special')
       } else if (m.card === 'swap' && m.targetId) {
         const prevIds = new Set(g.hands[m.by].map((c) => c.id))
         g = applySwap(g, m.by, m.targetId, replayRng(m.rng))
         const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
         const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
-        add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`)
+        add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
       } else {
         // peek / spy:不改牌面,只記用過。
         g = markSpecialUsed(g, m.by)
-        add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`)
+        add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`, 'special')
       }
     } else if (m.t === 'place') {
       g = applyPlace(g, m.by, m.slot)
-      // 有開牌 → 講開牌結果(actor=放牌者);沒開牌 → 只講放第幾格。(slot 對使用者從 1 起算)
+      // 有開牌 → 講開牌結果(actor=放牌者);沒開牌 → 只講「將對手牌放第幾格」。(slot 對使用者從 1 起算)
       const sd = g.lastShowdown
       if (sd) {
         const w = sd.winner === 'both' ? '雙方' : name(sd.winner)
-        add(g, name(m.by), `第 ${sd.slot + 1} 格開牌・${sd.p1Name} vs ${sd.p2Name}・${w}勝`)
+        const p1Won = sd.winner === 'p1' || sd.winner === 'both' // §10:搶金幣以下方 p1 角度
+        add(g, name(m.by), `第 ${sd.slot + 1} 格開牌・${sd.p1Name} vs ${sd.p2Name}・${w}勝`, p1Won ? 'showdown-win' : 'showdown-lose')
       } else {
-        add(g, name(m.by), `放第 ${m.slot + 1} 格`)
+        add(g, name(m.by), `將對手牌放第 ${m.slot + 1} 格`, 'place')
       }
       // 自動補出「開牌→翻幣→補牌」的後續幀(棋譜不記,決定性推得出來)。
       if (g.phase === 'showdown') {
@@ -164,7 +172,8 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
         const drawer = g.postPicker
         const after = applyDraw(g)
         const n = drawer ? after.hands[drawer].length - g.hands[drawer].length : 0
-        if (n > 0) add(after, name(drawer!), `補 ${n} 張`)
+        // §10:只有下方 p1 補牌才放聲(對手補牌靜音,和正常對局一致)。
+        if (n > 0) add(after, name(drawer!), `補 ${n} 張`, drawer === 'p1' ? 'draw' : undefined, n)
         g = after // → 'pick'
       }
       if (pushEndedIfDone()) break // applyPlace 直接判定結束(無開牌的保險路徑)

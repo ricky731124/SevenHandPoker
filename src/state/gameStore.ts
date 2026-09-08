@@ -139,6 +139,20 @@ function beginCasualBroadcast(
   if (foe.botId) void fetchBotRecord(foe.botId).then((r) => patchLivePlayerRecord(code, 'p2', r.wins, r.games))
 }
 
+/** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
+function playFrameSound(f: ReplayFrame | undefined): void {
+  switch (f?.sound) {
+    case 'deal': sfx.deal(); break
+    case 'place': sfx.place(); break
+    case 'special': sfx.special(); break
+    case 'draw': sfx.draw(f.drawN ?? 1); break
+    case 'win': sfx.win(); break
+    case 'lose': sfx.lose(); break
+    case 'showdown-win': sfx.showdown(); setTimeout(() => sfx.coinWin(), 400); break
+    case 'showdown-lose': sfx.showdown(); setTimeout(() => sfx.coinFail(), 400); break
+  }
+}
+
 /** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
  *  + localStorage marker (close-reconcile). No-op for online / undealt / ended. */
 function persistLocalMatch(s: GameStore): void {
@@ -716,6 +730,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!first) return
     set({ replay: true, replayFrames: frames, replayStep: 0, replayPlaying: true, replaySpeed: 1 })
     get().applySpectate(first, info) // 灌第 0 幀(applySpectate 不動 replay 旗標)
+    playFrameSound(frames[0]) // §10:開局發牌聲
   },
   replaySeek: (step, pause = true) => {
     const { replayFrames } = get()
@@ -723,7 +738,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = Math.max(0, Math.min(step, replayFrames.length - 1))
     set({ replayStep: s, engine: replayFrames[s].state, ...(pause ? { replayPlaying: false } : {}) })
   },
-  replayStepBy: (d) => get().replaySeek(get().replayStep + d, true),
+  replayStepBy: (d) => {
+    const { replayStep, replayFrames } = get()
+    const target = Math.max(0, Math.min(replayStep + d, replayFrames.length - 1))
+    get().replaySeek(target, true)
+    if (d > 0 && target !== replayStep) playFrameSound(replayFrames[target]) // §10:只有「下一步」放聲,上一步/拖拉靜音
+  },
   replayToggle: () => {
     const { replayPlaying, replayStep, replayFrames } = get()
     if (!replayPlaying && replayStep >= replayFrames.length - 1) {
@@ -743,6 +763,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return
     }
     set({ replayStep: next, engine: replayFrames[next].state })
+    playFrameSound(replayFrames[next]) // §10:自動播前進放聲
   },
   feedDanmaku: (m) => set((s) => ({ spectateDanmaku: [...s.spectateDanmaku, m].slice(-40) })),
   setSpectateSend: (fn) => set({ spectateSend: fn }),

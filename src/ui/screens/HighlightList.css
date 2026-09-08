@@ -42,86 +42,100 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   overflow: hidden;
 }
+/* 名字左右各靠外(頭像最外),勝/敗+VS 靠中間(spacer 撐開)→ 勝/敗貼近 VS(#1)。 */
+.rp-hspace {
+  flex: 1 1 0;
+}
 .rp-hava {
-  width: 36px;
-  height: 36px;
+  width: 44px; /* 對齊排行榜頭像大小 */
+  height: 44px;
   border-radius: 50%;
   border: 2px solid var(--wood-edge, #6d3f1c);
   object-fit: cover;
   flex: none;
 }
 .rp-hname {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: clamp(72px, 14vw, 170px);
+  flex: 0 0 auto;
+  width: 7.5em; /* 15 bytes ≈ 7 中文 + 1 英 */
   font-weight: 800;
-  font-size: clamp(15px, 1.7vw, 18px);
+  font-size: clamp(16px, 1.9vw, 19px);
   color: var(--wood-text, #5a2a0c);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
+}
+.rp-hname--right {
+  text-align: right;
 }
 .rp-hvs {
   flex: none;
   font-weight: 900;
-  font-size: 13px;
-  color: rgba(90, 42, 12, 0.55);
-  padding: 0 2px;
+  font-size: clamp(15px, 1.8vw, 18px);
+  color: #a06a2e; /* 木金,不跟名字同色 */
+  padding: 0 3px;
 }
-/* WIN:大盜橙,微設計(斜體 + 深描邊)。 */
+/* 勝:綠、比名字大、更粗、斜體有設計感。 */
 .rp-hwin {
   flex: none;
+  font-family: var(--font-display, sans-serif);
   font-weight: 900;
-  font-size: clamp(13px, 1.5vw, 16px);
-  letter-spacing: 0.04em;
-  color: #e8631e;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
-  transform: skewX(-8deg);
+  font-size: clamp(19px, 2.4vw, 25px);
+  color: #1f9d4d;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 7px rgba(45, 200, 110, 0.4);
+  transform: skewX(-9deg);
+}
+/* 敗:紅、同樣大而粗、有設計感。 */
+.rp-hlose {
+  flex: none;
+  font-family: var(--font-display, sans-serif);
+  font-weight: 900;
+  font-size: clamp(19px, 2.4vw, 25px);
+  color: #d63a2e;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45), 0 0 7px rgba(230, 70, 55, 0.35);
+  transform: skewX(-9deg);
 }
 
 .rp-hmeta {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: flex-end;
-  gap: 1px;
+  gap: 3px;
   text-align: right;
 }
 .rp-hmode {
   font-weight: 800;
-  font-size: clamp(12px, 1.4vw, 15px);
+  font-size: clamp(14px, 1.75vw, 17px); /* 再大一點點 */
+  line-height: 1.05;
   color: var(--wood-text, #5a2a0c);
   white-space: nowrap;
 }
 .rp-htime {
-  font-size: clamp(10px, 1.2vw, 12px);
+  font-size: clamp(12px, 1.5vw, 15px); /* 再大一點點 */
   font-weight: 700;
-  color: rgba(90, 42, 12, 0.62);
+  line-height: 1.05;
+  color: rgba(90, 42, 12, 0.66);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
+/* 播放鈕:一個圈 + 一個較大的黑色播放三角(去掉方塊/底色)。反正點整列就播,這顆是引導。 */
 .rp-hplay {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(180deg, var(--gold-2, #f6c945), var(--gold-3, #d79a24));
+  background: transparent;
   border: 2px solid var(--wood-edge, #6d3f1c);
-  color: #4a2c07;
-  font-size: 13px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-/* 窄螢幕:方式/時間 換行避免擠爆(和排行榜一樣列高固定,故用較小字先擠得下)。 */
-@media (max-width: 560px) {
-  .rp-hname {
-    max-width: clamp(56px, 20vw, 110px);
-  }
+  color: #1a1208;
+  font-size: 17px; /* 播放三角較大 */
+  padding-left: 2px; /* ▶ 視覺置中 */
 }

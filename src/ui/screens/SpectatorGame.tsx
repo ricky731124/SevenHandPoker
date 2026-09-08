@@ -4,6 +4,7 @@ import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import { joinSpectate, type LiveMeta } from '../../net/spectate'
 import type { SpecView } from '../../net/sync'
+import type { GameState } from '../../game/state'
 import { getSpecialCard } from '../../game/specialCards'
 import { useToastStore } from '../../state/toastStore'
 import { GameBoard } from './Game'
@@ -17,6 +18,30 @@ import './SpectatorGame.css'
  * 拿掉 8 個操作鈕),版面與遊玩 100% 一致、推牌等也自然跟著動。本元件只負責:①把 spec 串流
  * 灌進 gameStore(applySpectate)②疊上觀戰專屬浮動 UI(左上 LIVE+觀戰數、離開觀戰、結算)。
  */
+
+/** §10 觀戰音效:比對前後兩張 spec 快照,以「下方 p1 角度」補回音效(發牌兩次的問題天然避開:
+ *  觀戰只收廣播端的狀態、不會自己再發一次)。進場首張不比對(不補播舊聲)。 */
+function spectateSound(prev: GameState, next: GameState): void {
+  if (next.winner && !prev.winner) {
+    next.winner === 'p1' ? sfx.win() : sfx.lose()
+    return
+  }
+  const ns = next.lastShowdown
+  const ps = prev.lastShowdown
+  if (ns && (!ps || ps.slot !== ns.slot)) {
+    sfx.showdown()
+    const p1Won = ns.winner === 'p1' || ns.winner === 'both'
+    setTimeout(() => (p1Won ? sfx.coinWin() : sfx.coinFail()), 400)
+    return
+  }
+  const grew = next.hands.p1.length - prev.hands.p1.length
+  if (grew > 0) {
+    sfx.draw(grew) // 只有下方 p1 補牌才響(對手補牌 p1 手牌不變)
+    return
+  }
+  const slotCards = (g: GameState) => g.slots.reduce((a, s) => a + s.p1.length + s.p2.length, 0)
+  if (slotCards(next) > slotCards(prev)) sfx.place() // 放牌(無開牌)
+}
 
 function seatsFrom(m: LiveMeta | null): SpectateInfo {
   return {
@@ -46,6 +71,7 @@ export default function SpectatorGame() {
   const [gone, setGone] = useState(false)
   const lastFxN = useRef(0) // 特殊牌通知去重(同一則只 toast 一次)
   const fxPrimed = useRef(false) // 進場首張 spec 只記 fx.n、不 toast → 進場前用過的特殊牌不會被補播(#5)
+  const prevEngRef = useRef<GameState | null>(null) // §10 音效:比對前後快照;首張不比對(不補播舊聲)
 
   useEffect(() => {
     if (!code) return
@@ -54,6 +80,7 @@ export default function SpectatorGame() {
     everHadLive.current = false
     lastFxN.current = 0
     fxPrimed.current = false
+    prevEngRef.current = null
     // §特殊牌:誰用了哪張 → 跳 toast。⚠️ 進場「第一張」spec 帶的 fx 是**進場前**就用過的
     //   (我第 6 手才進來、對手第 4 手用的)→ 只記 n、不 toast;之後 n 有變(進場後新用的)才 toast(#5)。
     const toastFx = (view: SpecView | null) => {
@@ -65,6 +92,7 @@ export default function SpectatorGame() {
       }
       if (!fx || fx.n === lastFxN.current) return
       lastFxN.current = fx.n
+      sfx.special() // §10:進場後新用的特殊牌 → 音效(下方角度即可)
       const m = liveRef.current
       const byName = fx.by === 'p1' ? m?.p1?.name || '玩家1' : m?.p2?.name || '玩家2'
       const cardName = getSpecialCard(fx.card)?.name ?? '特殊牌'
@@ -74,6 +102,9 @@ export default function SpectatorGame() {
       onSpec: (eng, view) => {
         toastFx(view)
         if (!eng) return
+        // §10 音效:比對前後快照補回音效(下方 p1 角度);首張只記、不發聲(不補播進場前的)。
+        if (prevEngRef.current) spectateSound(prevEngRef.current, eng)
+        prevEngRef.current = eng
         // 帶上 spec 附加狀態:推牌選取/排序 + 暫停 + 貼圖 → GameBoard 下方手牌 lift/同排序、顯暫停中、
         // SpecEmoteLayer 飄貼圖(#4:之前只帶 p1Sel/p1Sort,漏了 paused/emote → 觀戰看不到暫停/貼圖)。
         applySpectate(

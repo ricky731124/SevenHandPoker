@@ -487,6 +487,42 @@ type Move =
 
 ---
 
+## 6.6 賽事回放 — 實作定案（2026-09-09 as-built，**取代 §6.1~6.5 中與此不符處**）
+
+> 已上線實作的權威版；改別的遊戲可照搬。名稱定案為「**賽事回放**」（原賽事精華）。
+
+**A. 資料 / 錄製（`net/replays.ts`、`game/replay.ts`、`gameStore`、`broadcast.ts`、`netgame.ts`）**
+- 修正原 §0/§6.3 兩處錯：`applyClubs` 其實是**決定性**（`applySuit` 無 rng）；引擎唯一非決定性只有 **`applySwap`**（塞牌回牌堆）。且**沒有單一 choke point**：online **guest 的特殊牌在 `netgame.ts` 內直接 apply**，不經 gameStore。
+- **move-log**：`gameStore.moveLog:Move[]`（`{t:'pick'|'place'|'special', by, ...}`；swap 記 `rng`）+ `recordMove()`（守門：只有廣播端 me='p1' 且 casual/online-host 才錄）。錄製點：submitPick、placeAt、chooseSpecial(peek/spy)、activateSpecialTarget、aiMaybeSpecial、**+ netgame guest-special**。swap 用 **`recordingRng`（包 Math.random 記兩個輸出）**→ 回放 `replayRng` 重放,**live 玩法完全不變、零引擎改動、重整免疫**。
+- **持久化**：moveLog 進 LocalSnapshot/HostSnapshot（sessionStorage）→ 重整續玩保留、打完才有完整棋譜。
+- **決定性引擎**：`buildFrames(input)` = `createGame(seed,firstPicker)` 依序套 moves，**place 後自動補「開牌→翻幣→補牌」幀**（棋譜不記、可推），swap 用 `replayRng`。每幀 `{state, caption, actor, action, sound?, drawN?}`。`stateAtFrame(frames,k)=frames[k].state`（拖拉 O(1)）。**測試：5 種子整場錄→回放最後一幀 `toEqual` 真實結束 state（含 swap）**。
+- **push**（自然結束由 `broadcast.end()` gate `lastEngine.phase==='ended'`）：`pushHighlight`（全站 `replays/{id}`，精華賽事）+ `pushUserReplay` 幫 p1.uid、p2.uid(非 bot)各一份（`userReplays/{uid}/{id}`，專屬賽事）。**中離**（`broadcast.abandon`，casual forfeitLocal 呼叫，只進 userReplays、`abandoned:true`）。各 cap **8、後蓋前**。`matchType:'casual'|'match'|'friend'`（房間加 `origin` 旗標；casual='casual'）。⚠️ **規則要 `replays`+`userReplays` 節點（已發布）**。
+
+**B. 清單彈窗（`ui/screens/HighlightList.tsx`）— 骨架完全對齊排行榜**
+- `.pz-screen(+.rp-overlay z:1000 因是疊在主畫面) + .panel panel--wide panel--rp + .pz__topbar(返回+`.pz__tabs`) + .panel__scroll(隱藏滾軸)`。兩頁籤 **精華賽事 / 專屬賽事** 在返回鍵右邊、無標題。
+- 每列 **`.lb-row` 木紋 plank(固定高)+ 編號 `1. 2. 3.`**；內容:`[頭像44][名字7.5em] …spacer… [勝/敗] VS [勝/敗] …spacer… [名字][頭像]`（勝綠#1f9d4d/敗紅#d63a2e、比名字大粗 skew、貼近 VS；名字深木色置左/右；VS 木金）+ 右側 `配對方式-房型 / yyyy/mm/dd hh:mm:ss(結束時間)` + 圈狀黑三角播放鈕（點整列即播）。入口:AccountButton 每日任務鈕下「賽事回放」(IconFilm)。
+
+**C. 回放播放器 — Reels 風（`ui/components/game/ReplayControls.tsx`,複用觀戰 GameBoard）**
+- playback state 在 gameStore（`replayFrames/replayStep/replayPlaying/replaySpeed` + `startReplay/replaySeek/replayStepBy/replayToggle/replaySetSpeed/replayAdvance`）。`ReplayViewer` 只 buildFrames→startReplay + 計時器（**1x=1.7s、2x=1s/步**）。appStore `replayData:ReplayEntry`（清單帶 record,不再 fetch）。
+- **兩層架構**：①**舞台層 `.rp-tap`**（點畫面切換播放/暫停）：`--playing z:48`(到處點=暫停)、`--paused **z:-1**`(**沉到牌堆/頭像 z≥0 下**→暫停時點放大鏡/頭像各做各的不解暫停,只空白 felt 點到=繼續)。②**body 傳送門 `.rp-ui`(z:1100,比 Modal scrim 1000 高)**放 離開/流程字幕/倍速/(暫停時)中央 ⏮▶⏭+進度軸 → 開牌彈窗也點得到。
+- **⚠️ 傳送門定位貼齊 `.game` 舞台的 getBoundingClientRect（ResizeObserver+補量），子元素用舞台百分比**（不能用 viewport,否則電腦版舞台置中留白時控制飛到視窗邊）。
+- 中央 ⏮▶⏭ **很透(rgba .14)、無外框、統一同色 #ffe9b0、壓在下方牌上**；離開沿用 `.spec-leave` 同位置(右下);倍速常駐右側對手張數下(**點了不暫停/不叫出進度軸**、選中壓下感);進度軸黃半透明底部避開離開鈕。**流程字幕(右側,全圓體 Huninn)**:`第 N 步：`(6em 置中黑)/ 名字(6em 置左)/ 動作(7em 置左金換行)。**showdown 對決彈窗 `scrimThrough`**(spec 已有)→ 邊緣控制點得穿透。
+- **結束不彈框**(看字幕即可)。冪等:`startCasualBotMatch`/`finishCoinToss(Online)` guard(對局中忽略重開,防配對 race/onDone 重觸發重發牌+殘留假 live)。
+
+**D. 音效（§10,回放+觀戰、以下方 p1 角度、只前進響）**
+- 回放:每幀 `sound`(deal/place/showdown-win|lose→showdown+coin(400ms)/draw(drawN,只p1補牌)/special/win|lose;選牌&對手補牌靜音)。gameStore `playFrameSound` 只在 startReplay(第0幀deal)/replayAdvance/replayStepBy(+1) → **拖曳/上一步/跳轉靜音**。
+- 觀戰:`SpectatorGame.spectateSound(prev,next)` 比前後 spec 快照(winner→win/lose、新showdown→showdown+coin、p1手牌增→draw、slot牌增→place)+ 新 fx→special;**進場首張不比對**(不補播)。
+
+**E. 相關基建修（同批）**
+- **liveIndex 洪水**:訪客(無 firebase auth)寫 liveIndex/spectate 被拒→RTDB 佇列狂重送洪水→所有寫入 gate `currentUser()`(不影響觀戰:進場前都 ensureAccount)。掃殘缺 zombie + 假 live(`startedAt>1h`)。
+- **LiveBoard 已結束卡右上結束時間**(絕對定位不撐卡,13px)。
+
+**F. 待辦 / 下一步**
+- **回放分享連結**(尚未做):分享鈕→`?replay=<id>` deep link,別人過訪客關直接看。⚠️ 精華/專屬 cap8 會被蓋→需另存永久節點 `sharedReplays/{id}`(+規則+boot 讀 deep link,fetchReplay 讀該節點)。房號分享(`?room=`)已存在。
+- 真機微調:第X步黑字紅底可讀性、控制/字幕位置手感;觀戰音效需雙人真測。
+
+---
+
 ## 7. UI/UX 設計規範（務必遵守）
 
 - **一律用 `src/ui/theme/tokens.css` 的變數**，禁止寫死顏色/字型/圓角。常用：
