@@ -96,7 +96,7 @@ export default function Menu() {
       </motion.div>
 
       {/* Start dialog: 4 modes */}
-      <Modal open={dialog === 'start'} onClose={() => setDialog(null)} title="開始遊戲" largeTitle panelClass="menu-start">
+      <Modal open={dialog === 'start'} onClose={() => setDialog(null)} onBack={() => setDialog(null)} title="開始遊戲" largeTitle panelClass="menu-start menu-dialog">
         <Button full icon={<Paw />} onClick={() => { setDialog(null); go('campaignStages') }}>
           主線任務
         </Button>
@@ -112,8 +112,8 @@ export default function Menu() {
       </Modal>
 
       {/* Free match: pick room type, then search (30s for a human, else a bot). */}
-      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} title="快速配對" panelClass="menu-free">
-        <p className="menu__hint">選擇房型,系統會為你配對對手：</p>
+      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="快速配對" panelClass="menu-free menu-dialog">
+        <p className="menu__hint">選擇房型,系統會線上為你配對對手,請耐心等待一下。</p>
         <Button
           full
           icon={<IconGlobe />}
@@ -141,7 +141,7 @@ export default function Menu() {
       </Modal>
 
       {/* Create-match config: opponent · room type · time (each required), confirm */}
-      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} title="建立房間">
+      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="建立房間" panelClass="menu-dialog">
         <CheckGroup
           label="對手"
           value={opponent}
@@ -180,7 +180,7 @@ export default function Menu() {
       </Modal>
 
       {/* Join room */}
-      <Modal open={dialog === 'join'} onClose={() => setDialog('start')} title="加入房間">
+      <Modal open={dialog === 'join'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="加入房間" panelClass="menu-dialog">
         <p className="menu__hint">輸入朋友給你的 3 碼房號：</p>
         <input
           className="menu__input"

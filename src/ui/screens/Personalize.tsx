@@ -24,11 +24,12 @@ import './Personalize.css'
  */
 
 type Tab = 'avatar' | 'stats' | 'achievements' | 'cards' | 'emoji' | 'settings'
+// 頁籤順序(第六批#3):戰績 成就 牌組 頭像 貼圖 設定。
 const TABS: { id: Tab; label: string; ready: boolean }[] = [
-  { id: 'avatar', label: '頭像', ready: true },
   { id: 'stats', label: '戰績', ready: true },
   { id: 'achievements', label: '成就', ready: true },
   { id: 'cards', label: '牌組', ready: true },
+  { id: 'avatar', label: '頭像', ready: true },
   { id: 'emoji', label: '貼圖', ready: true },
   { id: 'settings', label: '設定', ready: true },
 ]
@@ -40,7 +41,7 @@ export default function Personalize() {
   const saveLoadout = usePlatformStore((s) => s.saveLoadout)
   const saveAvatar = usePlatformStore((s) => s.saveAvatar)
   const saveAchievements = usePlatformStore((s) => s.saveAchievements)
-  const [tab, setTab] = useState<Tab>('avatar')
+  const [tab, setTab] = useState<Tab>('stats') // 進來落在第一個頁籤(戰績,#3)
   const mw = useMobileWebScale()
 
   useEffect(() => {

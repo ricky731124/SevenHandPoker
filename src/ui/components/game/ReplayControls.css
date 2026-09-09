@@ -40,42 +40,43 @@
 }
 
 /* 流程字幕(舞台右側、倍速下方):第N步：/ 誰 / 動作。全圓體 Huninn(#8)。 */
+/* 流程字幕(舞台右側、倍速下方):第N步:/ 誰 / 動作。往下移避開 1x/2x(第六批#9)。 */
 .rp-flow {
   position: absolute;
   right: 2%;
-  top: 41%;
-  width: 7.5em; /* 容 15 bytes(7 中文 + 1 英)(#5) */
+  top: 47%; /* 41→47:第X步不再被 1x/2x 蓋到(#9) */
+  width: 7em; /* 手機網頁版字對牌桌偏大 → 框再收窄一點,避免蓋牌區(#10) */
   font-family: var(--font-display, sans-serif);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
-/* 第X步:圓體、綠(手機黑字看不清 → 改綠,#4)、置中、加冒號、深底陰影拉對比。 */
+/* 第X步:圓體、綠(手機黑字看不清 → 改綠,#4)、置中、加冒號、深底陰影拉對比。字再縮一點點(#10)。 */
 .rp-flow__step {
   width: 6em;
   margin: 0 auto 6px; /* 置中 + 步→名字 間隔 */
   text-align: center;
   font-weight: 900;
-  font-size: clamp(15px, 2.4vw, 19px);
+  font-size: clamp(13px, 2vw, 16px);
   color: #34e07d;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 6px rgba(0, 0, 0, 0.45);
 }
-/* 玩家名字:置左、容 15 bytes、字縮小(超過會 ellipsis,#5)。與內容同字級。 */
+/* 玩家名字:置左、容 15 bytes、字再縮一點點(超過 ellipsis,#10)。與內容同字級。 */
 .rp-flow__who {
-  width: 7.5em;
+  width: 7em;
   text-align: left;
   font-weight: 800;
-  font-size: clamp(12px, 1.8vw, 15px);
+  font-size: clamp(11px, 1.5vw, 13px);
   color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 5px; /* 名字→內容 間隔 */
 }
-/* 內容:置左、容 15 bytes、金色、超過換行。與名字同字級(#5)。 */
+/* 內容:置左、容 15 bytes、金色、超過換行。與名字同字級、再縮一點點(#10)。 */
 .rp-flow__act {
-  width: 7.5em;
+  width: 7em;
   text-align: left;
   font-weight: 700;
-  font-size: clamp(12px, 1.8vw, 15px);
+  font-size: clamp(11px, 1.5vw, 13px);
   line-height: 1.3;
   color: #ffe9b0;
 }
@@ -110,7 +111,7 @@
 .rp-center {
   position: absolute;
   left: 50%;
-  bottom: 12%; /* 往上移一點點(#3) */
+  bottom: 14%; /* 再往上一點點(第六批#7) */
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -140,9 +141,9 @@
   cursor: default;
 }
 .rp-cbtn--play {
-  width: clamp(46px, 10vw, 58px);
-  height: clamp(46px, 10vw, 58px);
-  font-size: clamp(17px, 3vw, 22px);
+  width: clamp(50px, 11vw, 64px); /* 播放鍵再大一些些(第六批#7) */
+  height: clamp(50px, 11vw, 64px);
+  font-size: clamp(19px, 3.4vw, 25px);
   background: rgba(8, 5, 3, 0.38); /* 播放鍵一併加深(#3) */
 }
 

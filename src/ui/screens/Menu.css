@@ -184,3 +184,25 @@
 .modal__panel.menu-free {
   padding-bottom: clamp(20px, 3.6vw, 28px);
 }
+
+/* 開始/快速配對/建立房間/加入房間 的返回鍵(第六批#1)。
+   返回鍵大小「跟著標題」→ 大標題(開始遊戲)較大、一般標題較小,且返回鍵高度 ≈ 標題高度 →
+   標題列不會被 38px 預設鍵撐高,彈窗高度不變(使用者:版面固定、別動高度)。側欄等寬 → 標題仍置中。 */
+.modal__panel.menu-dialog .modal__titlebar {
+  grid-template-columns: clamp(30px, 5vw, 34px) 1fr clamp(30px, 5vw, 34px);
+}
+.modal__panel.menu-dialog .modal__back {
+  width: clamp(30px, 5vw, 34px);
+  height: clamp(30px, 5vw, 34px);
+}
+.modal__panel.menu-dialog .modal__back svg {
+  width: 62%;
+  height: 62%;
+}
+.modal__panel.menu-dialog.menu-start .modal__titlebar {
+  grid-template-columns: clamp(38px, 6.6vw, 44px) 1fr clamp(38px, 6.6vw, 44px);
+}
+.modal__panel.menu-dialog.menu-start .modal__back {
+  width: clamp(38px, 6.6vw, 44px);
+  height: clamp(38px, 6.6vw, 44px);
+}

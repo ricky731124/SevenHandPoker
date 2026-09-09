@@ -99,7 +99,7 @@ function Side({ p }: { p: LivePlayer }) {
   )
 }
 
-const TICK_MS = 10_000 // 每 10 秒跑到下一頁
+const TICK_MS = 20_000 // 每 20 秒跑到下一頁(第六批#5)
 
 export default function LiveBoard() {
   const [entries, setEntries] = useState<LiveEntry[]>([])
@@ -125,7 +125,7 @@ export default function LiveBoard() {
     if (timer.current) clearInterval(timer.current)
     timer.current = null
   }
-  // (重)啟動自動輪播:每 10 秒往右一頁(有 live 只在 live 群內循環;跑出 live 群→拉回 1)。
+  // (重)啟動自動輪播:每 TICK_MS 往右一頁(有 live 只在 live 群內循環;跑出 live 群→拉回 1)。
   const start = () => {
     stop()
     timer.current = setInterval(() => {

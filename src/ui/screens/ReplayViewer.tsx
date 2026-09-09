@@ -3,6 +3,7 @@ import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import type { ReplayEntry } from '../../net/replays'
 import { buildFrames } from '../../game/replay'
+import { sfx } from '../../audio/sfx'
 import { GameBoard } from './Game'
 import './Game.css'
 import './SpectatorGame.css'
@@ -28,6 +29,7 @@ export default function ReplayViewer() {
   const startReplay = useGameStore((s) => s.startReplay)
   const exitSpectate = useGameStore((s) => s.exitSpectate)
   const replayAdvance = useGameStore((s) => s.replayAdvance)
+  const replayToggle = useGameStore((s) => s.replayToggle)
   const playing = useGameStore((s) => s.replayPlaying)
   const step = useGameStore((s) => s.replayStep)
   const speed = useGameStore((s) => s.replaySpeed)
@@ -60,7 +62,17 @@ export default function ReplayViewer() {
   const ready = !!boardEngine && !!boardSpectate
 
   return (
-    <div className="replay">
+    // 牌桌(.game)是等比信箱式,兩側/上下會露出 .replay 紅氈邊。rp-tap 只蓋 .game,蓋不到這些邊 →
+    // 之前點紅氈邊不會播放/暫停(第六批#8)。這裡讓「直接點到 .replay 本身(= 露出的邊)」也切換播放/
+    // 暫停;點到 .game 內(牌/頭像/控制)的事件 target 不是 .replay → 不受影響、各做各的。
+    <div
+      className="replay"
+      onClick={(e) => {
+        if (e.target !== e.currentTarget) return
+        sfx.click()
+        replayToggle()
+      }}
+    >
       {ready ? (
         <GameBoard />
       ) : (

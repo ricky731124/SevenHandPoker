@@ -1,5 +1,8 @@
 .lobby {
   width: min(92vw, 460px);
+  /* 手機網頁版(有網址列)整塊等比縮 → 對齊其他彈窗(第六批#4)。standalone/桌機 = 1 不變。
+     .stage flex 置中 + transform-origin 預設中心 → 縮放仍置中,不跑版。 */
+  transform: scale(var(--mw-scale, 1));
   max-height: 94vh; /* never taller than the viewport */
   overflow-y: auto; /* safety net if content still doesn't fit */
   display: flex;
