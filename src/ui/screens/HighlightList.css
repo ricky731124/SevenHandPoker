@@ -28,9 +28,11 @@
   width: 100%;
 }
 
-/* .lb-row 已給 plank 底 / 固定 54px 高 / wood-text / --font-display / --r-md。這裡只加游標。 */
+/* .lb-row 已給 plank 底 / 固定 54px 高 / wood-text / --font-display / --r-md。這裡只加游標。
+   gap 從 10px 收到 7px → 編號↔頭像 間隔小一點點(真機略截,#1)。 */
 .rp-hrow {
   cursor: pointer;
+  gap: 7px;
 }
 .rp-hrow .lb-rank {
   flex: 0 0 30px;
@@ -42,16 +44,18 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px; /* 頭像↔名字 間隔小一點點(#1) */
   overflow: hidden;
 }
-/* 名字左右各靠外(頭像最外),勝/敗+VS 靠中間(spacer 撐開)→ 勝/敗貼近 VS(#1)。 */
+/* 名字左右各靠外(頭像最外),勝/敗+VS 靠中間(spacer 撐開)→ 勝/敗貼近 VS(#1)。
+   spacer 加 max-width → 名字↔勝敗 只留一點點間隔(#1)。 */
 .rp-hspace {
   flex: 1 1 0;
+  max-width: 16px;
 }
 .rp-hava {
-  width: 44px; /* 對齊排行榜頭像大小 */
-  height: 44px;
+  width: 41px; /* 比排行榜略小一點點(真機略截,#1) */
+  height: 41px;
   border-radius: 50%;
   border: 2px solid var(--wood-edge, #6d3f1c);
   object-fit: cover;
@@ -59,9 +63,9 @@
 }
 .rp-hname {
   flex: 0 0 auto;
-  width: 7.5em; /* 15 bytes ≈ 7 中文 + 1 英 */
+  width: 7.5em; /* 15 bytes ≈ 7 中文 + 1 英(em 隨字級縮,字小→框也小) */
   font-weight: 800;
-  font-size: clamp(16px, 1.9vw, 19px);
+  font-size: clamp(14px, 1.7vw, 17px); /* 名字小一點點(#1) */
   color: var(--wood-text, #5a2a0c);
   overflow: hidden;
   text-overflow: ellipsis;
