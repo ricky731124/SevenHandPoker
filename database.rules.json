@@ -90,6 +90,33 @@
           ".validate": "newData.hasChildren(['seed', 'moves'])"
         }
       }
+    },
+    "lobbyChat": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['ts', 'kind', 'name'])"
+      }
+    },
+    "lobbyActive": {
+      ".read": true,
+      "$conn": {
+        ".write": "auth != null"
+      }
+    },
+    "lobbyHost": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "lobbyExhibition": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "lobbySeen": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null"
+      }
     }
   }
 }

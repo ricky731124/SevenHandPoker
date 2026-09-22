@@ -1,0 +1,184 @@
+/* 大廳聊天室（LOBBY-AI-SPEC §3）。沿用遊戲羊皮紙/木色調 + 既有定位慣例（安全區 + 桌機 clamp）。 */
+
+/* ---- 左下角縮合框（2 行：頭像 + 名字：內容/貼圖）---- */
+.lchat-fab {
+  position: fixed;
+  /* 對齊 OnlineCount/LiveBoard 的邊界手法：max(14px, env * 0.8)。桌機另見 media。 */
+  left: max(14px, calc(env(safe-area-inset-left) * 0.8));
+  bottom: max(14px, calc(env(safe-area-inset-bottom) * 0.8));
+  z-index: 40;
+  width: clamp(200px, 30vw, 340px);
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  text-align: left;
+  /* 背景/框對齊「即時戰況」LiveBoard 卡（#4）：羊皮紙漸層 + 金框。 */
+  background: linear-gradient(180deg, var(--parch-1, #f3e2c0), var(--parch-2, #e7d0a2));
+  border: 2px solid var(--gold-3, #c99a3e);
+  border-radius: 12px;
+  box-shadow: var(--shadow-1, 0 6px 18px rgba(0, 0, 0, 0.35));
+  color: var(--parch-text, #4a3721);
+  font: inherit;
+  cursor: pointer;
+}
+.lchat-fab:hover { filter: brightness(1.02); }
+@media (min-width: 1024px) {
+  .lchat-fab {
+    left: clamp(24px, 4vw, 80px);
+    bottom: clamp(18px, 2.6vw, 50px);
+  }
+}
+.lchat-fab__av {
+  width: 38px; height: 38px; flex: 0 0 38px;
+  border-radius: 50%; object-fit: cover;
+  background: #f0e2c6; border: 1.5px solid #d99a5a;
+}
+.lchat-fab__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: clamp(12px, 1.6vw, 14px);
+  line-height: 1.55; /* 行高放寬 → 貼圖 emoji 上下不被 line-clamp 的 overflow 切到 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lchat-fab__name { color: #9a5a1e; font-weight: 700; }
+.lchat-fab__sticker { display: inline-flex; align-items: center; vertical-align: middle; line-height: 1; }
+.lchat-fab__hint { color: #9a7a55; font-size: clamp(12px, 1.6vw, 14px); }
+
+/* ---- 彈窗（沿用 Modal；固定高度、內容不撐高）---- */
+.lchat-modal .modal__body { padding-top: 6px; }
+.lchat-wrap { position: relative; }
+
+.lchat-list {
+  height: min(46vh, 360px);
+  overflow-y: auto;
+  padding: 4px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.lchat-empty { text-align: center; color: #9a7a55; padding: 24px 0; }
+
+.lchat-row { display: flex; align-items: flex-start; gap: 7px; }
+.lchat-row--me { flex-direction: row-reverse; }
+.lchat-av {
+  width: 32px; height: 32px; flex: 0 0 32px;
+  border-radius: 50%; object-fit: cover;
+  background: #f0e2c6; border: 1.5px solid #d99a5a;
+}
+.lchat-col { display: flex; flex-direction: column; max-width: 78%; }
+.lchat-row--me .lchat-col { align-items: flex-end; }
+.lchat-name { font-size: 13px; color: #9a5a1e; margin: 0 4px 2px; font-weight: 700; }
+
+.lchat-bubrow { display: flex; align-items: flex-end; gap: 5px; max-width: 100%; }
+.lchat-row--me .lchat-bubrow { flex-direction: row-reverse; }
+.lchat-bubble {
+  min-width: 0;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: #fff8ef;
+  border: 1.5px solid #e2b98a;
+  color: #3a2712;
+  font-size: 15px;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.lchat-row--me .lchat-bubble {
+  background: linear-gradient(#ffe0a3, #ffcf78);
+  border-color: #e0a752;
+  color: #4a2f0e;
+}
+.lchat-bubble--sticker { background: transparent; border: none; padding: 2px 4px; }
+.lchat-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #a9906f;
+  white-space: nowrap;
+  padding-bottom: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lchat-ctarow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.lchat-row--me .lchat-ctarow { justify-content: flex-end; }
+.lchat-cta {
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: linear-gradient(#c9962f, #a97a1e);
+  border: none;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.lchat-cta:hover { filter: brightness(1.05); }
+
+/* ---- 有新訊息懸浮提示（不搶 focus）---- */
+.lchat-newpill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 56px;
+  z-index: 7;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffe9b0;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- 貼圖盤：懸浮在輸入列上方（絕對定位，不撐高彈窗）---- */
+.lchat-tray {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 50px;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: #ffe9cf;
+  border: 1.5px solid #d99a5a;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.lchat-tray__btn {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff8ef; border: 1px solid #d99a5a; border-radius: 9px;
+  cursor: pointer;
+}
+.lchat-tray__btn:hover { filter: brightness(1.03); }
+
+/* ---- 輸入列 ---- */
+.lchat-input-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.lchat-emoji {
+  flex: 0 0 auto; width: 38px; height: 38px;
+  background: #fff8ef; border: 1.5px solid #d99a5a; border-radius: 10px;
+  font-size: 20px; cursor: pointer; line-height: 1;
+}
+.lchat-input {
+  flex: 1 1 auto; min-width: 0; height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid #d99a5a; border-radius: 10px;
+  background: #fffdf8; color: #3a2712; font: inherit; font-size: 14px;
+}
+.lchat-input:focus { outline: none; border-color: #c9962f; }
+.lchat-send {
+  flex: 0 0 auto; height: 38px; padding: 0 16px;
+  background: linear-gradient(#c9962f, #a97a1e); border: none; border-radius: 10px;
+  color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.lchat-send:disabled { opacity: 0.5; cursor: default; }

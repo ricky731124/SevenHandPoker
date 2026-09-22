@@ -286,6 +286,10 @@ export function GameBoard() {
   const spec = g.spectate // 非 null = 觀戰模式(§4.3):全開、拿掉操作、關互動
   const replay = g.replay // 回放(§6.4):也走 spectate,但收起即時觀戰專屬 UI(改由 ReplayViewer 疊 transport)
   const engine = g.engine!
+  // 觀戰:觀戰者主動關掉「第 N 格對決」彈窗(只關自己這邊,不影響對戰者;對戰者關了照樣跟著關)。
+  // 記下被自己關掉的格號;phase 離開 showdown(對戰者關了/進下一步)就清掉 → 下一格對決照常顯示。
+  const [specDismissedSlot, setSpecDismissedSlot] = useState<number | null>(null)
+  useEffect(() => { if (engine.phase !== 'showdown') setSpecDismissedSlot(null) }, [engine.phase])
   const me = g.me
   const foe = otherPlayer(me)
   const go = useAppStore((s) => s.go)
@@ -823,12 +827,16 @@ export function GameBoard() {
 
       <ConfirmSubmit data={g.confirm} onConfirm={g.confirmPick} onCancel={g.cancelConfirm} />
       <ShowdownModal
-        open={spec ? engine.phase === 'showdown' : g.showdownOpen}
+        open={spec
+          ? engine.phase === 'showdown' && !!engine.lastShowdown && specDismissedSlot !== engine.lastShowdown.slot
+          : g.showdownOpen}
         showdown={engine.lastShowdown}
         slot={engine.lastShowdown ? engine.slots[engine.lastShowdown.slot] : null}
         me={me}
-        onClose={spec ? () => {} : g.dismissShowdown}
+        // 觀戰:onClose(點遮罩外)= 觀戰者本地關;對戰:onClose(按「繼續」)= 真的 dismiss。
+        onClose={spec ? () => setSpecDismissedSlot(engine.lastShowdown?.slot ?? null) : g.dismissShowdown}
         names={spec ? { p1: seats.p1.name, p2: seats.p2.name } : null}
+        onSpectatorClose={spec ? () => setSpecDismissedSlot(engine.lastShowdown?.slot ?? null) : undefined}
       />
       <MagnifierModal
         target={g.magnifier}

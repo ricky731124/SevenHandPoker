@@ -1,5 +1,5 @@
 /**
- * 固定人機（假人）設定。§3：15 隻 persona（固定 name/avatar/loadout/展示成就），
+ * 固定人機（假人）設定。§3：20 隻 persona（固定 name/avatar/loadout/展示成就），
  * 身分固定、大腦每局隨機 roll（見 casualBots.ts）。戰績寫在 bots/{botId}（見
  * src/net/bots.ts）。見 docs/SPECTATE-REPLAY-SPEC.md §3。
  *
@@ -20,7 +20,7 @@ export interface BotPersona {
   achievements: { id: string; tier: number }[]
 }
 
-/** 15 隻固定人機（使用者定案的名字）。 */
+/** 20 隻固定人機（使用者定案的名字）。 */
 export const BOTS: BotPersona[] = [
   { id: 'bot_01', name: '山石宮分',       avatarId: 'cat',   loadout: ['peek', 'swap'],            achievements: [{ id: 'wins', tier: 2 }, { id: 'games', tier: 2 }] },
   { id: 'bot_02', name: '我要驗牌',       avatarId: 'bird',  loadout: ['spy', 'peek', 'clubs'],    achievements: [{ id: 'streak', tier: 1 }] },
@@ -37,12 +37,17 @@ export const BOTS: BotPersona[] = [
   { id: 'bot_13', name: '乂煞氣a屁孩卍',  avatarId: 'cat2',  loadout: ['spades', 'peek'],          achievements: [{ id: 'games', tier: 1 }] },
   { id: 'bot_14', name: '陶敬凱',         avatarId: 'bird2', loadout: ['swap', 'spy', 'clubs'],    achievements: [{ id: 'wins', tier: 1 }, { id: 'flush', tier: 1 }] },
   { id: 'bot_15', name: '穹道穗宮原',     avatarId: 'cat',   loadout: ['peek', 'diamonds'],        achievements: [{ id: 'streak', tier: 1 }] },
+  { id: 'bot_16', name: '今天辛棄疾',     avatarId: 'bear',  loadout: ['peek', 'spades'],          achievements: [{ id: 'wins', tier: 2 }, { id: 'streak', tier: 1 }] },
+  { id: 'bot_17', name: '宮森裘',         avatarId: 'cat2',  loadout: ['spy', 'diamonds'],         achievements: [{ id: 'games', tier: 2 }] },
+  { id: 'bot_18', name: '不得不開除大衛', avatarId: 'dog',   loadout: ['swap', 'hearts', 'peek'],  achievements: [{ id: 'wins', tier: 1 }, { id: 'flush', tier: 1 }] },
+  { id: 'bot_19', name: 'Chill西郎',      avatarId: 'bird',  loadout: ['clubs', 'spy'],            achievements: [{ id: 'games', tier: 1 }, { id: 'streak', tier: 2 }] },
+  { id: 'bot_20', name: '春燕要來了嗎',   avatarId: 'cat3',  loadout: ['peek', 'swap', 'spades'],  achievements: [{ id: 'fullHouse', tier: 1 }, { id: 'wins', tier: 2 }] },
 ]
 
 /** botId → persona（配對時、名片顯示用）。 */
 export const BOT_BY_ID: Record<string, BotPersona> = Object.fromEntries(BOTS.map((b) => [b.id, b]))
 
 /**
- * 在線人數保底:永遠顯示這麼多隻人機在線（不佔真實 RTDB 連線）。= 固定 15 隻。
+ * 在線人數保底:永遠顯示這麼多隻人機在線（不佔真實 RTDB 連線）。= 固定 20 隻。
  */
 export const BOTS_ONLINE = BOTS.length

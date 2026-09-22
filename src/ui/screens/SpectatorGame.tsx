@@ -69,6 +69,7 @@ export default function SpectatorGame() {
   // 不能讓他卡在牌桌苦等(#5)。用 everHadLive 區分「一開始就沒有」與「打到一半收攤」。
   const everHadLive = useRef(false)
   const [gone, setGone] = useState(false)
+  const gotSpecRef = useRef(false) // 是否曾收到任何牌局資料(判「孤兒場:liveIndex 說 live 但 spectate 沒資料」)
   const lastFxN = useRef(0) // 特殊牌通知去重(同一則只 toast 一次)
   const fxPrimed = useRef(false) // 進場首張 spec 只記 fx.n、不 toast → 進場前用過的特殊牌不會被補播(#5)
   const prevEngRef = useRef<GameState | null>(null) // §10 音效:比對前後快照;首張不比對(不補播舊聲)
@@ -78,6 +79,7 @@ export default function SpectatorGame() {
     setHasSpec(false)
     setGone(false)
     everHadLive.current = false
+    gotSpecRef.current = false
     lastFxN.current = 0
     fxPrimed.current = false
     prevEngRef.current = null
@@ -112,6 +114,7 @@ export default function SpectatorGame() {
           seatsFrom(liveRef.current),
           view ? { p1Sel: view.p1Sel, p1Sort: view.p1Sort, paused: view.paused, emote: view.emote } : null,
         )
+        gotSpecRef.current = true
         setHasSpec(true)
       },
       onLive: (m) => {
@@ -127,7 +130,11 @@ export default function SpectatorGame() {
       onName: (name) => setSpectateMyName(name), // 觀戰者姓名(#3)
     })
     setSpectateSend((t) => h.sendDanmaku(t)) // 綁定送出器供 GameBoard 的彈幕鈕呼叫
+    // 孤兒場保護(Bug 1):9 秒還收不到任何牌局資料 = 這場其實已死(liveIndex 說 live、但 spectate 沒資料/驅動者早死)
+    //   → 判結束導回,永遠不讓觀戰者卡在「讀取牌局中…」。正常場首張 spec 幾百 ms 內就到,不會誤觸。
+    const deadTimer = setTimeout(() => { if (!gotSpecRef.current) setGone(true) }, 9000)
     return () => {
+      clearTimeout(deadTimer)
       h.stop()
       exitSpectate()
     }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { subscribeLiveIndex, type LiveEntry, type LivePlayer } from '../../net/liveIndex'
+import { pruneDeadExhibition, subscribeExhibitionLiveCode } from '../../game/exhibition'
 import PlayerAvatar from './PlayerAvatar'
 import { sfx } from '../../audio/sfx'
 import './LiveBoard.css'
@@ -102,11 +103,24 @@ function Side({ p }: { p: LivePlayer }) {
 const TICK_MS = 20_000 // 每 20 秒跑到下一頁(第六批#5)
 
 export default function LiveBoard() {
-  const [entries, setEntries] = useState<LiveEntry[]>([])
+  const [rawEntries, setRawEntries] = useState<LiveEntry[]>([])
+  const [liveExCode, setLiveExCode] = useState<string | null>(null) // 目前真的還活著的表演賽 code(權威節點)
   const [center, setCenter] = useState(0)
   const myUid = usePlatformStore((s) => s.uid)
 
-  useEffect(() => subscribeLiveIndex(setEntries, 8), []) // 取 8 呈現 1(#1)
+  // board 立刻訂閱、立刻呈現(不等清理);清理丟背景跑,不擋畫面(不再「等清完才顯示」拖 8~15 秒)。
+  useEffect(() => {
+    const u1 = subscribeLiveIndex(setRawEntries, 8) // 取 8 呈現 1(#1)
+    const u2 = subscribeExhibitionLiveCode(setLiveExCode) // 用來即時濾死掉的表演賽卡
+    void pruneDeadExhibition() // 背景收掉 DB 裡死掉的表演賽節點(best-effort,不擋呈現)
+    return () => { u1(); u2() }
+  }, [])
+
+  // 即時濾掉「死掉的表演賽卡」:表演賽=雙方都是人機(bot vs bot);全域只有一個表演賽節點,
+  // 所以「是表演賽卡、狀態 live、但 code 不等於當前真活著的那個」= 死卡 → 不呈現(不必等 DB 清完)。
+  const entries = rawEntries.filter(
+    (e) => !(e.status === 'live' && e.p1?.isBot && e.p2?.isBot && e.code !== liveExCode),
+  )
 
   const total = entries.length
   const liveCount = entries.filter((e) => e.status === 'live').length
@@ -169,7 +183,7 @@ export default function LiveBoard() {
     setCenter((c) => (c >= total ? 0 : c))
   }, [total])
 
-  if (total === 0) return null // 沒場次 → 整塊不顯示(§5.1)
+  if (total === 0) return null // 沒場次(或全被濾成死卡)→ 整塊不顯示(§5.1)
 
   const main = entries[Math.min(center, total - 1)]
   const canPage = total > 1

@@ -8,6 +8,7 @@ import Button, { Paw, IconRobot, IconDice, IconKey, IconGlobe } from '../compone
 import Modal from '../components/Modal'
 import AccountButton from '../components/AccountButton'
 import LiveBoard from '../components/LiveBoard'
+import LobbyChat from '../components/LobbyChat'
 import { sfx } from '../../audio/sfx'
 import './Menu.css'
 
@@ -61,6 +62,7 @@ export default function Menu() {
     <div className="menu">
       <AccountButton />
       <LiveBoard />
+      <LobbyChat />
 
       {/* Full-bleed hero art (title baked in) */}
       {heroOk ? (

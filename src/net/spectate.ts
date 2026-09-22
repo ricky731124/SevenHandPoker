@@ -155,6 +155,15 @@ export function joinSpectate(
       void push(noticeNode, { kind: 'join', name: myName, at: serverTimestamp() }).catch(() => {}) // 進場提示
     })
 
+  // 重連時「重新掛」觀戰在席:手機切到 LINE 回訊息會斷 WebSocket → onDisconnect 把 watch 移掉
+  // (人數掉、彈幕收不到);回到前景重連後,若不重寫就永遠不在席了。這裡每次 .info/connected 變 true
+  // 就重寫 watchRef + 重掛 onDisconnect(myName 還沒解析好時先跳過,初次由上面的 .then() 寫)。
+  const unsubConn = onValue(ref(db, '.info/connected'), (snap) => {
+    if (stopped || snap.val() !== true || !myName) return
+    void dbSet(watchRef, myName).catch(() => {})
+    void onDisconnect(watchRef).remove().catch(() => {})
+  })
+
   const unsubSpec = onValue(
     specRef,
     (snap) => {
@@ -199,6 +208,7 @@ export function joinSpectate(
     stop: () => {
       if (stopped) return
       stopped = true
+      unsubConn()
       unsubSpec()
       unsubLive()
       unsubDanmaku()

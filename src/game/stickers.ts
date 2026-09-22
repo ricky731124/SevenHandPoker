@@ -4,7 +4,7 @@
  *   - free emoji stickers (everyone owns them → the 貼圖 button is never empty)
  *   - paid image stickers (public/stickers/{id}.png, green-screened + de-watermarked),
  *     unlocked by buying with 鑽石 (stored in profile.unlocked.emojis).
- * Order = the display/tray order (使用者定:笑臉→哭臉→驚訝→謝謝→讚→付費).
+ * Order = the display/tray order (使用者定:笑臉→哭臉→驚訝→生氣→謝謝→讚→愛心→再見→付費).
  */
 export interface StickerDef {
   id: string
@@ -20,8 +20,11 @@ export const STICKERS: StickerDef[] = [
   { id: 'smile', name: '笑臉', free: true, emoji: '😄' },
   { id: 'cry', name: '哭臉', free: true, emoji: '😢' },
   { id: 'wow', name: '驚訝', free: true, emoji: '😮' },
+  { id: 'angry', name: '生氣', free: true, emoji: '😠' },
   { id: 'thanks', name: '謝謝', free: true, emoji: '🙏' },
   { id: 'like', name: '讚', free: true, emoji: '👍' },
+  { id: 'heart', name: '愛心', free: true, emoji: '❤️' },
+  { id: 'bye', name: '再見', free: true, emoji: '👋' },
   { id: '1', name: '呵呵', free: false },
   { id: '2', name: '!!', free: false },
   { id: '3', name: '計畫通', free: false, price: 80 },

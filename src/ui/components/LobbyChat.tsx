@@ -1,0 +1,196 @@
+import { useEffect, useRef, useState } from 'react'
+import Modal from './Modal'
+import { avatarSrc } from './PlayerAvatar'
+import { useLobby } from '../hooks/useLobby'
+import { useAppStore } from '../../state/appStore'
+import { usePlatformStore } from '../../state/platformStore'
+import { STICKERS, getSticker } from '../../game/stickers'
+import { sfx } from '../../audio/sfx'
+import type { LobbyMsg } from '../../net/lobby'
+import './LobbyChat.css'
+
+/**
+ * 大廳聊天室（見 docs/LOBBY-AI-SPEC.md §3）。左下角 2 行縮合框（頭像+名字：內容/貼圖）
+ * → 點擊開 Modal 彈窗（沿用既有 Modal、固定高度、貼圖盤浮動不撐高）。
+ */
+
+// 聊天室貼圖 = 全部免費預設貼圖（emoji 那組，含新加的 生氣/愛心/再見）。
+const DEFAULT_STICKERS = STICKERS.filter((s) => s.free)
+
+function StickerGlyph({ id, size }: { id: string; size: number }) {
+  const def = getSticker(id)
+  if (def?.emoji) return <span style={{ fontSize: size, lineHeight: 1 }}>{def.emoji}</span>
+  return <span style={{ fontSize: size * 0.6, lineHeight: 1 }}>🂠</span>
+}
+
+function hhmmss(ts: number): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+type Cta = NonNullable<LobbyMsg['cta']>[number]
+/** CTA 按鈕點擊 → 導去對應流程（§13）。多數接既有畫面；賽事回放/每日任務先當 no-op。 */
+function runCta(c: Cta) {
+  sfx.click()
+  const app = useAppStore.getState()
+  switch (c.action) {
+    case 'register': app.requestRegister(); return
+    case 'google': app.requestGoogle(); return
+    case 'campaign': app.go('campaignStages'); return
+    case 'tutorial': app.go('tutorial'); return
+    // 個人化畫面涵蓋 頭像/牌組/牌背/預設特殊牌/展示成就/商城 → 都先導到 personalize
+    case 'personalize': case 'loadout': case 'achvShow': case 'shop': app.go('personalize'); return
+    case 'leaderboard': app.go('leaderboard'); return
+    case 'spectate': if (c.code) app.openSpectate(c.code); return
+    case 'replays': case 'daily': return // 這兩個是 Menu 內的彈窗,尚未接入口(§13 待辦)
+    case 'quickmatch':
+      void usePlatformStore.getState().ensureAccount()
+      app.openMatchmaking(c.room ?? 'normal')
+      return
+  }
+}
+
+function MsgRow({ m, myUid }: { m: LobbyMsg; myUid: string | null }) {
+  const mine = m.kind === 'human' && !!myUid && m.uid === myUid
+  return (
+    <div className={`lchat-row${mine ? ' lchat-row--me' : ''}`}>
+      <img className="lchat-av" src={avatarSrc(m.avatarId)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+      <div className="lchat-col">
+        <span className="lchat-name">{m.name}</span>
+        <div className="lchat-bubrow">
+          {m.type === 'sticker' && m.stickerId ? (
+            <div className="lchat-bubble lchat-bubble--sticker"><StickerGlyph id={m.stickerId} size={40} /></div>
+          ) : (
+            <div className="lchat-bubble">{m.text}</div>
+          )}
+          <span className="lchat-time">{hhmmss(m.ts)}</span>
+        </div>
+        {m.cta && m.cta.length > 0 && (
+          <div className="lchat-ctarow">
+            {m.cta.map((c, i) => (
+              <button key={i} type="button" className="lchat-cta" onClick={() => runCta(c)}>{c.label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function LobbyChat() {
+  const { messages, latest, send, notifyOpened } = useLobby()
+  const myUid = usePlatformStore((s) => s.uid)
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [tray, setTray] = useState(false)
+  const [hasNew, setHasNew] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+  const atBottomRef = useRef(true)
+  const seenLastRef = useRef<string | null>(null)
+
+  const scrollToBottom = () => {
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+    atBottomRef.current = true
+    setHasNew(false)
+  }
+  const onScroll = () => {
+    const el = listRef.current
+    if (!el) return
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    atBottomRef.current = near
+    if (near) setHasNew(false)
+  }
+
+  // 新訊息偵測用「最後一則 id」而非 length（訊息滿 30 則後 length 不再變 → 舊寫法會失效）。
+  const lastId = messages.length ? messages[messages.length - 1].id : null
+  useEffect(() => {
+    const first = seenLastRef.current === null
+    const changed = lastId !== null && lastId !== seenLastRef.current
+    seenLastRef.current = lastId
+    if (!changed || first) return
+    if (open) {
+      // 收到新訊息不發音效(會一直「搭搭搭」很吵,使用者要求拿掉)。只處理捲動。
+      if (atBottomRef.current) scrollToBottom()
+      else setHasNew(true)
+    }
+  }, [lastId, open])
+
+  // 開啟彈窗 → 直接捲到底
+  useEffect(() => { if (open) requestAnimationFrame(scrollToBottom) }, [open])
+
+  const openPopup = () => { sfx.click(); setOpen(true); notifyOpened() }
+  const submitText = () => {
+    const t = text.trim()
+    if (!t) return
+    send({ text: t.slice(0, 200) })
+    setText('')
+    atBottomRef.current = true // 自己發言 → 視為在追最新、之後自動捲到底看得到自己
+  }
+  const sendSticker = (id: string) => { send({ stickerId: id }); setTray(false); atBottomRef.current = true }
+
+  return (
+    <>
+      {/* 左下角縮合框（2 行：頭像 + 名字：內容/貼圖） */}
+      <button type="button" className="lchat-fab" onClick={openPopup} aria-label="聊天室">
+        {latest ? (
+          <>
+            <img className="lchat-fab__av" src={avatarSrc(latest.avatarId)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+            <span className="lchat-fab__body">
+              <b className="lchat-fab__name">{latest.name}：</b>
+              {latest.type === 'sticker' && latest.stickerId
+                ? <span className="lchat-fab__sticker"><StickerGlyph id={latest.stickerId} size={16} /></span>
+                : latest.text}
+            </span>
+          </>
+        ) : (
+          <span className="lchat-fab__hint">💬 點我聊天</span>
+        )}
+      </button>
+
+      <Modal open={open} onClose={() => setOpen(false)} onBack={() => setOpen(false)} title="聊天室" width={460} panelClass="lchat-modal">
+        <div className="lchat-wrap">
+          <div className="lchat-list" ref={listRef} onScroll={onScroll}>
+            {messages.length === 0 ? (
+              <p className="lchat-empty">還沒有人說話，來打聲招呼吧！</p>
+            ) : (
+              messages.map((m) => <MsgRow key={m.id} m={m} myUid={myUid} />)
+            )}
+          </div>
+
+          {/* 有新訊息但沒看到底 → 懸浮提示（不搶 focus，點了才捲到底） */}
+          {hasNew && (
+            <button type="button" className="lchat-newpill" onClick={scrollToBottom}>有新訊息 ↓</button>
+          )}
+
+          {/* 貼圖盤：懸浮在輸入列上方，不撐高彈窗 */}
+          {tray && (
+            <div className="lchat-tray">
+              {DEFAULT_STICKERS.map((s) => (
+                <button key={s.id} type="button" className="lchat-tray__btn" title={s.name} onClick={() => sendSticker(s.id)}>
+                  <StickerGlyph id={s.id} size={24} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="lchat-input-row">
+            <button type="button" className="lchat-emoji" onClick={() => { sfx.click(); setTray((v) => !v) }} aria-label="貼圖">😀</button>
+            <input
+              className="lchat-input"
+              value={text}
+              maxLength={200}
+              placeholder="說點什麼…"
+              onFocus={() => { setTray(false) }}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitText() } }}
+            />
+            <button type="button" className="lchat-send" onClick={submitText} disabled={!text.trim()}>發送</button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  )
+}

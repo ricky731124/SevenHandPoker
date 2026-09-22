@@ -125,6 +125,8 @@ export function subscribeOnlineCount(cb: (n: number) => void, onError?: () => vo
     cb(live + BOTS_ONLINE)
   }
 
+  // 計數天生免疫殘留:recount 只認「lastActive 在 10 分鐘內」的 uid,stale 節點不會被算到,
+  // 所以在線人數不需要靠 sweep 清 DB(之前那段 sweep 對數字零幫助,已移除)。
   const unsubPresence = onValue(
     ref(db, 'presence'),
     (snap) => {

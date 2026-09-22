@@ -46,6 +46,7 @@ export default function ShowdownModal({
   me,
   onClose,
   names,
+  onSpectatorClose,
 }: {
   open: boolean
   showdown: Showdown | null
@@ -54,6 +55,8 @@ export default function ShowdownModal({
   onClose: () => void
   /** 觀戰(§4.3):label 用雙方顯示名(非「你/對手」)、勝負標題用名字、隱藏「繼續」。 */
   names?: { p1: string; p2: string } | null
+  /** 觀戰:給觀戰者一個「主動關掉這格對決彈窗」的 X(只關自己這邊,不影響對戰者)。 */
+  onSpectatorClose?: () => void
 }) {
   if (!showdown || !slot) return <Modal open={false} onClose={onClose} children={null} />
   const spectator = !!names
@@ -82,13 +85,17 @@ export default function ShowdownModal({
     <Modal
       open={open}
       onClose={onClose}
-      locked
+      // 觀戰者:點彈窗外(遮罩)也能關(同玩家資訊卡)→ 不 locked、不 scrimThrough(讓遮罩吃點擊)。
+      // 對戰者:locked,只能按彈窗裡的「繼續」關。
+      locked={!spectator}
       title={title}
       width={520}
       // 觀戰:名字欄固定寬(~8 中文字)→ 兩排的牌起始位置對齊(名字長短不一也不歪,#4)。
       panelClass={`modal__panel--showdown${spectator ? ' modal__panel--showdown-spec' : ''}`}
-      scrimThrough={spectator}
     >
+      {spectator && onSpectatorClose && (
+        <button type="button" className="showdown__spec-close" onClick={onSpectatorClose} aria-label="關閉對決畫面" title="關閉">×</button>
+      )}
       <Row label={foeLabel} name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
       <div className="showdown__vs accent">{tie ? '平手・雙方各得' : 'VS'}</div>
       <Row label={meLabel} name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />

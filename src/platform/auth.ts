@@ -97,12 +97,43 @@ export function onAuth(cb: (user: User | null) => void): () => void {
 /**
  * Ensure a signed-in user exists (anonymous if none). Call this at the FIRST
  * persistence-worthy action, never on app boot. See PLATFORM-SPEC §2.2.
+ *
+ * ⚠️ 防重入:同一時刻若有多處呼叫(例如 Menu 快速配對 + Matchmaking overlay 都會呼叫
+ * ensureAccount),而 currentUser 尚未建立,舊版會各自 signInAnonymously → 建出「多個匿名
+ * 帳號」→ 每個都被 trackPresence 掛一筆 presence → 在線人數莫名 +N。這裡用一個共享的
+ * in-flight promise,讓並發呼叫共用同一次匿名登入,絕不重複建帳號。
  */
+let _pendingAnon: Promise<User> | null = null
+
+/**
+ * Resolves once Firebase has restored any persisted session (the FIRST
+ * onAuthStateChanged callback fires — with the saved user, or null if none).
+ *
+ * ⚠️ 為什麼需要:Firebase 還原已登入帳號是「非同步」的,開機/重整後有一小段時間
+ * `auth().currentUser` 還是 null。若此時就 signInAnonymously(例如大廳 ensureLobbyAuth
+ * 在 Menu 掛載即呼叫),會建出一個匿名帳號、把正要還原的帳號蓋掉 →「重整後被踢成訪客
+ * + 每次重整在線人數 +1(一直生拋棄式 uid)」。ensureUser 先等這個 resolve,確定沒有
+ * 已存帳號才建匿名。
+ */
+let _authReady: Promise<void> | null = null
+function whenAuthReady(): Promise<void> {
+  if (!_authReady) {
+    _authReady = new Promise((resolve) => {
+      const unsub = onAuthStateChanged(auth(), () => { unsub(); resolve() })
+    })
+  }
+  return _authReady
+}
+
 export async function ensureUser(): Promise<User> {
+  await whenAuthReady() // 先讓已存帳號有機會還原,才不會誤建匿名把它蓋掉
   const u = auth().currentUser
   if (u) return u
-  const cred = await signInAnonymously(auth())
-  return cred.user
+  if (_pendingAnon) return _pendingAnon
+  _pendingAnon = signInAnonymously(auth())
+    .then((cred) => cred.user)
+    .finally(() => { _pendingAnon = null })
+  return _pendingAnon
 }
 
 /**

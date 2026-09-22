@@ -477,12 +477,15 @@ function RegisterForm({ open, onClose, onDone }: { open: boolean; onClose: () =>
 
   return (
     <Modal open={open} onClose={handleClose} title="遊戲帳號註冊" width={360} panelClass="modal__panel--auth">
+      {/* 密碼欄包 <form> → 消除 Chrome「password field not in a form」警告；onSubmit 擋導頁,行為不變。 */}
+      <form onSubmit={(e) => e.preventDefault()}>
       <label className="acct-field">
         <span>帳號</span>
         <input
           className="acct-input"
           value={name}
           maxLength={16}
+          autoComplete="username"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -524,6 +527,7 @@ function RegisterForm({ open, onClose, onDone }: { open: boolean; onClose: () =>
           {busy ? '請稍候…' : '確定'}
         </Button>
       </div>
+      </form>
     </Modal>
   )
 }
@@ -565,12 +569,14 @@ function LoginForm({ open, onClose, onDone }: { open: boolean; onClose: () => vo
 
   return (
     <Modal open={open} onClose={handleClose} title="遊戲帳號登入" width={360} panelClass="modal__panel--auth">
+      <form onSubmit={(e) => e.preventDefault()}>
       <label className="acct-field">
         <span>帳號</span>
         <input
           className="acct-input"
           value={name}
           maxLength={16}
+          autoComplete="username"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -598,6 +604,7 @@ function LoginForm({ open, onClose, onDone }: { open: boolean; onClose: () => vo
           {busy ? '請稍候…' : '登入'}
         </Button>
       </div>
+      </form>
     </Modal>
   )
 }

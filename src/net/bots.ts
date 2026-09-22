@@ -132,6 +132,39 @@ export async function leaseBot(uid: string): Promise<BotPersona | null> {
   }
 }
 
+/**
+ * 表演賽用:一次占用「指定的多隻」persona(依 id),transaction 逐一搶、掛 onDisconnect。
+ * 冪等:空的/殭屍的/已是自己的都可占;接手續播時也用它「依 id 重占」。回成功占到的 id。best-effort。
+ * (leaseBot 是「一台只租一隻」的設計,表演賽的 host 要同時握兩隻,故另開這支。)
+ */
+export async function leaseBotsById(uid: string, ids: string[]): Promise<string[]> {
+  const got: string[] = []
+  for (const id of ids) {
+    try {
+      const lref = ref(getDb(), `botLease/${id}`)
+      const res = await runTransaction(lref, (cur) => {
+        if (cur && !leaseClaimable(cur) && (cur as { by?: string }).by !== uid) return // 別人握著且新鮮 → 放棄
+        return { by: uid, at: serverTimestamp() }
+      })
+      if (res.committed && (res.snapshot.val() as { by?: string } | null)?.by === uid) {
+        got.push(id)
+        void onDisconnect(lref).remove()
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+  return got
+}
+
+/** 表演賽用:放掉指定多隻 persona 的租借(cancel onDisconnect + remove)。best-effort。 */
+export async function releaseBotsById(ids: string[]): Promise<void> {
+  for (const id of ids) {
+    try { await onDisconnect(ref(getDb(), `botLease/${id}`)).cancel() } catch { /* ignore */ }
+    try { await remove(ref(getDb(), `botLease/${id}`)) } catch { /* best-effort */ }
+  }
+}
+
 /* ---- Record (§3.2) -------------------------------------------------------- */
 
 /**
