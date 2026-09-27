@@ -4,6 +4,8 @@ import { subStageOrder } from '../../game/campaign'
 import { ambientUnit, greetingUtter, reactUnit, arrivalGreeting, pickBots, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
 import { BOTS, type BotPersona } from '../../game/bots'
 import { fetchCard } from '../../platform/cards'
+import { subscribeLiveIndex } from '../../net/liveIndex'
+import { subscribeOnlineCount } from '../../net/presence'
 import {
   ensureLobbyAuth, startActive, stopActive, subscribeActive,
   tryBecomeHost, releaseHost, amHost, verifyStillHost, pruneActive, LOBBY_MUTE_USERS, hostGrabWasCold, hostGrabInfo,
@@ -49,12 +51,14 @@ let mLastSeenHuman: string | null = null
 let mLastReactByUid: Record<string, number> = {}
 let mActiveUids: string[] = []
 let mMyUid: string | null = null
+let mLiveCode: string | null = null // 當前可觀戰的 live code（spectate CTA 用；null=現在沒 live）
+let mOnline = 0 // 顯示用線上人數（= 角落 OnlineCount：presence 活躍 uid + BOTS_ONLINE 20）
 
 const getRoster = (): BotPersona[] => {
   if (mRoster.length === 0) mRoster = pickBots(Math.min(SESSION_BOTS, BOTS.length))
   return mRoster
 }
-const globals = (): LobbyGlobals => ({ onlineCount: mActive, hasLive: false })
+const globals = (): LobbyGlobals => ({ onlineCount: mOnline, hasLive: !!mLiveCode, liveCode: mLiveCode ?? undefined })
 const chatStale = (): boolean => {
   if (mMessages.length === 0) return true
   return Date.now() - (mMessages[mMessages.length - 1]?.ts ?? 0) > FRESH_MS
@@ -145,7 +149,9 @@ export function useLobby(): UseLobby {
   useEffect(() => {
     const un1 = subscribeChat((all) => setMessages(visibleChat(all)))
     const un2 = subscribeActive((n, uids) => { setActiveCount(n); mActiveUids = [...uids] })
-    return () => { un1(); un2() }
+    const un3 = subscribeLiveIndex((entries) => { mLiveCode = entries.find((e) => e.status === 'live')?.code ?? null })
+    const un4 = subscribeOnlineCount((n) => { mOnline = n }) // 與角落在線人數同源(含 +20 保底)
+    return () => { un1(); un2(); un3(); un4() }
   }, [])
 
   useEffect(() => {
@@ -217,6 +223,7 @@ export function useLobby(): UseLobby {
       const card = last.uid ? await fetchCard(last.uid) : null
       const input: ReactInput = {
         name: last.name,
+        username: last.username,
         registered: !!last.reg,
         streak: card?.pvp.streak ?? 0,
         bestStreak: card?.pvp.bestStreak ?? 0,
@@ -248,6 +255,7 @@ export function useLobby(): UseLobby {
         type: isSticker ? 'sticker' : 'text', text: payload.text, stickerId: payload.stickerId,
         reg: !!s2.uid && !s2.isAnonymous,
         stage: cleared ? subStageOrder(cleared) : -1,
+        username: s2.username ?? undefined,
       })
     })()
   }

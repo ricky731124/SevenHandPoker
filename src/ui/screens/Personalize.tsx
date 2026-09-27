@@ -41,11 +41,13 @@ export default function Personalize() {
   const saveLoadout = usePlatformStore((s) => s.saveLoadout)
   const saveAvatar = usePlatformStore((s) => s.saveAvatar)
   const saveAchievements = usePlatformStore((s) => s.saveAchievements)
-  const [tab, setTab] = useState<Tab>('stats') // 進來落在第一個頁籤(戰績,#3)
+  // 落點頁籤:聊天 CTA 若指定(loadout→cards / achvShow→achievements)就用它,否則預設戰績。
+  const [tab, setTab] = useState<Tab>(() => (useAppStore.getState().personalizeTab as Tab) || 'stats')
   const mw = useMobileWebScale()
 
   useEffect(() => {
     void usePlatformStore.getState().ensureAccount()
+    useAppStore.getState().clearPersonalizeTab() // 用過即清,下次進來回預設
   }, [])
 
   const allUnlocked = username === 'ricky' // test account: everything open

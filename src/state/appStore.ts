@@ -64,6 +64,12 @@ interface AppState {
   /** AccountButton fires Google login when it sees this on the menu (from the
    *  upgrade prompt's 使用 Google 登入). */
   wantGoogle: boolean
+  /** 聊天 CTA 觸發：AccountButton 看到這些旗標就開對應彈窗(每日任務/賽事回放/商城)。 */
+  wantDaily: boolean
+  wantReplays: boolean
+  wantShop: boolean
+  /** 聊天 CTA 導個人化時要落在哪個頁籤(avatar/stats/achievements/cards/emoji)；Personalize 讀完清空。 */
+  personalizeTab: string | null
   go: (screen: Screen) => void
   launchGame: (cfg: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean }) => void
   /** Show the free-match overlay for a room type (一般/特殊) — stays over the menu. */
@@ -85,6 +91,15 @@ interface AppState {
   /** From the upgrade prompt's 使用 Google 登入: go to the menu and flag Google login. */
   requestGoogle: () => void
   clearGoogle: () => void
+  /** 聊天 CTA：開每日任務/賽事回放/商城(回主畫面設旗標,AccountButton 開彈窗);個人化指定頁籤。 */
+  openDaily: () => void
+  clearDaily: () => void
+  openReplays: () => void
+  clearReplays: () => void
+  openShop: () => void
+  clearShop: () => void
+  openPersonalize: (tab?: string) => void
+  clearPersonalizeTab: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -100,6 +115,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   upgradePrompt: false,
   wantRegister: false,
   wantGoogle: false,
+  wantDaily: false,
+  wantReplays: false,
+  wantShop: false,
+  personalizeTab: null,
   go: (screen) => set({ screen }),
   launchGame: (cfg) => set({ pendingGame: cfg, screen: 'game' }),
   openMatchmaking: (type) => set({ matchType: type }),
@@ -116,6 +135,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearRegister: () => set({ wantRegister: false }),
   requestGoogle: () => set({ upgradePrompt: false, wantGoogle: true, screen: 'menu' }),
   clearGoogle: () => set({ wantGoogle: false }),
+  openDaily: () => set({ wantDaily: true, screen: 'menu' }),
+  clearDaily: () => set({ wantDaily: false }),
+  openReplays: () => set({ wantReplays: true, screen: 'menu' }),
+  clearReplays: () => set({ wantReplays: false }),
+  openShop: () => set({ wantShop: true, screen: 'menu' }),
+  clearShop: () => set({ wantShop: false }),
+  openPersonalize: (tab) => set({ personalizeTab: tab ?? null, screen: 'personalize' }),
+  clearPersonalizeTab: () => set({ personalizeTab: null }),
   updateSettings: (patch) => {
     const next = { ...get().settings, ...patch }
     try {

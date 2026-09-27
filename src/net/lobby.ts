@@ -263,6 +263,7 @@ export interface LobbyMsg {
   // 不必去讀對方 profile。非機密(是否訪客/主線進度)。
   reg?: boolean
   stage?: number
+  username?: string // 帳號（判 isOwner 專屬彩蛋用；他寫自己的、非機密）
   cta?: { label?: string; action: LobbyCtaAction; room?: 'normal' | 'special'; code?: string }[]
 }
 
@@ -282,6 +283,7 @@ export async function writeChatMessage(msg: Omit<LobbyMsg, 'id' | 'ts'>): Promis
   if (msg.stickerId != null) payload.stickerId = msg.stickerId
   if (msg.reg != null) payload.reg = msg.reg
   if (msg.stage != null) payload.stage = msg.stage
+  if (msg.username != null) payload.username = msg.username
   if (msg.cta != null) payload.cta = msg.cta
   try {
     await push(ref(getDb(), 'lobbyChat'), payload)

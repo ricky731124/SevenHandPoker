@@ -33,6 +33,7 @@ export interface BotUtterance {
 export interface LobbyGlobals {
   onlineCount: number
   hasLive: boolean
+  liveCode?: string // 當前可觀戰的 live code（spectate CTA 導向用）
   newcomerName?: string
   lastWinner?: string
   lastLoser?: string
@@ -42,6 +43,7 @@ export interface LobbyGlobals {
 /** 一位真人發言者的原始資料（host 讀他的玩家資訊卡 + 訊息 payload 組出）。 */
 export interface ReactInput {
   name: string
+  username?: string // 帳號（判 isOwner 用；顯示名可重複、帳號穩）
   registered: boolean
   streak: number
   bestStreak: number
@@ -78,11 +80,32 @@ interface Facts {
   boss: BossFacts | null
   onlineCount: number
   hasLive: boolean
+  liveCode?: string
   newcomerName?: string
   lastWinner?: string
   lastLoser?: string
+  isOwner: boolean
   morning: boolean
+  afternoon: boolean
+  evening: boolean
   night: boolean
+}
+
+/** 時段：早上05–11 / 下午11–17 / 晚上17–23 / 深夜23–05。 */
+function timeOfDay(now?: number): Pick<Facts, 'morning' | 'afternoon' | 'evening' | 'night'> {
+  const hr = new Date(now ?? Date.now()).getHours()
+  return {
+    morning: hr >= 5 && hr < 11,
+    afternoon: hr >= 11 && hr < 17,
+    evening: hr >= 17 && hr < 23,
+    night: hr >= 23 || hr < 5,
+  }
+}
+/** 發言者帳號是否為 owner（chatContent.config.owners，不分大小寫）。 */
+function isOwnerName(username: string | undefined): boolean {
+  if (!username) return false
+  const owners = (CONTENT.config.owners ?? []).map((s) => s.toLowerCase())
+  return owners.includes(username.toLowerCase())
 }
 
 // ─── 靜態對照（從遊戲資料取真值，避免亂命名）──────────────────────────────────
@@ -146,8 +169,6 @@ function bossForOrder(order: number): BossFacts | null {
 }
 
 function reactFacts(inp: ReactInput, g: LobbyGlobals): Facts {
-  const ts = new Date(g.now ?? Date.now())
-  const hr = ts.getHours()
   const loadoutName = inp.loadout.length
     ? (SPECIAL_CARDS[inp.loadout[Math.floor(rng0() * inp.loadout.length)] as SpecialCardId]?.name ?? null)
     : null
@@ -166,24 +187,23 @@ function reactFacts(inp: ReactInput, g: LobbyGlobals): Facts {
     boss: bossForOrder(inp.clearedOrder),
     onlineCount: g.onlineCount,
     hasLive: g.hasLive,
+    liveCode: g.liveCode,
     newcomerName: g.newcomerName,
     lastWinner: g.lastWinner,
     lastLoser: g.lastLoser,
-    morning: hr >= 5 && hr < 11,
-    night: hr >= 0 && hr < 5,
+    isOwner: isOwnerName(inp.username),
+    ...timeOfDay(g.now),
   }
 }
 
 /** 沒有發言者（環境閒聊 / 主動）時的事實：只有全域 + 隨機實體可用。 */
 function ambientFacts(g: LobbyGlobals): Facts {
-  const ts = new Date(g.now ?? Date.now())
-  const hr = ts.getHours()
   return {
     name: '', registered: true, streak: 0, bestStreak: 0, wins: 0, games: 0, winRate: null,
     achvList: [], hasLoadout: false, loadoutName: null, clearedOrder: -1, boss: null,
-    onlineCount: g.onlineCount, hasLive: g.hasLive, newcomerName: g.newcomerName,
-    lastWinner: g.lastWinner, lastLoser: g.lastLoser,
-    morning: hr >= 5 && hr < 11, night: hr >= 0 && hr < 5,
+    onlineCount: g.onlineCount, hasLive: g.hasLive, liveCode: g.liveCode, newcomerName: g.newcomerName,
+    lastWinner: g.lastWinner, lastLoser: g.lastLoser, isOwner: false,
+    ...timeOfDay(g.now),
   }
 }
 
@@ -219,9 +239,10 @@ function evalTerm(term: string, F: Facts): boolean {
     }
   } else {
     res = ({
-      guest: !F.registered, registered: F.registered,
+      guest: !F.registered, registered: F.registered, isOwner: F.isOwner,
       showsAchv: F.achvList.length > 0, silverAchv: F.achvList.some((a) => a.tier >= 2), goldAchv: F.achvList.some((a) => a.tier >= 3),
-      hasLoadout: F.hasLoadout, hasBoss: !!F.boss, hasLive: F.hasLive, morning: F.morning, night: F.night,
+      hasLoadout: F.hasLoadout, hasBoss: !!F.boss, hasLive: F.hasLive,
+      morning: F.morning, afternoon: F.afternoon, evening: F.evening, night: F.night,
     } as Record<string, boolean>)[t] ?? false
   }
   return neg ? !res : res
@@ -294,7 +315,7 @@ function resolveCtas(spec: LobbyCtaSpec | undefined, lineChance: number | undefi
     if (n === 'quickmatch') out.push({ action: 'quickmatch', room: rng() < 0.5 ? 'normal' : 'special', label: CTA_LABEL.quickmatch })
     else if (n === 'quickmatch-normal') out.push({ action: 'quickmatch', room: 'normal', label: '快速配對（一般）' })
     else if (n === 'quickmatch-special') out.push({ action: 'quickmatch', room: 'special', label: '快速配對（特殊）' })
-    else if (n === 'spectate') { if (F.hasLive) out.push({ action: 'spectate', label: CTA_LABEL.spectate }) } // 沒 live 就不掛觀戰鈕
+    else if (n === 'spectate') { if (F.hasLive && F.liveCode) out.push({ action: 'spectate', label: CTA_LABEL.spectate, code: F.liveCode }) } // 有 live 才掛觀戰鈕 + 帶當前 code
     else out.push({ action: n as CtaOut['action'], label: CTA_LABEL[n] ?? n })
   }
   return out.length ? out : undefined
@@ -363,11 +384,19 @@ export function ambientUnit(bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: ()
     }
     const out: BotUtterance[] = []
     for (const beat of shape.beats) {
+      if (beat.chance != null && rng() >= beat.chance) continue // 這拍「不一定出現」(例：不一定有 C)
       const b = byRole[beat.role] ?? pick(roster, rng)
-      const line = pickLine(CONTENT.beatPools[beat.pool], F, 1, rng)
+      // beat 可以四選一：lines(內嵌加權) / t(固定句) / sticker(固定貼圖) / pool(從 beatPools 抽)
+      const pool: Line[] | undefined =
+        beat.lines ? beat.lines
+          : beat.t != null ? [{ t: beat.t }]
+            : beat.sticker != null ? [{ sticker: beat.sticker }]
+              : beat.pool ? CONTENT.beatPools[beat.pool]
+                : undefined
+      const line = pickLine(pool, F, 1, rng)
       if (!line) continue
       let text = line.text
-      if (text) for (const [k, v] of Object.entries(slotVals)) text = text!.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
+      if (text) for (const [k, v] of Object.entries(slotVals)) text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
       out.push(mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId } : { text }))
     }
     return out
@@ -400,6 +429,8 @@ function weightedCat(w: Partial<Record<Cat, number>>, rng: () => number): Cat {
 function ambientProactive(roster: BotPersona[], F: Facts, rng: () => number): BotUtterance | null {
   const kinds: string[] = ['online_count', 'gossip_gm']
   if (F.morning) kinds.push('time_morning')
+  if (F.afternoon) kinds.push('time_afternoon')
+  if (F.evening) kinds.push('time_evening')
   if (F.night) kinds.push('time_night')
   if (F.lastWinner && F.lastLoser) kinds.push('announce_replay')
   const kind = pick(kinds, rng)

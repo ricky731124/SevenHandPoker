@@ -83,6 +83,9 @@ export default function AccountButton() {
   const pendingRoom = useAppStore((s) => s.pendingRoom)
   const wantRegister = useAppStore((s) => s.wantRegister)
   const wantGoogle = useAppStore((s) => s.wantGoogle)
+  const wantDaily = useAppStore((s) => s.wantDaily)
+  const wantReplays = useAppStore((s) => s.wantReplays)
+  const wantShop = useAppStore((s) => s.wantShop)
   // A registered (non-anonymous) account. uid+isAnonymous are set together with
   // `ready`, so this is stable — unlike `username`, which loads a beat later via
   // the profile subscription (using username here caused the gate to flash for
@@ -136,6 +139,11 @@ export default function AccountButton() {
       useAppStore.getState().clearRegister()
     }
   }, [wantRegister])
+
+  // 聊天 CTA 觸發：開每日任務 / 賽事回放 / 商城 彈窗（開完清旗標）。
+  useEffect(() => { if (wantDaily) { setDailyOpen(true); useAppStore.getState().clearDaily() } }, [wantDaily])
+  useEffect(() => { if (wantReplays) { setHighlightsOpen(true); useAppStore.getState().clearReplays() } }, [wantReplays])
+  useEffect(() => { if (wantShop) { setShopOpen(true); useAppStore.getState().clearShop() } }, [wantShop])
 
   const onboard = () => {
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 import { avatarSrc } from './PlayerAvatar'
+import PlayerInfoCard, { type CardFallback } from './PlayerInfoCard'
 import { useLobby } from '../hooks/useLobby'
 import { useAppStore } from '../../state/appStore'
 import { usePlatformStore } from '../../state/platformStore'
@@ -40,11 +41,14 @@ function runCta(c: Cta) {
     case 'google': app.requestGoogle(); return
     case 'campaign': app.go('campaignStages'); return
     case 'tutorial': app.go('tutorial'); return
-    // 個人化畫面涵蓋 頭像/牌組/牌背/預設特殊牌/展示成就/商城 → 都先導到 personalize
-    case 'personalize': case 'loadout': case 'achvShow': case 'shop': app.go('personalize'); return
+    case 'personalize': app.openPersonalize(); return       // 個人化(預設頁籤)
+    case 'loadout': app.openPersonalize('cards'); return    // 直接落在「牌組/預設特殊牌」頁
+    case 'achvShow': app.openPersonalize('achievements'); return // 直接落在「成就」頁
+    case 'shop': app.openShop(); return                     // 商城彈窗
+    case 'daily': app.openDaily(); return                   // 每日任務彈窗
+    case 'replays': app.openReplays(); return               // 賽事回放彈窗
     case 'leaderboard': app.go('leaderboard'); return
     case 'spectate': if (c.code) app.openSpectate(c.code); return
-    case 'replays': case 'daily': return // 這兩個是 Menu 內的彈窗,尚未接入口(§13 待辦)
     case 'quickmatch':
       void usePlatformStore.getState().ensureAccount()
       app.openMatchmaking(c.room ?? 'normal')
@@ -52,11 +56,11 @@ function runCta(c: Cta) {
   }
 }
 
-function MsgRow({ m, myUid }: { m: LobbyMsg; myUid: string | null }) {
+function MsgRow({ m, myUid, onOpenCard }: { m: LobbyMsg; myUid: string | null; onOpenCard: (m: LobbyMsg) => void }) {
   const mine = m.kind === 'human' && !!myUid && m.uid === myUid
   return (
     <div className={`lchat-row${mine ? ' lchat-row--me' : ''}`}>
-      <img className="lchat-av" src={avatarSrc(m.avatarId)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+      <img className="lchat-av" src={avatarSrc(m.avatarId)} alt="" style={{ cursor: 'pointer' }} onClick={() => onOpenCard(m)} onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
       <div className="lchat-col">
         <span className="lchat-name">{m.name}</span>
         <div className="lchat-bubrow">
@@ -86,6 +90,7 @@ export default function LobbyChat() {
   const [text, setText] = useState('')
   const [tray, setTray] = useState(false)
   const [hasNew, setHasNew] = useState(false)
+  const [cardTarget, setCardTarget] = useState<{ uid: string | null; fallback: CardFallback } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
   const seenLastRef = useRef<string | null>(null)
@@ -130,6 +135,12 @@ export default function LobbyChat() {
     atBottomRef.current = true // 自己發言 → 視為在追最新、之後自動捲到底看得到自己
   }
   const sendSticker = (id: string) => { send({ stickerId: id }); setTray(false); atBottomRef.current = true }
+  // 點頭像 → 開玩家資訊卡（人機用 botId，PlayerInfoCard 內建 fetchBotCard 顯示 persona 卡、不露餡）。
+  const openCard = (m: LobbyMsg) => {
+    sfx.click()
+    const uid = m.kind === 'human' ? (m.uid ?? null) : (m.botId ?? null)
+    setCardTarget({ uid, fallback: { name: m.name, avatarId: m.avatarId } })
+  }
 
   return (
     <>
@@ -156,7 +167,7 @@ export default function LobbyChat() {
             {messages.length === 0 ? (
               <p className="lchat-empty">還沒有人說話，來打聲招呼吧！</p>
             ) : (
-              messages.map((m) => <MsgRow key={m.id} m={m} myUid={myUid} />)
+              messages.map((m) => <MsgRow key={m.id} m={m} myUid={myUid} onOpenCard={openCard} />)
             )}
           </div>
 
@@ -191,6 +202,10 @@ export default function LobbyChat() {
           </div>
         </div>
       </Modal>
+
+      {cardTarget && (
+        <PlayerInfoCard uid={cardTarget.uid} fallback={cardTarget.fallback} onClose={() => setCardTarget(null)} />
+      )}
     </>
   )
 }
