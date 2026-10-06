@@ -1,6 +1,14 @@
 # 大廳 AI 人機：聊天室 + LiveBoard 自動對戰 開發規格書
 
-> 狀態：**框架定案、內容後補**。本檔只定「機制 + 資料 schema」；實際對話句子、tips 內容為後補。
+> 狀態：**全部已上線**（2026-10-06）。內文各節標的「未 commit」是當時的紀錄，以這張表為準：
+>
+> | commit | 內容 | 對應章節 |
+> |---|---|---|
+> | `c1e4877` (09-22) | 大廳 AI 人機：聊天室 + LiveBoard 表演賽 + 內容引擎 v2 | §1~§12、§13.1~13.9 |
+> | `fbaa0a9` (09-27) | 內容引擎擴充（owner 彩蛋/時段/關卡分段/關鍵字/固定+混合劇場）+ CTA 入口全接 + 點頭像開資訊卡 | §13 |
+> | `30472a3` (10-06) | 聊天導演（換手/回大廳續聊、防連發）+ reactRules 合併大池 + 內容檢查器 + 圖片瘦身 + 觀戰進場直接定位 + owner 線上名單 | §13.10~13.12 |
+>
+> **還沒做（大廳 AI 相關）**：①聊天內容量產到 ≥3000（使用者寫 `// -- 自然語言` 給核心句，Claude 套功能+擴充）②`announce_replay`（剛剛誰打敗誰）、`cue_idle`（點名潛水者）的資料餵給（§13.8）③大廳網路瘦身（使用者說先不動，見 §13.13）。
 > 關聯：複用 `docs/SPECTATE-REPLAY-SPEC.md` §3（固定人機/租借）、§4（觀戰/liveIndex/broadcast）、§5（Live 版卡片）、§6（賽事回放）、§7（UI/UX 規範）。
 
 ---
@@ -329,7 +337,7 @@ reactRules:  { when: Condition, say: poolRef|Line[], cta?: Cta }[]  // 有序；
 
 ---
 
-## 13. 聊天內容模型 v2（產句引擎）— 定案 + as-built（2026-09-22 實作、已瀏覽器實測、未 commit）
+## 13. 聊天內容模型 v2（產句引擎）— 定案 + as-built（2026-09-22 實作，已上線 `c1e4877`/`fbaa0a9`/`30472a3`）
 
 > 取代 §3.5 的陽春 schema。目標：**組合出 ≥3000 種變化**（不是手寫 3000 句）＋針對性＋關鍵字＋主動內容＋不重複感。使用者給核心/迷因句，Claude 依框架量產。
 
@@ -386,7 +394,7 @@ reactRules:  { when: Condition, say: poolRef|Line[], cta?: Cta }[]  // 有序；
 - ⏳ 待接：`spectate`/`replays`/`daily` CTA 入口；`announce_replay`/`cue_idle` 的資料餵給(需 host 拿最近表演賽勝負 + 在席但沒發言者名單)；`hasLive` 目前恆 false。
 - 🔒 不碰：表演賽「怎麼觸發」邏輯、紅線（不寫真人節點、不揭露人機）。**未 commit。**
 
-### 13.10 聊天導演 + 內容檢查（2026-10-06，未 commit）
+### 13.10 聊天導演 + 內容檢查（2026-10-06，已上線 `30472a3`）
 - **導演 `src/game/lobbyDirector.ts`**（純邏輯、依賴注入 write/verifyHost/sleep/now，可做多分頁劇本模擬）決定何時講、講幾則、要不要打招呼；`useLobby.ts` 只剩 Firebase 接線 + 表演賽觸發（表演賽邏輯不變）。
   - **招呼只在冷啟動且聊天安靜 ≥10 分**；其他一律接著聊（修「打完一場回來又安安大家好」）。
   - **換手續聊**：非冷啟動成為 host 且引擎閒著 → 補 2~4 則（推翻 9/20「換手不重置」，使用者 10/06 同意）。
@@ -399,14 +407,23 @@ reactRules:  { when: Condition, say: poolRef|Line[], cta?: Cta }[]  // 有序；
 - **reactRules 新規則（10/06 第二批）**：`exclusive:true` 的規則獨佔（目前 isOwner、guest）；其他所有符合的規則**合併成一個大池**（句子帶自己規則的 cta/ctaChance；achv 取最高階要求）→ 保底句可達、老手不再只抽到 2 句。
 - **防連發（10/06 第二批）**：每則送出前「硬間隔」——聊天室最後一則（不論誰講、哪個分頁）未滿 10s 先等；確認 host 後再檢查一次本地狀態（確認期間人離開就不送）；時間比對用校正過的 `serverNow()`；HMR 換新導演時 `dispose()` 舊的。壓力測試：3 分頁亂進亂出/換手/發言，20 種子 × 2 小時 × (0ms/300ms 延遲)，最小間隔 10.2s、沒聽眾不講、招呼只在安靜 ≥10 分後。真環境兩分頁換手：10 則最小間隔 11.1s、0 則 <10s。
 
-### 13.12 觀戰進場直接給局面 + owner 線上名單（10/06 第二批，未 commit）
+### 13.12 觀戰進場直接給局面 + owner 線上名單（10/06 第二批，已上線 `30472a3`）
 - **觀戰**：`SkipEnterAnim` context（`components/game/enterAnim.ts`）。SpectatorGame 在棋盤剛掛上的 0.6s 內提供 true → Hand/OpponentHand/SlotView 用 `initial={false}` 直接定位；之後新發的牌照常飛入。實測重進觀戰 0.13s 出棋盤、48 張牌 0 張在飛。
 - **owner 線上名單** `OnlineWho.tsx`：只有 `isOwnerName(username)`（chatContent.config.owners，目前 ricky）且非訪客才渲染/訂閱；放在左上「賽事回放」下方；名單＝`subscribeOnlineUids()`（與在線人數同一套 10 分窗判定，不含人機、不含自己），名字讀 `cards/{uid}`，訪客顯示「訪客·xxxx」；沒人不顯示、多人往下排。Q 版字型（--font-display）+ 羊皮紙膠囊 + 綠點。
 
-### 13.11 圖片瘦身（2026-10-06，未 commit）
+### 13.11 圖片瘦身（2026-10-06，已上線 `30472a3`）
 - 頭像原為 ~1000px PNG（0.7~1.4MB/張）、title.png 1.8MB，畫面只顯示 40~150px → 新玩家進主畫面要下載 ~9MB、解碼 ~28MB。
 - `scripts/build-img.mjs`（ffmpeg-static）產 `public/avatars/{id}.webp`（長邊 512，~20KB）+ `public/title.webp`（73KB）；**原 PNG 保留當母檔**，改原圖後重跑即可。
 - `avatarSrc()`/Menu 標題/CardBack 改用 WebP；頭像 `<img>` 加 `decoding="async"`，清單加 `loading="lazy"`。實測主畫面圖片總量 **263KB**。
+
+### 13.13 大廳網路/運算瘦身 — 調查結果（10/06，使用者說「先不用動」，之後要做照這份）
+調查結論：非 host 手機負擔不大；以下為可瘦身點（依效益排序，皆**未做**）：
+1. **非 host 每 6s 對 `lobbyHost` 跑 runTransaction**（`useLobby` poll → `tryBecomeHost`，沒有 lobbyHost 監聽、首次 cache 為 null 必被打回 → 每輪 ≥2 次來回，約 10 次/分/人）。→ 改 `onValue(lobbyHost)`，只在過期時才 transaction。
+2. **`lobbyExhibition` 每步推整個節點給所有人**（含 moves[] + 兩隻 BossRuntime；驅動者每步約寫 2 次 + 每 4s 心跳 → 約 35~40 事件/分推給每個在大廳的人；`exhibition.ts:102` 與 `:157` 各一個監聽）。→ 拆小 meta 節點（code/status/driverConn/driverAt）給旁觀者；moves 用 push 追加、步驟寫入順便刷新 driverAt 取消獨立心跳。
+3. **`liveIndex` 每人 3 個監聽**（useLobby / LiveBoard / exhibition），每個事件各自 parse+sort 並各跑一次 `sweepStaleLive`；結束卡保留 24h（含每場表演賽）→ 進大廳首次下載隨時間變大。→ 共用一個訂閱、`limitToLast(20)` 查詢、只有 host 清、表演賽結束卡短 TTL。
+4. **`presence` 整包下載且從不清理**（OnlineCount、useLobby、owner 的 OnlineWho 共用 SDK 監聽但各自重算）。→ host 寫一個小的 onlineCount 值、定期清舊 uid。
+5. host 每 6s：`pruneActive` 讀整個 lobbyActive、`markSeenAndFindNewcomers` 讀整個 lobbySeen 並寫回 → 改 30~60s 一次。
+6. 觀戰時主畫面（LiveBoard/聊天/host 迴圈）仍掛在底下；GameBoard `useGameStore()` 無 selector（`Game.tsx:285`），進場數次 store 更新都整桌重畫 → 可合併成一次 set、觀戰時暫停主畫面層。
 
 ### 13.9 內容生產流程（定案）
 使用者用**自然語言 + 【中文佔位】**下單（格式見 chatContent.ts 檔頭 / 對話紀錄的 A~F 格式），Claude 轉成 `Line` 灌進 `chatContent.ts` 並量產；使用者也可直接改該檔（有中文註解）。
