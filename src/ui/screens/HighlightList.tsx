@@ -100,7 +100,7 @@ export default function HighlightList({ open, onClose }: { open: boolean; onClos
                 <li key={r.id} className="lb-row rp-hrow" onClick={() => pick(r)}>
                   <span className="lb-rank">{i + 1}.</span>
                   <div className="rp-hmatch">
-                    <img className="rp-hava" src={avatarSrc(r.p1?.avatar || 'cat')} alt="" />
+                    <img className="rp-hava" src={avatarSrc(r.p1?.avatar || 'cat')} alt="" decoding="async" loading="lazy" />
                     <span className="rp-hname">{r.p1?.name || '玩家1'}</span>
                     <span className="rp-hspace" />
                     <span className={r.winner === 'p1' ? 'rp-hwin' : 'rp-hlose'}>{r.winner === 'p1' ? '勝' : '敗'}</span>
@@ -108,7 +108,7 @@ export default function HighlightList({ open, onClose }: { open: boolean; onClos
                     <span className={r.winner === 'p2' ? 'rp-hwin' : 'rp-hlose'}>{r.winner === 'p2' ? '勝' : '敗'}</span>
                     <span className="rp-hspace" />
                     <span className="rp-hname rp-hname--right">{r.p2?.name || '玩家2'}</span>
-                    <img className="rp-hava" src={avatarSrc(r.p2?.avatar || 'bird')} alt="" />
+                    <img className="rp-hava" src={avatarSrc(r.p2?.avatar || 'bird')} alt="" decoding="async" loading="lazy" />
                   </div>
                   <div className="rp-hmeta">
                     <div className="rp-hmode">{matchLabel(r.matchType)} - {roomLabel(r.special)}</div>

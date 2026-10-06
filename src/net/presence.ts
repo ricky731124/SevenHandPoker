@@ -92,6 +92,31 @@ export function trackPresence(uid: string): () => void {
 }
 
 /**
+ * 目前在線的真人 uid 清單（跟 subscribeOnlineCount 同一套判定：任一連線 lastActive 在窗口內；
+ * 不含人機保底）。給 owner 專屬的「線上名單」用。presence 本來就公開可讀，這裡只是換個形式回傳。
+ */
+export function subscribeOnlineUids(cb: (uids: string[]) => void): () => void {
+  const db = getDb()
+  type Conn = { lastActive?: number } | true
+  let entries: Record<string, Record<string, Conn>> = {}
+  let offset = 0
+  let last = ''
+  const recompute = () => {
+    const now = Date.now() + offset
+    const uids = Object.entries(entries)
+      .filter(([, conns]) => Object.values(conns ?? {}).some((c) => c !== true && typeof c?.lastActive === 'number' && now - c.lastActive < ONLINE_WINDOW_MS))
+      .map(([uid]) => uid)
+      .sort()
+    const key = uids.join(',')
+    if (key !== last) { last = key; cb(uids) } // 名單沒變就不通知（避免無謂重畫）
+  }
+  const unsubPresence = onValue(ref(db, 'presence'), (snap) => { entries = (snap.val() as typeof entries) ?? {}; recompute() }, () => cb([]))
+  const unsubOffset = onValue(ref(db, '.info/serverTimeOffset'), (snap) => { offset = (snap.val() as number) ?? 0; recompute() })
+  const timer = setInterval(recompute, RECOUNT_MS)
+  return () => { unsubPresence(); unsubOffset(); clearInterval(timer) }
+}
+
+/**
  * Subscribe to the count of online people (distinct uids with ≥1 connection
  * active within the window) + BOTS_ONLINE. Recomputes on every presence change
  * AND on a timer — entries expire silently (no DB event), so a change alone isn't

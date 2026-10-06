@@ -386,5 +386,27 @@ reactRules:  { when: Condition, say: poolRef|Line[], cta?: Cta }[]  // 有序；
 - ⏳ 待接：`spectate`/`replays`/`daily` CTA 入口；`announce_replay`/`cue_idle` 的資料餵給(需 host 拿最近表演賽勝負 + 在席但沒發言者名單)；`hasLive` 目前恆 false。
 - 🔒 不碰：表演賽「怎麼觸發」邏輯、紅線（不寫真人節點、不揭露人機）。**未 commit。**
 
+### 13.10 聊天導演 + 內容檢查（2026-10-06，未 commit）
+- **導演 `src/game/lobbyDirector.ts`**（純邏輯、依賴注入 write/verifyHost/sleep/now，可做多分頁劇本模擬）決定何時講、講幾則、要不要打招呼；`useLobby.ts` 只剩 Firebase 接線 + 表演賽觸發（表演賽邏輯不變）。
+  - **招呼只在冷啟動且聊天安靜 ≥10 分**；其他一律接著聊（修「打完一場回來又安安大家好」）。
+  - **換手續聊**：非冷啟動成為 host 且引擎閒著 → 補 2~4 則（推翻 9/20「換手不重置」，使用者 10/06 同意）。
+  - **回大廳續聊**：host 看到某人離開 ≥45s 又回來 → 補 2~4 則；host 自己 ≥45s 沒 poll(被節流) 時只重設基準、不誤判。
+  - 安靜 ≥30s 時第一句 1.5~4s 就出；其餘 10~20s。真人發言/點開聊天室 → 額度回滿 6~9（不打招呼）。
+  - 進主畫面延遲 3s 才接 host 工作（`START_DELAY_MS`）；「成為 host」與「人數到位」誰先到都不漏（`pendingBecameRef`）。
+- **劇場**：不加 opener；共用槽（`{card}`/`{sticker}`）在挑句前帶入（修：原本含槽的句子全被濾掉 → 聊特殊卡劇場 B 從不發言）；劇場句的 cta 會顯示。
+- **內容檢查器 `lintChatContent()`**（lobbyChat.ts）：pool/關鍵字池/佔位/條件/按鈕/貼圖 id/beat 格式/無發言者卻用 `{name}`/關鍵字互搶/池沒人用。DEV 啟動印在 F12；`npm test` 有 error 就失敗。
+- **測試**：`lobbyDirector.test.ts`（9 個多分頁劇本：冷啟動、獨自進遊戲回來、換手、回大廳、切分頁不觸發、host 被節流不誤判、回覆插隊+節流、點開聊天室、兩分頁搶 host 不洗版、沒聽眾不講；全程驗「非 host 不寫」）＋ `lobbyChat.coverage.test.ts`（每個劇場/關鍵字/貼圖/時段/owner/觀戰鈕都真的會出現）。
+- **reactRules 新規則（10/06 第二批）**：`exclusive:true` 的規則獨佔（目前 isOwner、guest）；其他所有符合的規則**合併成一個大池**（句子帶自己規則的 cta/ctaChance；achv 取最高階要求）→ 保底句可達、老手不再只抽到 2 句。
+- **防連發（10/06 第二批）**：每則送出前「硬間隔」——聊天室最後一則（不論誰講、哪個分頁）未滿 10s 先等；確認 host 後再檢查一次本地狀態（確認期間人離開就不送）；時間比對用校正過的 `serverNow()`；HMR 換新導演時 `dispose()` 舊的。壓力測試：3 分頁亂進亂出/換手/發言，20 種子 × 2 小時 × (0ms/300ms 延遲)，最小間隔 10.2s、沒聽眾不講、招呼只在安靜 ≥10 分後。真環境兩分頁換手：10 則最小間隔 11.1s、0 則 <10s。
+
+### 13.12 觀戰進場直接給局面 + owner 線上名單（10/06 第二批，未 commit）
+- **觀戰**：`SkipEnterAnim` context（`components/game/enterAnim.ts`）。SpectatorGame 在棋盤剛掛上的 0.6s 內提供 true → Hand/OpponentHand/SlotView 用 `initial={false}` 直接定位；之後新發的牌照常飛入。實測重進觀戰 0.13s 出棋盤、48 張牌 0 張在飛。
+- **owner 線上名單** `OnlineWho.tsx`：只有 `isOwnerName(username)`（chatContent.config.owners，目前 ricky）且非訪客才渲染/訂閱；放在左上「賽事回放」下方；名單＝`subscribeOnlineUids()`（與在線人數同一套 10 分窗判定，不含人機、不含自己），名字讀 `cards/{uid}`，訪客顯示「訪客·xxxx」；沒人不顯示、多人往下排。Q 版字型（--font-display）+ 羊皮紙膠囊 + 綠點。
+
+### 13.11 圖片瘦身（2026-10-06，未 commit）
+- 頭像原為 ~1000px PNG（0.7~1.4MB/張）、title.png 1.8MB，畫面只顯示 40~150px → 新玩家進主畫面要下載 ~9MB、解碼 ~28MB。
+- `scripts/build-img.mjs`（ffmpeg-static）產 `public/avatars/{id}.webp`（長邊 512，~20KB）+ `public/title.webp`（73KB）；**原 PNG 保留當母檔**，改原圖後重跑即可。
+- `avatarSrc()`/Menu 標題/CardBack 改用 WebP；頭像 `<img>` 加 `decoding="async"`，清單加 `loading="lazy"`。實測主畫面圖片總量 **263KB**。
+
 ### 13.9 內容生產流程（定案）
 使用者用**自然語言 + 【中文佔位】**下單（格式見 chatContent.ts 檔頭 / 對話紀錄的 A~F 格式），Claude 轉成 `Line` 灌進 `chatContent.ts` 並量產；使用者也可直接改該檔（有中文註解）。

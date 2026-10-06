@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import type { Card as TCard } from '../../../game/cards'
 import { sortHand, type SortDir, type SortMode } from '../../../game/sort'
 import Card from '../Card'
+import { useSkipEnterAnim } from './enterAnim'
 
 interface Props {
   cards: TCard[]
@@ -36,6 +37,7 @@ export default function Hand({ cards, selected, sortMode, sortDir, interactive, 
   const fit = n > 1 ? (maxWidth - cardW) / (n - 1) : ideal
   const overlap = Math.max(cardW * 0.34, Math.min(ideal, fit))
   const lift = Math.round(cardW * 0.42)
+  const skipEnter = useSkipEnterAnim() // 觀戰中途進場 → 不播飛入
 
   return (
     <div className="hand" style={{ width: overlap * (n - 1) + cardW, height: cardW * 1.4 + lift }}>
@@ -49,7 +51,7 @@ export default function Hand({ cards, selected, sortMode, sortDir, interactive, 
             key={c.id}
             className="hand__slot"
             style={{ left: i * overlap, zIndex: i }}
-            initial={{ x: -320 - i * overlap * 0.25, y: -210, rotate: -22, opacity: 0, scale: 0.82 }}
+            initial={skipEnter ? false : { x: -320 - i * overlap * 0.25, y: -210, rotate: -22, opacity: 0, scale: 0.82 }}
             animate={{ x: 0, y: 0, rotate: 0, opacity: 1, scale: 1 }}
             transition={{ type: 'spring', stiffness: 420, damping: 30, delay: Math.min(i * 0.045, 0.5) }}
           >

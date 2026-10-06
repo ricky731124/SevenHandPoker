@@ -4,6 +4,7 @@ import type { PlayerId, Slot } from '../../../game/state'
 import Card from '../Card'
 import CardBack from '../CardBack'
 import Coin from './Coin'
+import { useSkipEnterAnim } from './enterAnim'
 
 interface Props {
   slot: Slot
@@ -45,6 +46,7 @@ function Pile({
   stackUp: boolean
 }) {
   const h = Math.round(cardW * 1.4)
+  const skipEnter = useSkipEnterAnim() // 觀戰中途進場 → 不播飛入
   // Fixed footprint (= one card) so the board grid never reflows. Extra cards
   // stack with a small offset AWAY from the coin so they never cover it.
   if (cards.length === 0) return <div className="pile pile--empty" style={{ width: cardW, height: h }} />
@@ -60,7 +62,7 @@ function Pile({
           key={c.id}
           className="pile__card"
           style={{ left: i * off * 0.7, top: (stackUp ? -1 : 1) * i * off, zIndex: stackUp ? cards.length - i : i }}
-          initial={{ y: -34, opacity: 0, rotate: -8 }}
+          initial={skipEnter ? false : { y: -34, opacity: 0, rotate: -8 }}
           animate={{ y: 0, opacity: 1, rotate: 0 }}
           transition={{ delay: i * 0.04, type: 'spring', stiffness: 300, damping: 22 }}
         >

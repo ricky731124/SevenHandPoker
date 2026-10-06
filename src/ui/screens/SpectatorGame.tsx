@@ -8,6 +8,7 @@ import type { GameState } from '../../game/state'
 import { getSpecialCard } from '../../game/specialCards'
 import { useToastStore } from '../../state/toastStore'
 import { GameBoard } from './Game'
+import { SkipEnterAnim } from '../components/game/enterAnim'
 import Button from '../components/Button'
 import { sfx } from '../../audio/sfx'
 import './Game.css'
@@ -73,6 +74,14 @@ export default function SpectatorGame() {
   const lastFxN = useRef(0) // 特殊牌通知去重(同一則只 toast 一次)
   const fxPrimed = useRef(false) // 進場首張 spec 只記 fx.n、不 toast → 進場前用過的特殊牌不會被補播(#5)
   const prevEngRef = useRef<GameState | null>(null) // §10 音效:比對前後快照;首張不比對(不補播舊聲)
+  // 中途進場:棋盤剛掛上的 0.6 秒內跳過飛牌動畫 → 直接給當下局面(不然幾十張牌同時飛入會卡);之後新發的牌照常飛入。
+  const boardReady = hasSpec && !!engine && !!spectate
+  const [skipEnter, setSkipEnter] = useState(true)
+  useEffect(() => {
+    if (!boardReady) { setSkipEnter(true); return }
+    const t = setTimeout(() => setSkipEnter(false), 600)
+    return () => clearTimeout(t)
+  }, [boardReady])
 
   useEffect(() => {
     if (!code) return
@@ -158,7 +167,9 @@ export default function SpectatorGame() {
       {ready ? (
         // 牌桌本體 = GameBoard(spec):LIVE/眼睛(左上取代選單鈕位置)、左欄(觀戰者姓名/彈幕/N張)、
         // 離開觀戰(右下取代送出鈕位置)、彈幕層 全都在 GameBoard 內、用 stage 相對定位(各平台一致,#5)。
-        <GameBoard />
+        <SkipEnterAnim.Provider value={skipEnter}>
+          <GameBoard />
+        </SkipEnterAnim.Provider>
       ) : (
         <div className="spectate__loading">
           <div className="mm__spinner" aria-hidden="true" />

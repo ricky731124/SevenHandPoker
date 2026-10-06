@@ -68,7 +68,7 @@ export default function Menu() {
       {heroOk ? (
         <img
           className="menu__hero"
-          src={`${import.meta.env.BASE_URL}title.png`}
+          src={`${import.meta.env.BASE_URL}title.webp`}
           alt="Seven Hand Poker"
           onError={() => setHeroOk(false)}
         />

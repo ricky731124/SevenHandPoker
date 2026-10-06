@@ -35,6 +35,8 @@ const CHAT_PRUNE_MAX = 50 // RTDB 保留上限（超過就刪最舊）
 let _offset = 0
 onValue(ref(getDb(), '.info/serverTimeOffset'), (s) => { _offset = (s.val() as number) ?? 0 })
 const nowServer = () => Date.now() + _offset
+/** 伺服器時間（已校正本機時鐘偏移）；訊息 ts 是伺服器時間，比「安靜多久」要用這個。 */
+export const serverNow = nowServer
 
 // ---- 自動匿名登入（SPEC §2；A 案 + 登出防呆）--------------------------------
 let _prevUser = currentUser()

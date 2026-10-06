@@ -11,6 +11,8 @@ import Modal from './Modal'
 import JoinConfirm from './JoinConfirm'
 import Shop from './Shop'
 import DailyTasks from './DailyTasks'
+import OnlineWho from './OnlineWho'
+import { isOwnerName } from '../../game/lobbyChat'
 import { avatarSrc } from './PlayerAvatar'
 import Diamond from './game/Diamond'
 import { sfx } from '../../audio/sfx'
@@ -76,6 +78,8 @@ export default function AccountButton() {
   const displayName = usePlatformStore((s) => s.displayName)
   const uid = usePlatformStore((s) => s.uid)
   const isAnonymous = usePlatformStore((s) => s.isAnonymous)
+  const username = usePlatformStore((s) => s.username)
+  const isOwner = !isAnonymous && isOwnerName(username) // owner(ricky) 專屬 UI：線上名單
   const avatarId = usePlatformStore((s) => s.profile?.equipped.avatar)
   const diamonds = usePlatformStore((s) => s.profile?.diamonds) ?? 0
   const logout = usePlatformStore((s) => s.logout)
@@ -253,6 +257,7 @@ export default function AccountButton() {
                 className="acctbar__avatar"
                 src={avatarSrc(avatarId ?? 'cat')}
                 alt=""
+                decoding="async"
                 onError={(e) => (e.currentTarget.style.display = 'none')}
               />
               <span className="acctbar__meta">
@@ -307,6 +312,9 @@ export default function AccountButton() {
         >
           賽事回放
         </Button>
+
+        {/* owner(ricky) 專屬:誰在線上(不含人機/自己)。其他人不會渲染、也不會訂閱。 */}
+        {isOwner && <OnlineWho selfUid={uid} />}
       </div>
 
       {/* Top-right: ? → 商城 → 登出 (設定 已併入個人化設置的頁籤). */}

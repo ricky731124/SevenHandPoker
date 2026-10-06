@@ -3,7 +3,7 @@ import { ALL_SUB_STAGE_IDS, getSubStage, subStageOrder } from './campaign'
 import { SPECIAL_CARDS, type SpecialCardId } from './specialCards'
 import { getAchievement, TIER_NAME_ZH } from './achievements'
 import { STICKERS } from './stickers'
-import CONTENT, { type Line, type LobbyCtaSpec } from '../data/chatContent'
+import CONTENT, { type Line, type LobbyCtaSpec, type ReactRule } from '../data/chatContent'
 import type { LobbyMsg } from '../net/lobby'
 
 /**
@@ -101,8 +101,8 @@ function timeOfDay(now?: number): Pick<Facts, 'morning' | 'afternoon' | 'evening
     night: hr >= 23 || hr < 5,
   }
 }
-/** 發言者帳號是否為 owner（chatContent.config.owners，不分大小寫）。 */
-function isOwnerName(username: string | undefined): boolean {
+/** 帳號是否為 owner（chatContent.config.owners，不分大小寫）。聊天彩蛋與 owner 專屬 UI 共用。 */
+export function isOwnerName(username: string | null | undefined): boolean {
   if (!username) return false
   const owners = (CONTENT.config.owners ?? []).map((s) => s.toLowerCase())
   return owners.includes(username.toLowerCase())
@@ -257,11 +257,12 @@ function fragment(name: string, rng: () => number): string {
   const pool = CONTENT.fragments[name]
   return pool && pool.length ? pick(pool, rng) : ''
 }
-/** 把 {token} 換成實值。回傳 null = 這句有無法解析的佔位符（該跳過）。 */
-function resolveText(t: string, F: Facts, minTier: number, rng: () => number): string | null {
+/** 把 {token} 換成實值。回傳 null = 這句有無法解析的佔位符（該跳過）。
+ *  `slots` = 劇場共用槽(例 {card}/{sticker})，優先於一般佔位符解析。 */
+function resolveText(t: string, F: Facts, minTier: number, rng: () => number, slots?: Record<string, string>): string | null {
   let bad = false
   const out = t.replace(/\{(\w+)\}/g, (_, tok: string) => {
-    const v = tokenValue(tok, F, minTier, rng)
+    const v = slots && tok in slots ? slots[tok] || null : tokenValue(tok, F, minTier, rng)
     if (v === null) { bad = true; return '' }
     return v
   })
@@ -323,9 +324,14 @@ function resolveCtas(spec: LobbyCtaSpec | undefined, lineChance: number | undefi
 
 // ─── 從 Line[] 挑一句（guard 過濾 + 佔位可解析 + 冷卻 + 加權）───────────────────
 interface Resolved { text?: string; stickerId?: string; cta?: CtaOut[] }
-function pickLine(pool: Line[] | undefined, F: Facts, minTier: number, rng: () => number, ruleCta?: LobbyCtaSpec, ruleChance?: number): Resolved | null {
+function pickLine(
+  pool: Line[] | undefined, F: Facts, minTier: number, rng: () => number,
+  ruleCta?: LobbyCtaSpec, ruleChance?: number,
+  slots?: Record<string, string>, // 劇場共用槽
+  noOpener?: boolean,             // 劇場句不加語助詞
+): Resolved | null {
   if (!pool || !pool.length) return null
-  const ok = pool.filter((l) => evalGuard(l.guard, F) && (l.sticker != null || l.t == null || resolveText(l.t, F, minTier, rng) != null))
+  const ok = pool.filter((l) => evalGuard(l.guard, F) && (l.sticker != null || l.t == null || resolveText(l.t, F, minTier, rng, slots) != null))
   if (!ok.length) return null
   const fresh = ok.filter((l) => !isCooled(l.t ?? l.sticker ?? ''))
   const cands = fresh.length ? fresh : ok
@@ -337,9 +343,9 @@ function pickLine(pool: Line[] | undefined, F: Facts, minTier: number, rng: () =
   noteUsed(chosen.t ?? chosen.sticker ?? '')
   const cta = resolveCtas(chosen.cta ?? ruleCta, chosen.ctaChance ?? ruleChance, F, rng)
   if (chosen.sticker != null) return { stickerId: chosen.sticker, cta }
-  let text = resolveText(chosen.t ?? '', F, minTier, rng) ?? ''
-  // 單句可自動前綴語助詞（opener≠false 且句子沒自帶 {opener}）
-  if (chosen.opener !== false && !(chosen.t ?? '').includes('{opener}') && rng() < (CONTENT.config.openerChance ?? 0.4)) {
+  let text = resolveText(chosen.t ?? '', F, minTier, rng, slots) ?? ''
+  // 單句可自動前綴語助詞（非劇場、opener≠false、句子沒自帶 {opener}）
+  if (!noOpener && chosen.opener !== false && !(chosen.t ?? '').includes('{opener}') && rng() < (CONTENT.config.openerChance ?? 0.4)) {
     const op = fragment('opener', rng)
     if (op) text = `${op}${text}`
   }
@@ -393,11 +399,10 @@ export function ambientUnit(bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: ()
             : beat.sticker != null ? [{ sticker: beat.sticker }]
               : beat.pool ? CONTENT.beatPools[beat.pool]
                 : undefined
-      const line = pickLine(pool, F, 1, rng)
+      // 槽位在「挑句之前」就帶入(否則含 {card} 的句會被當成無法解析而濾掉);劇場不加 opener。
+      const line = pickLine(pool, F, 1, rng, undefined, undefined, slotVals, true)
       if (!line) continue
-      let text = line.text
-      if (text) for (const [k, v] of Object.entries(slotVals)) text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
-      out.push(mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId } : { text }))
+      out.push(mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta }))
     }
     return out
   }
@@ -439,6 +444,13 @@ function ambientProactive(roster: BotPersona[], F: Facts, rng: () => number): Bo
   return mkUtter(pick(roster, rng), line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta })
 }
 
+/** 這位發言者會用到哪些 reactRules：符合的 exclusive 規則(第一條)獨佔；否則所有符合的非 exclusive 規則。 */
+function selectReactRules(F: Facts): ReactRule[] {
+  const ok = CONTENT.reactRules.filter((r) => evalGuard(r.when, F))
+  const excl = ok.find((r) => r.exclusive)
+  return excl ? [excl] : ok.filter((r) => !r.exclusive)
+}
+
 // ─── 對外：真人發言 → 一則(或兩則:補刀)回覆 ─────────────────────────────────────
 export function reactUnit(inp: ReactInput, bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: () => number = rng0): BotUtterance[] {
   const roster = bots.length ? bots : BOTS
@@ -459,15 +471,17 @@ export function reactUnit(inp: ReactInput, bots: BotPersona[] = BOTS, g?: LobbyG
     if (hit) pool = CONTENT.kwPools[hit]
   }
   if (!pool || !pool.length) {
-    // ③ 依狀態的 reactRules（有序，第一個 guard 通過者）
-    for (const rule of CONTENT.reactRules) {
-      if (!evalGuard(rule.when, F)) continue
-      pool = rule.say
-      ruleCta = rule.cta
-      ruleChance = rule.ctaChance
-      minTier = achvMinTierOf(rule.when)
-      break
+    // ③ 依狀態的 reactRules：exclusive 獨佔（先中先用）；否則所有符合的規則合併成一個大池
+    const rules = selectReactRules(F)
+    if (rules.length === 1) {
+      pool = rules[0].say
+      ruleCta = rules[0].cta
+      ruleChance = rules[0].ctaChance
+    } else {
+      // 合併：每句帶上自己規則的按鈕設定（句子自己的優先）
+      pool = rules.flatMap((r) => r.say.map((l) => ({ ...l, cta: l.cta ?? r.cta, ctaChance: l.ctaChance ?? r.ctaChance })))
     }
+    minTier = Math.max(1, ...rules.map((r) => achvMinTierOf(r.when))) // 符合的規則都成立 → 取最高階要求
   }
   const line = pickLine(pool, F, minTier, rng, ruleCta, ruleChance)
   if (!line) return []
@@ -499,4 +513,161 @@ function matchKeyword(text: string): string | null {
   if (!hits.length) return null
   hits.sort((a, b) => (b.w ?? 1) - (a.w ?? 1))
   return hits[0].intent
+}
+export const matchKeywordForTest = matchKeyword
+/** 測試用：這位發言者的回覆會從 reactRules 的哪幾條抽（索引）。 */
+export function reactRulesForTest(inp: ReactInput, g: LobbyGlobals = { onlineCount: 0, hasLive: false }): number[] {
+  return selectReactRules(reactFacts(inp, g)).map((r) => CONTENT.reactRules.indexOf(r))
+}
+
+// ─── 內容檢查器（lint）：chatContent.ts 改完後自動檢查「程式跑不跑得動」────────────
+//   DEV 啟動時印在 F12 Console；`npm test` 也會跑（有 error 就測試失敗）。
+//   規則跟上面的引擎放同一個檔，新增佔位/條件/按鈕時兩邊一起改，才不會不同步。
+const SPEAKER_TOKENS = ['name', 'streak', 'bestStreak', 'wins', 'games', 'winRate', 'achv', 'loadoutCard', 'stageNo', 'bossName', 'bossCard', 'bossStyle', 'bossSkill']
+const GLOBAL_TOKENS = ['onlineCount', 'anyCard', 'anyBoss', 'anySticker', 'opener', 'invite']
+const SPEAKER_GUARDS = ['guest', 'registered', 'isOwner', 'showsAchv', 'silverAchv', 'goldAchv', 'hasLoadout', 'hasBoss']
+const GLOBAL_GUARDS = ['hasLive', 'morning', 'afternoon', 'evening', 'night']
+const SPEAKER_NUMS = ['streak', 'bestStreak', 'wins', 'games', 'winRate']
+const GLOBAL_NUMS = ['online']
+const CTA_NAMES = [...Object.keys(CTA_LABEL), 'quickmatch-normal', 'quickmatch-special']
+const SLOT_KINDS = ['anyCard', 'anyBoss', 'anySticker']
+const PROACTIVE_KEYS = ['greet_newcomer', 'online_count', 'gossip_gm', 'announce_replay', 'time_morning', 'time_afternoon', 'time_evening', 'time_night']
+
+export interface LintResult { errors: string[]; warnings: string[] }
+
+export function lintChatContent(C: typeof CONTENT = CONTENT): LintResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+  const stickerIds = new Set(STICKERS.map((s) => s.id))
+  const fragKeys = Object.keys(C.fragments ?? {})
+
+  /** speaker=有發言者(反應式)；extra=此處額外合法的佔位(劇場槽 / newcomerName…) */
+  const checkGuard = (g: string | undefined, where: string, speaker: boolean) => {
+    if (!g) return
+    for (const raw of g.split('&&')) {
+      const t = raw.trim().replace(/^!\s*/, '')
+      if (!t) { errors.push(`${where}：條件「${g}」有空的 && 段`); continue }
+      const stage = t.match(/^(beforeStage|afterStage):(\d+-\d+)$/)
+      if (stage) {
+        if (subStageOrder('s' + stage[2]) < 0) errors.push(`${where}：條件「${t}」的關卡 ${stage[2]} 不存在`)
+        else if (!speaker) errors.push(`${where}：這裡沒有發言者，條件「${t}」永遠不成立`)
+        continue
+      }
+      if (/[<>=]/.test(t)) {
+        const m = t.match(/^([a-zA-Z]+)\s*(>=|<=|==|>|<)\s*(\d+)$/)
+        if (!m) { errors.push(`${where}：條件「${t}」格式錯（要像 streak>=2）`); continue }
+        if (GLOBAL_NUMS.includes(m[1])) continue
+        if (!SPEAKER_NUMS.includes(m[1])) errors.push(`${where}：條件「${t}」的「${m[1]}」不認得`)
+        else if (!speaker) errors.push(`${where}：這裡沒有發言者，條件「${t}」無意義`)
+        continue
+      }
+      if (GLOBAL_GUARDS.includes(t)) continue
+      if (!SPEAKER_GUARDS.includes(t)) errors.push(`${where}：條件「${t}」不認得`)
+      else if (!speaker) errors.push(`${where}：這裡沒有發言者，條件「${t}」永遠不成立`)
+    }
+  }
+  const checkLine = (l: Line, where: string, speaker: boolean, extra: string[] = []) => {
+    if (l.t == null && l.sticker == null) errors.push(`${where}：這句沒有 t 也沒有 sticker`)
+    if (l.t != null && l.sticker != null) warnings.push(`${where}：同時有 t 和 sticker，只會送貼圖`)
+    if (l.sticker != null && !stickerIds.has(l.sticker)) errors.push(`${where}：貼圖「${l.sticker}」不存在`)
+    if (l.w != null && !(l.w > 0)) errors.push(`${where}：w 要大於 0`)
+    if (l.ctaChance != null && (l.ctaChance < 0 || l.ctaChance > 1)) errors.push(`${where}：ctaChance 要在 0~1`)
+    for (const c of l.cta == null ? [] : Array.isArray(l.cta) ? l.cta : [l.cta]) {
+      if (!CTA_NAMES.includes(c)) errors.push(`${where}：按鈕「${c}」不存在（可用：${CTA_NAMES.join('/')}）`)
+    }
+    for (const m of (l.t ?? '').matchAll(/\{(\w+)\}/g)) {
+      const tok = m[1]
+      if (extra.includes(tok) || GLOBAL_TOKENS.includes(tok) || fragKeys.includes(tok)) continue
+      if (SPEAKER_TOKENS.includes(tok)) { if (!speaker) errors.push(`${where}：這裡沒有發言者，{${tok}} 取不到 → 這句永遠不會出現`); continue }
+      errors.push(`${where}：佔位 {${tok}} 不認得`)
+    }
+    checkGuard(l.guard, where, speaker)
+  }
+  const checkLines = (arr: Line[] | undefined, where: string, speaker: boolean, extra: string[] = []) => {
+    if (!arr || !arr.length) { errors.push(`${where}：是空的`); return }
+    arr.forEach((l, i) => checkLine(l, `${where}[${i}]「${l.t ?? l.sticker ?? ''}」`, speaker, extra))
+  }
+
+  if (!C.fragments?.opener?.length) warnings.push('fragments.opener 是空的')
+  if (!C.fragments?.invite?.length) warnings.push('fragments.invite 是空的')
+  checkLines(C.greetings, 'greetings', false)
+  checkLines(C.singles, 'singles', false)
+
+  // 劇場：每拍恰好一種來源、pool 要存在、槽位要合法
+  const poolSlots: Record<string, Set<string>> = {}
+  const seenIds = new Set<string>()
+  C.threads.forEach((th, ti) => {
+    const tw = `threads[${ti}]${th.id ? `(${th.id})` : ''}`
+    if (th.id) { if (seenIds.has(th.id)) warnings.push(`${tw}：id 重複`); seenIds.add(th.id) }
+    const slotNames = Object.keys(th.slots ?? {})
+    for (const [k, kind] of Object.entries(th.slots ?? {})) if (!SLOT_KINDS.includes(kind)) errors.push(`${tw}：槽 ${k} 的種類「${kind}」不認得`)
+    if (!th.beats?.length) errors.push(`${tw}：沒有任何 beat`)
+    th.beats?.forEach((b, bi) => {
+      const bw = `${tw}.beats[${bi}](${b.role})`
+      const n = [b.pool, b.t, b.sticker, b.lines].filter((v) => v != null).length
+      if (n !== 1) errors.push(`${bw}：pool / t / sticker / lines 要「恰好一個」（現在 ${n} 個）`)
+      if (b.chance != null && !(b.chance > 0 && b.chance <= 1)) errors.push(`${bw}：chance 要在 0~1`)
+      if (b.pool != null) {
+        if (!C.beatPools[b.pool]) errors.push(`${bw}：pool「${b.pool}」在 beatPools 裡找不到`)
+        ;(poolSlots[b.pool] ??= new Set()).add('')
+        slotNames.forEach((s) => poolSlots[b.pool!].add(s))
+      }
+      if (b.t != null) checkLine({ t: b.t }, `${bw}「${b.t}」`, false, slotNames)
+      if (b.sticker != null) checkLine({ sticker: b.sticker }, bw, false)
+      if (b.lines) checkLines(b.lines, `${bw}.lines`, false, slotNames)
+    })
+  })
+  for (const [k, arr] of Object.entries(C.beatPools)) {
+    if (!poolSlots[k]) warnings.push(`beatPools.${k}：沒有任何劇場用到`)
+    checkLines(arr, `beatPools.${k}`, false, [...(poolSlots[k] ?? [])].filter(Boolean))
+  }
+
+  for (const id of C.ambientStickers) if (!stickerIds.has(id)) errors.push(`ambientStickers：貼圖「${id}」不存在`)
+  for (const [k, arr] of Object.entries(C.stickerReplies)) {
+    if (k !== '*' && !stickerIds.has(k)) errors.push(`stickerReplies.${k}：沒有這張貼圖（key 要是貼圖 id 或 '*'）`)
+    checkLines(arr, `stickerReplies.${k}`, true)
+  }
+
+  // 關鍵字：intent 要有池；池要有人用；偵測「這個字會被別條優先度更高的搶走」
+  const usedIntents = new Set<string>()
+  C.keywords.forEach((k, ki) => {
+    const kw = `keywords[${ki}](${k.intent})`
+    usedIntents.add(k.intent)
+    if (!C.kwPools[k.intent]) errors.push(`${kw}：kwPools 裡沒有「${k.intent}」這個池`)
+    if (!k.any?.length && !k.all?.length) errors.push(`${kw}：any 跟 all 都是空的`)
+    for (const s of k.any ?? []) {
+      C.keywords.forEach((o, oi) => {
+        if (oi === ki || o.intent === k.intent || o.all?.length) return
+        const beats = (o.w ?? 1) > (k.w ?? 1) || ((o.w ?? 1) === (k.w ?? 1) && oi < ki)
+        const u = (o.any ?? []).find((x) => s.toLowerCase().includes(x.toLowerCase()))
+        if (beats && u) warnings.push(`${kw}：關鍵字「${s}」會被 ${o.intent} 的「${u}」(w${o.w ?? 1}) 搶走 → 想讓它生效就把 w 調高`)
+      })
+    }
+  })
+  for (const [k, arr] of Object.entries(C.kwPools)) {
+    if (!usedIntents.has(k)) warnings.push(`kwPools.${k}：沒有任何關鍵字指到這個池`)
+    checkLines(arr, `kwPools.${k}`, true)
+  }
+
+  C.reactRules.forEach((r, ri) => {
+    const rw = `reactRules[${ri}](${r.when ?? '保底'})`
+    checkGuard(r.when, rw, true)
+    for (const c of r.cta == null ? [] : Array.isArray(r.cta) ? r.cta : [r.cta]) if (!CTA_NAMES.includes(c)) errors.push(`${rw}：按鈕「${c}」不存在`)
+    checkLines(r.say, `${rw}.say`, true)
+  })
+  if (C.reactRules.length && C.reactRules[C.reactRules.length - 1].when) warnings.push('reactRules：最後一條建議不寫 when（保底），不然有人講話可能沒人回')
+
+  for (const [k, arr] of Object.entries(C.proactive)) {
+    if (!PROACTIVE_KEYS.includes(k)) warnings.push(`proactive.${k}：程式不認得這個 key，永遠不會用到（可用：${PROACTIVE_KEYS.join('/')}）`)
+    const extra = k === 'greet_newcomer' ? ['newcomerName'] : k === 'announce_replay' ? ['lastWinner', 'lastLoser'] : []
+    checkLines(arr, `proactive.${k}`, false, extra)
+  }
+  checkLines(C.pileOn, 'pileOn', true)
+  return { errors, warnings }
+}
+
+if (import.meta.env.DEV) {
+  const { errors, warnings } = lintChatContent()
+  if (errors.length) console.warn(`%c[chatContent] ❌ ${errors.length} 個錯誤（這些句子/規則跑不動）\n` + errors.join('\n'), 'color:#e55')
+  if (warnings.length) console.warn(`%c[chatContent] ⚠️ ${warnings.length} 個提醒\n` + warnings.join('\n'), 'color:#c90')
 }

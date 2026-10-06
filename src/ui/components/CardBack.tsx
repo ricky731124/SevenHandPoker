@@ -8,7 +8,7 @@ export default function CardBack({ w = 58, theme }: { w?: number; theme?: string
   const h = Math.round(w * 1.4)
   const [c1, c2, edge] =
     t === 'green' ? ['#2aa25a', '#0f5f32', '#0b5e2f'] : ['#3568d6', '#123a86', '#0d2a63']
-  const catSrc = `${import.meta.env.BASE_URL}cat.png`
+  const catSrc = `${import.meta.env.BASE_URL}avatars/cat.webp` // 512px WebP(原 cat.png ~765KB)
 
   return (
     <div
@@ -37,6 +37,7 @@ export default function CardBack({ w = 58, theme }: { w?: number; theme?: string
       <img
         src={catSrc}
         alt=""
+        decoding="async"
         style={{
           position: 'absolute',
           left: '50%',

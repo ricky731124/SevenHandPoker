@@ -6,14 +6,15 @@ import type { PlayerId } from '../../game/state'
  * registered player can show their equipped avatar; falls back to the role
  * default (p1=cat / p2=bird) when only a PlayerId is given.
  */
+// 網頁用 512px WebP（~20KB/張）。原圖 public/{id}.png(~1MB) 保留當母檔；改原圖後跑 `node scripts/build-img.mjs` 重產。
 const AVATAR_IMG: Record<string, string> = {
-  cat: 'cat.png', // 橘貓 (default / host)
-  bird: 'bird.png', // 鳥鳥 (guest default / 哪裡來的鎹鴉? boss + 第1關獎勵)
-  cat2: 'cat2.png', // 英國短毛貓 (明天開始168 boss + 第2關獎勵)
-  bear: 'bear.png', // 北極熊 (第3關 boss + 獎勵)
-  dog: 'dog.png', // 紅貴賓 (第4關 boss + 獎勵)
-  cat3: 'cat3.png', // 波斯貓 (第5關 boss + 獎勵)
-  bird2: 'bird2.png', // 貓頭鷹 (第6關 boss + 獎勵)
+  cat: 'avatars/cat.webp', // 橘貓 (default / host)
+  bird: 'avatars/bird.webp', // 鳥鳥 (guest default / 哪裡來的鎹鴉? boss + 第1關獎勵)
+  cat2: 'avatars/cat2.webp', // 英國短毛貓 (明天開始168 boss + 第2關獎勵)
+  bear: 'avatars/bear.webp', // 北極熊 (第3關 boss + 獎勵)
+  dog: 'avatars/dog.webp', // 紅貴賓 (第4關 boss + 獎勵)
+  cat3: 'avatars/cat3.webp', // 波斯貓 (第5關 boss + 獎勵)
+  bird2: 'avatars/bird2.webp', // 貓頭鷹 (第6關 boss + 獎勵)
 }
 const AVATAR_EMOJI: Record<string, string> = { cat: '🐱', bird: '🐦', cat2: '🐱', bear: '🐻', dog: '🐩', cat3: '😾', bird2: '🦉' }
 
@@ -60,6 +61,7 @@ export default function PlayerAvatar({
           alt=""
           width={size}
           height={size}
+          decoding="async"
           onError={() => setOk(false)}
           style={{
             width: size,

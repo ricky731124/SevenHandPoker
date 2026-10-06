@@ -60,7 +60,7 @@ function MsgRow({ m, myUid, onOpenCard }: { m: LobbyMsg; myUid: string | null; o
   const mine = m.kind === 'human' && !!myUid && m.uid === myUid
   return (
     <div className={`lchat-row${mine ? ' lchat-row--me' : ''}`}>
-      <img className="lchat-av" src={avatarSrc(m.avatarId)} alt="" style={{ cursor: 'pointer' }} onClick={() => onOpenCard(m)} onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+      <img className="lchat-av" src={avatarSrc(m.avatarId)} alt="" decoding="async" loading="lazy" style={{ cursor: 'pointer' }} onClick={() => onOpenCard(m)} onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
       <div className="lchat-col">
         <span className="lchat-name">{m.name}</span>
         <div className="lchat-bubrow">
@@ -148,7 +148,7 @@ export default function LobbyChat() {
       <button type="button" className="lchat-fab" onClick={openPopup} aria-label="聊天室">
         {latest ? (
           <>
-            <img className="lchat-fab__av" src={avatarSrc(latest.avatarId)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+            <img className="lchat-fab__av" src={avatarSrc(latest.avatarId)} alt="" decoding="async" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
             <span className="lchat-fab__body">
               <b className="lchat-fab__name">{latest.name}：</b>
               {latest.type === 'sticker' && latest.stickerId

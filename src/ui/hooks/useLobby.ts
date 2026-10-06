@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlatformStore } from '../../state/platformStore'
 import { subStageOrder } from '../../game/campaign'
-import { ambientUnit, greetingUtter, reactUnit, arrivalGreeting, pickBots, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
-import { BOTS, type BotPersona } from '../../game/bots'
+import { arrivalGreeting, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
+import { createChatDirector, type ChatDirector } from '../../game/lobbyDirector'
 import { fetchCard } from '../../platform/cards'
 import { subscribeLiveIndex } from '../../net/liveIndex'
 import { subscribeOnlineCount } from '../../net/presence'
 import {
   ensureLobbyAuth, startActive, stopActive, subscribeActive,
   tryBecomeHost, releaseHost, amHost, verifyStillHost, pruneActive, LOBBY_MUTE_USERS, hostGrabWasCold, hostGrabInfo,
-  markSeenAndFindNewcomers, writeChatMessage, subscribeChat, pruneChat, visibleChat, type LobbyMsg,
+  markSeenAndFindNewcomers, writeChatMessage, subscribeChat, pruneChat, visibleChat, serverNow, type LobbyMsg,
 } from '../../net/lobby'
 import { exhibitionStart, exhibitionStop, exhibitionSetContext, exhibitionRequestOpen } from '../../game/exhibition'
 
@@ -21,104 +21,51 @@ import { exhibitionStart, exhibitionStop, exhibitionSetContext, exhibitionReques
  *   - 引擎是「整個分頁的單例」(模組層變數),React StrictMode 雙掛載 / HMR 都只一條迴圈。
  *   - 內容全走 chatContent.ts 產句引擎(§13):ambientUnit(環境)/reactUnit(反應+補刀)/arrivalGreeting(招呼)。
  *   - host 讀發言者的「玩家資訊卡」組 facts(連勝/成就/預設特殊牌/主線→BOSS),挑針對性回覆。
- *   - 額度:一輪 6~9 個單元;重置觸發①新到訪②真人發言③host 點開④換 host。回覆插隊優先。
- *   - 冷場首句零間隔;其餘 10~20s。表演賽「怎麼觸發」的邏輯不在本次改動範圍(紅線)。
+ *   - 何時講/講幾則/要不要打招呼 → 全交給 lobbyDirector(可測)。本檔只負責 Firebase 接線 + 表演賽觸發。
+ *   - 表演賽「怎麼觸發」的邏輯不在本次改動範圍(紅線),維持原樣。
  */
 
 const HOST_POLL_MS = 6000
-const GAP_MIN = 10000, GAP_MAX = 20000 // 每則訊息間隔 10~20s
-const QUOTA_MIN = 6, QUOTA_MAX = 9     // 一輪聊天的「額度」= 6~9 個單元
-const REPLY_THROTTLE_MS = 15000        // 同一真人 15s 內最多被回一次
-const FRESH_MS = 12000                 // 最新訊息比這新 → 不硬插零間隔首句
-const SESSION_BOTS = 8                 // 一次聊天只用隨機 8 隻人機（§9）
+const START_DELAY_MS = 3000 // 進主畫面先讓畫面/圖片載完,3 秒後才接 host 工作(表演賽/聊天),新玩家手機不會一進來就卡
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1))
-const gap = () => rand(GAP_MIN, GAP_MAX)
-
-type QueuedReply = BotUtterance
-
-// ─── 分頁單例引擎狀態（模組層,跨 mount/StrictMode/HMR 只有一份、一條迴圈）─────────
+// ─── 分頁單例（模組層,跨 mount/StrictMode/HMR 只有一份）──────────────────────────
 let mHost = false
-let mActive = 0
-let mMessages: LobbyMsg[] = []
-let mQuota = 0
-let mReplies: QueuedReply[] = []       // 待插隊的針對性回覆(可含補刀,依序送出)
-let mRunning = false
-let mGen = 0
-let mRoster: BotPersona[] = []
 let mLastSeenHuman: string | null = null
-let mLastReactByUid: Record<string, number> = {}
 let mActiveUids: string[] = []
 let mMyUid: string | null = null
 let mLiveCode: string | null = null // 當前可觀戰的 live code（spectate CTA 用；null=現在沒 live）
 let mOnline = 0 // 顯示用線上人數（= 角落 OnlineCount：presence 活躍 uid + BOTS_ONLINE 20）
 
-const getRoster = (): BotPersona[] => {
-  if (mRoster.length === 0) mRoster = pickBots(Math.min(SESSION_BOTS, BOTS.length))
-  return mRoster
-}
 const globals = (): LobbyGlobals => ({ onlineCount: mOnline, hasLive: !!mLiveCode, liveCode: mLiveCode ?? undefined })
-const chatStale = (): boolean => {
-  if (mMessages.length === 0) return true
-  return Date.now() - (mMessages[mMessages.length - 1]?.ts ?? 0) > FRESH_MS
-}
 
 const writeUtter = (u: BotUtterance) =>
   writeChatMessage({ kind: 'bot', botId: u.botId, name: u.name, avatarId: u.avatarId, type: u.type, text: u.text, stickerId: u.stickerId, cta: u.cta })
 
-/** 單一序列引擎:回覆插隊(連 mini-thread 中間)、消耗額度、冷場首句零間隔。整個分頁只會有一條。 */
-function runEngine(): void {
-  if (mRunning) return
-  if (!mHost || mActive < 1) return
-  mRunning = true
-  const gen = ++mGen
-  const alive = () => mHost && mActive >= 1 && gen === mGen
-  void (async () => {
-    let pending: BotUtterance[] = [] // 當前環境單元(可能多則:mini-thread)尚未播的步驟
-    if (chatStale() && alive() && await verifyStillHost()) {
-      await writeUtter(greetingUtter(getRoster()))
-      if (mQuota > 0) mQuota -= 1
-    }
-    while (alive()) {
-      if (mReplies.length === 0 && pending.length === 0) {
-        if (mQuota > 0) { pending = ambientUnit(getRoster(), globals()); mQuota -= 1 }
-        else break // 沒回覆、沒步驟、沒額度 → 收工待命
-      }
-      await sleep(gap())
-      if (!alive()) break
-      if (!(await verifyStillHost())) { mHost = false; break }
-      const msg = mReplies.shift() ?? pending.shift() // 回覆插隊(連 thread 中間)
-      if (!msg) continue
-      await writeUtter(msg)
-    }
-    if (gen === mGen) mRunning = false
-    void pruneChat()
-  })()
-}
+// 分頁唯一導演：HMR 重新載入本模組時先把舊導演的迴圈關掉，避免同一分頁兩條迴圈同時講。
+const holder = globalThis as { __shpChatDirector?: ChatDirector }
+holder.__shpChatDirector?.dispose()
+const director = createChatDirector({
+  write: writeUtter,
+  verifyHost: async () => { const ok = await verifyStillHost(); if (!ok) mHost = false; return ok },
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: serverNow, // 訊息 ts 是伺服器時間 → 用校正過的伺服器時鐘比較
+  prune: () => void pruneChat(),
+  log: import.meta.env.DEV ? (m) => console.log('%c[lobby chat] ' + m, 'color:#69c') : undefined,
+})
+holder.__shpChatDirector = director
+const pushGlobals = () => director.setGlobals(globals())
 
-/** 重置額度回滿 6~9 +（可選）排入回覆(可多則:reply+補刀),並確保引擎在跑。 */
-function bumpQuota(replies?: QueuedReply[]): void {
-  mQuota = rand(QUOTA_MIN, QUOTA_MAX)
-  if (replies && replies.length) mReplies.push(...replies)
-  runEngine()
-}
-
-/** 「真的有新到訪」→ 請表演賽開一場(不排隊)+ 重置聊天 +（可選）點名招呼。 */
-function onLobbyArrival(reason: string, greet?: QueuedReply[]): void {
-  exhibitionRequestOpen(reason) // §4:表演賽觸發邏輯(不在本次改動範圍)
-  bumpQuota(greet)
-}
-
-/** host 的 poll 每輪:比對全域 lobbySeen 找「別人的新到訪」→ 開場 + 點名招呼(讀新人卡片取名)。 */
+/** host 的 poll 每輪:比對全域 lobbySeen 找「別人的新到訪」→ 開表演賽(原邏輯) + 點名招呼;再偵測「回大廳」續聊。 */
 async function checkNewcomers(): Promise<void> {
   if (!mHost) return
   const newcomers = await markSeenAndFindNewcomers(mActiveUids, mMyUid)
-  if (!newcomers.length) return
-  let name = '新朋友'
-  try { const c = await fetchCard(newcomers[0]); if (c?.displayName) name = c.displayName } catch { /* best-effort */ }
-  const greet = arrivalGreeting(name, getRoster(), globals())
-  onLobbyArrival('新到訪 ' + newcomers.map((u) => u.slice(0, 6)).join(', '), greet ? [greet] : undefined)
+  if (newcomers.length) {
+    let name = '新朋友'
+    try { const c = await fetchCard(newcomers[0]); if (c?.displayName) name = c.displayName } catch { /* best-effort */ }
+    exhibitionRequestOpen('新到訪 ' + newcomers.map((u) => u.slice(0, 6)).join(', ')) // §4:表演賽觸發(不在本次改動範圍)
+    director.onNewcomer(arrivalGreeting(name, director.roster, globals()))
+  }
+  director.observeActive(mActiveUids, mMyUid)
 }
 
 export interface UseLobby {
@@ -138,9 +85,11 @@ export function useLobby(): UseLobby {
   const muted = !!username && LOBBY_MUTE_USERS.some((u) => u.toLowerCase() === username.toLowerCase())
 
   mHost = host
-  mActive = activeCount
-  mMessages = messages
   mMyUid = uid
+  // 餵導演最新狀態（render 期間同步;整個 app 只有一個 <LobbyChat/>）。
+  director.setHost(host)
+  director.setAudience(activeCount)
+  director.setLastMessageTs(messages.length ? messages[messages.length - 1].ts ?? null : null)
 
   const prevHostRef = useRef(false)
 
@@ -149,8 +98,8 @@ export function useLobby(): UseLobby {
   useEffect(() => {
     const un1 = subscribeChat((all) => setMessages(visibleChat(all)))
     const un2 = subscribeActive((n, uids) => { setActiveCount(n); mActiveUids = [...uids] })
-    const un3 = subscribeLiveIndex((entries) => { mLiveCode = entries.find((e) => e.status === 'live')?.code ?? null })
-    const un4 = subscribeOnlineCount((n) => { mOnline = n }) // 與角落在線人數同源(含 +20 保底)
+    const un3 = subscribeLiveIndex((entries) => { mLiveCode = entries.find((e) => e.status === 'live')?.code ?? null; pushGlobals() })
+    const un4 = subscribeOnlineCount((n) => { mOnline = n; pushGlobals() }) // 與角落在線人數同源(含 +20 保底)
     return () => { un1(); un2(); un3(); un4() }
   }, [])
 
@@ -167,6 +116,7 @@ export function useLobby(): UseLobby {
         const h = amHost()
         setHost(h)
         mHost = h
+        director.setHost(h)
         exhibitionSetContext({ active: true, isHost: h, uid })
         if (h) { void pruneActive(); void checkNewcomers() }
       }
@@ -181,33 +131,44 @@ export function useLobby(): UseLobby {
       exhibitionStop()
       setHost(false)
       mHost = false
+      director.setHost(false)
     }
 
-    const onVis = () => { document.visibilityState === 'visible' ? goActive() : goInactive() }
-    if (document.visibilityState === 'visible') goActive()
+    // 進主畫面延遲 START_DELAY_MS 才接 host 工作 → 先讓畫面/圖片載完(新玩家手機一進來不卡)。
+    let started = false
+    const startTimer = setTimeout(() => {
+      started = true
+      if (document.visibilityState === 'visible') goActive()
+    }, START_DELAY_MS)
+    const onVis = () => {
+      if (!started) return // 還在開場延遲內 → 交給 startTimer
+      document.visibilityState === 'visible' ? goActive() : goInactive()
+    }
     document.addEventListener('visibilitychange', onVis)
 
     return () => {
+      clearTimeout(startTimer)
       document.removeEventListener('visibilitychange', onVis)
       goInactive()
     }
   }, [uid, muted])
 
-  // 全部離線 → 清本 session 名單/額度。剛「冷啟動」成 host → 開一場給他看(表演賽,原邏輯)。
+  // 成為 host：冷啟動 → 開表演賽(原邏輯) + 聊天冷啟動；換手 → 聊天續聊(不開表演賽)。
+  //   「成為 host」與「大廳人數到位」誰先到不一定 → 先記住(pendingBecameRef)，人數 ≥1 時才處理，不會漏掉。
+  const pendingBecameRef = useRef<boolean | null>(null) // null=無；true/false=待處理的 cold 旗標
   useEffect(() => {
-    if (activeCount === 0) { mRoster = []; mQuota = 0; prevHostRef.current = host; return }
-    const becameHost = host && !prevHostRef.current
+    if (host && !prevHostRef.current) pendingBecameRef.current = hostGrabWasCold()
+    if (!host) pendingBecameRef.current = null
     prevHostRef.current = host
-    if (becameHost) {
-      if (hostGrabWasCold()) {
-        onLobbyArrival('冷啟動 [' + hostGrabInfo() + ']')
-      } else if (import.meta.env.DEV) {
-        console.log('%c[lobby] 成為 host(非冷啟動 → 不開表演賽,新到訪交給 lobbySeen 判)[' + hostGrabInfo() + ']', 'color:#69c')
-      }
-    }
+    if (pendingBecameRef.current === null || activeCount === 0) return
+    const cold = pendingBecameRef.current
+    pendingBecameRef.current = null
+    if (cold) exhibitionRequestOpen('冷啟動 [' + hostGrabInfo() + ']')
+    else if (import.meta.env.DEV) console.log('%c[lobby] 成為 host(非冷啟動 → 不開表演賽,聊天續聊)[' + hostGrabInfo() + ']', 'color:#69c')
+    director.onBecameHost(cold)
   }, [host, activeCount])
 
-  // 任一真人發言/貼圖 → host 重置額度 +（節流後）讀他的玩家資訊卡組 facts、排入針對性回覆(可含補刀)。
+  // 任一真人發言/貼圖 → host 讀他的玩家資訊卡組 facts → 導演排入針對性回覆(節流在導演內)。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.kind !== 'human' || last.id === mLastSeenHuman) return
@@ -215,10 +176,6 @@ export function useLobby(): UseLobby {
     if (!host) return // 只有 host 是嘴巴
 
     const u = last.uid ?? '?'
-    const now = Date.now()
-    if (now - (mLastReactByUid[u] ?? 0) < REPLY_THROTTLE_MS) { bumpQuota(); return } // 節流:重置額度但不回話
-    mLastReactByUid[u] = now
-
     void (async () => {
       const card = last.uid ? await fetchCard(last.uid) : null
       const input: ReactInput = {
@@ -236,7 +193,7 @@ export function useLobby(): UseLobby {
         stickerId: last.stickerId,
         text: last.text,
       }
-      bumpQuota(reactUnit(input, getRoster(), globals()))
+      director.onHumanMessage(u, input)
     })()
   }, [messages, host])
 
@@ -260,7 +217,7 @@ export function useLobby(): UseLobby {
     })()
   }
 
-  const notifyOpened = () => { if (mHost) bumpQuota() }
+  const notifyOpened = () => director.onOpened()
 
   const latest = messages.length ? messages[messages.length - 1] : null
   return { messages, latest, send, notifyOpened }

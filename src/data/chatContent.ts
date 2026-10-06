@@ -52,7 +52,7 @@ export interface ThreadBeat {
 }
 export interface ThreadShape { id?: string; slots?: Record<string, 'anyCard' | 'anyBoss' | 'anySticker'>; beats: ThreadBeat[] }
 export interface KwRule { any?: string[]; all?: string[]; intent: string; w?: number }
-export interface ReactRule { when?: string; say: Line[]; cta?: LobbyCtaSpec; ctaChance?: number }
+export interface ReactRule { when?: string; say: Line[]; cta?: LobbyCtaSpec; ctaChance?: number; exclusive?: boolean }
 export interface ChatConfig {
   openerChance?: number
   pileOnChance?: number
@@ -229,8 +229,6 @@ const CHAT: ChatContent = {
     { t: '幾分鐘後你就會崇拜我了，敢來嗎', cta: 'quickmatch', ctaChance: 0.8 },
     { t: '做人如果沒有夢想，那跟鹹魚有什麼分別！' },
     { t: '是不是想虐我？來啊', cta: 'quickmatch', ctaChance: 0.6 },
-    { t: '是不是想虐我？來啊', cta: 'quickmatch', ctaChance: 0.6 },
-    { t: '是不是想虐我？來啊', cta: 'quickmatch', ctaChance: 0.6 },
   ],
 
   // ── 多句劇場（形狀定死走向、每拍從 beatPools 隨機抽；A/B/C 指派給不同人機）──
@@ -319,13 +317,13 @@ const CHAT: ChatContent = {
   // ── 關鍵字（中文字元共現：any=任一命中、all=全部都要有；命中後取 w 最大的那條）──────
   //   ▸ w 越大越優先(平手取先出現的)。想刪整類 → 這裡刪一條 + 下面 kwPools 刪同名池。
   keywords: [
-    { any: ['機器人', 'bot', '真人嗎', '是ai', '是 ai', '外掛', '程式'], intent: 'kw_botq', w: 9 }, // 🔒問是不是機器人→裝傻,絕不承認
+    { any: ['機器人', 'bot', '真人嗎', '是ai', '是 ai'], intent: 'kw_botq', w: 9 }, // 🔒問是不是機器人→裝傻,絕不承認
     { all: ['玩'], any: ['怎', '如何', '不會', '教學', '規則'], intent: 'kw_howto', w: 6 },          // 問怎麼玩
-    { any: ['教我', '怎麼變強', '技巧', '攻略', '怎麼贏', '心得'], intent: 'kw_strategy', w: 6 },     // 求上手技巧
-    { any: ['機車', '難打', '打不過', '怎麼破', '第一關', '第二關', 'boss', '北極熊', '貓頭鷹', '短毛貓'], intent: 'kw_bossask', w: 5 }, // 問某關/BOSS
-    { any: ['特殊牌', '鬼牌', '哪張牌', '偷天換日', '偷窺', '踏雪', '換牌'], intent: 'kw_cardask', w: 5 }, // 問特殊牌
-    { any: ['滾', '爛', '弱', '菜', '沒料', '虛', '不行', '這樣也贏'], intent: 'kw_taunt', w: 4 },        // 嗆人機(通用+owner彩蛋)
-    { any: ['先走', '下線', '要走', '去忙', '掰啦', '掰掰', '睡了', '工作', '寫程式', '寫遊戲', '拜拜'], intent: 'kw_leave', w: 4 }, // 要走→別走(通用+owner彩蛋)
+    { any: ['教我', '變強', '技巧', '攻略', '怎麼贏', '心得'], intent: 'kw_strategy', w: 6 },     // 求上手技巧
+    { any: ['機車', '難打', '打不過', '打不贏', '第一關', '第二關', 'boss'], intent: 'kw_bossask', w: 5 }, // 問某關/BOSS
+    { any: ['特殊牌', '鬼牌', '哪張牌', '偷天換日', '偷窺', '換牌'], intent: 'kw_cardask', w: 5 }, // 問特殊牌
+    { any: ['爛', '弱', '廢', '嫩', '去練'], intent: 'kw_taunt', w: 4 },        // 嗆人機(通用+owner彩蛋)
+    { any: ['先走', '88', '去忙', '掰啦', '掰掰', '工作', '寫程式', '8~', '81'], intent: 'kw_leave', w: 4 }, // 要走→別走(通用+owner彩蛋)
     { any: ['單挑', '約戰', '來一場', '對戰', '打一場', '配對'], intent: 'kw_challenge', w: 4 },        // 約戰
     { any: ['有人嗎', '在嗎', '有人在', '有沒有人', '哈囉有人'], intent: 'kw_atanyone', w: 4 },         // 問在不在
     { any: ['配不到', '等好久', '沒人', '都沒人', '找不到對手'], intent: 'kw_waiting', w: 3 },          // 催對局
@@ -335,7 +333,7 @@ const CHAT: ChatContent = {
     { any: ['hi', 'hello', '哈囉', '你好', '安安', '嗨', 'yo', '午安', '晚安'], intent: 'kw_greet', w: 3 }, // 招呼
     { any: ['謝', '感謝', 'thx', 'thanks', '3q'], intent: 'kw_thanks', w: 2 },                         // 道謝
     { any: ['好強', '厲害', '強', '猛', '佩服', 'gg'], intent: 'kw_praise', w: 2 },                     // 稱讚人機
-    { any: ['衰', '背', '運氣', '賽', '歹勢'], intent: 'kw_unlucky', w: 2 },                            // 討拍
+    { any: ['衰', '背', '運氣', '牌好爛', '爛牌'], intent: 'kw_unlucky', w: 5 },                            // 討拍（w 要高過 kw_taunt 的 4，不然「牌好爛」會被「爛」搶走）
     { any: ['對啊', '沒錯', '就是', '+1', '同意', '真的'], intent: 'kw_agree', w: 1 },                  // 附和
     { any: ['哈哈', '笑死', 'xd', 'lol', 'www', '😂'], intent: 'kw_lol', w: 1 },                        // 大笑
     { any: ['老大', '鼓山金城武', 'GM'], intent: 'kw_gm', w: 1 },                                      // todo老大
@@ -344,9 +342,9 @@ const CHAT: ChatContent = {
   //  別人發言時(guard 不成立)自動被濾掉、只會拿到通用句。這招你之後也能自己套。
   kwPools: {
     // 🔒 問是不是機器人：一律裝傻帶過，永不承認
-    kw_botq: [{ t: '哈哈你想太多了啦，我大活人一個' }, { t: '機器人哪有我這麼會嘴' }, { t: '不然你要不要跟我這個「機器人」對戰看看', cta: 'quickmatch' }],
+    kw_botq: [{ t: '哈哈你想太多了啦' }, { t: '我先去換個電池XD' }, { t: '別問那多，我們用遊戲來對話吧', cta: 'quickmatch' }],
     kw_howto: [{ t: '{name}先照新手教學走一遍最快，很好上手', cta: 'tutorial' }, { t: '規則不難，跟著教學打一場就懂了', cta: 'tutorial' }],
-    kw_strategy: [{ t: '想變強？先把主線打熟，boss 什麼牌風都摸過一輪', cta: 'campaign' }, { t: '三條 CP 值超高、耗牌少，記起來' }, { t: '窺牌拿來賭補牌超好用，去設一張帶著', cta: 'loadout' }],
+    kw_strategy: [{ t: '想變強？先把主線打熟，boss 什麼牌風都摸過一輪', cta: 'campaign' }, { t: '三條 CP 值超高、耗牌少，記起來' }, { t: '「偷窺」牌拿來賭補牌超好用，去設一張帶著', cta: 'loadout' }],
     kw_bossask: [{ t: '{bossName}那關嗎，牠主打{bossStyle}，招牌卡是{bossCard}，帶對牌就好打', guard: 'hasBoss' }, { t: '英國短毛貓超愛囤牌，你要逼牠出手' }, { t: '鳥鳥只會強攻，撐過前面就贏一半' }, { t: '打不過就回去主線多練幾場', cta: 'campaign' }],
     kw_cardask: [{ t: '「{anyCard}」我覺得最萬用，帶著不吃虧' }, { t: '鬼牌留到最後補洞最賺，別急著出' }, { t: '想試特殊牌就先設預設牌組，每場自動帶', cta: 'loadout' }],
     // 嗆人機：通用回嗆 + owner 專屬(對你嘴更兇)
@@ -356,6 +354,7 @@ const CHAT: ChatContent = {
       { t: '哼，等等牌桌見真章' },
       { t: '鼓山金城武上線了，鷹爪門的都給我站出來', guard: 'isOwner', w: 20, cta: 'quickmatch' },       // owner 專屬
       { t: '老大你別太囂張，這次我不會放水的', guard: 'isOwner', w: 20 },                            // owner 專屬
+      { t: '被嗆了，我想刪遊戲了', guard: 'isOwner', w: 20 },                            // owner 專屬
     ],
     // 要走：通用挽留 + owner 專屬(很黏)
     kw_leave: [
@@ -373,47 +372,49 @@ const CHAT: ChatContent = {
     kw_reward: [{ t: '每天記得簽到，免費鑽石別浪費', cta: 'daily' }, { t: '每日任務隨手做一下就有鑽石', cta: 'daily' }],
     kw_sticker: [{ t: '我最愛「{anySticker}」那張，超好用' }, { t: '商城偶爾有限定貼圖，可以逛逛', cta: 'shop' }],
     kw_greet: [{ t: 'hi～{name}' }, { t: '{name}你好呀，來玩嗎', cta: 'quickmatch', ctaChance: 0.3 }, { t: '安安，正缺對手' }],
-    kw_thanks: [{ t: '不客氣啦' }, { t: '小事，多交流呀' }, { t: '客氣什麼，{invite}' }],
+    kw_thanks: [{ t: '不客氣啦' }, { t: '小事，多多交流呀' }, { t: '客氣什麼，{invite}' }],
     kw_praise: [{ t: '過獎過獎（其實我也覺得）' }, { t: '哪裡，運氣好而已啦' }, { t: '再來一場你就知道我多強', cta: 'quickmatch' }],
-    kw_unlucky: [{ t: '牌背而已，下一場就翻身' }, { t: '運氣這種東西是會輪的啦' }],
-    kw_agree: [{ t: '對吧對吧' }, { t: '就是說，你懂喔' }, { sticker: 'like' }],
+    kw_unlucky: [{ t: '牌差而已，下一場就不一樣了' }, { t: '哪有小孩天天哭，哪有賭徒天天輸!!' }],
+    kw_agree: [{ t: '對吧對吧' }, { t: '就是說呀' }, { sticker: 'like' }],
     kw_lol: [{ t: '笑死，是不是' }, { sticker: 'smile' }, { t: '哈哈哈懂喔' }, { t: '不要問你會怕' }],
     kw_gm: [{ t: '別提鼓山金城武，我一想到那勝率就發抖' }, { t: '老大等級的存在，我們只能仰望' }, { t: '你也是來朝聖的？' }], // todo老大(已補池)
   },
 
-  // ── 依「發言者狀態」的反應（有序，取「第一個」guard 通過的規則；貼圖/關鍵字都沒命中才走這）──
-  //   ▸ when 用 && 串條件；由上往下比，先中先用 → 特殊的放上面、保底的放最後(無 when)。
+  // ── 依「發言者狀態」的反應（貼圖/關鍵字都沒命中才走這）──────────────────────────
+  //   ▸ exclusive:true 的規則「獨佔」：符合就只用它（由上往下，先中先用）。
+  //   ▸ 其他規則：所有符合的「合併成一個大池」一起抽 → 老手會從好幾條規則的句子裡抽，不會一直重複。
+  //     沒寫 when = 永遠符合（保底句也會混進大池）。按鈕：句子自己的 cta 優先，否則用該規則的 cta。
   reactRules: [
-    // ★ owner 專屬：你發言(且沒中關鍵字)時，人機會捧你
-    { when: 'isOwner', say: [{ t: '老大來了！大家認真點', w: 3 }, { t: '鼓山金城武 說話了，全體聽訓' }, { t: '靠我來終止老大的連勝了', cta: 'quickmatch' }] },
+    // ★ owner 專屬：你發言(且沒中關鍵字)時，人機會捧你（獨佔）
+    { when: 'isOwner', exclusive: true, say: [{ t: '老大來了！大家認真點', w: 3 }, { t: '鼓山金城武 說話了，全體聽訓' }, { t: '靠我來終止老大的連勝了', cta: 'quickmatch' }] },
     // 訪客 → 推註冊(兩顆鈕)
-    { when: 'guest', say: [{ t: '{name}要不要先註冊一下？進度才能保存喔' }, { t: '先註冊嘛，不然打的成績都白費啦' }, { t: '{name}註冊一下，還能上排行榜呢' }], cta: ['register', 'google'] },
+    { when: 'guest', exclusive: true, say: [{ t: '{name}要不要先註冊一下？進度才能保存喔' }, { t: '先註冊嘛，不然打的成績都白費啦' }, { t: '{name}註冊一下，還能上排行榜呢' }], cta: ['register', 'google'] },
     // 連勝分段(範例:範圍寫法 streak>=6 && streak<=9)。⚠️沒連勝那段別放 {streak}
-    { when: 'streak>=10', say: [{ t: '{name} 居然連{streak}勝？！大神饒命', cta: 'quickmatch' }, { t: '{streak}連勝的怪物…讓我當那個終結者' }] },
-    { when: 'streak>=6 && streak<=9', say: [{ t: '{name}都連勝{streak}場了喔，該有人擋一下了吧', cta: 'quickmatch' }, { t: '連{streak}勝，手感正燙喔' }] },
-    { when: 'streak>=2 && streak<=5', say: [{ t: '{name}連{streak}場了，讓我來終止你的連勝', cta: 'quickmatch' }, { t: '小連勝而已，別得意' }] },
+    { when: 'streak>=10', say: [{ t: '{name} 居然連{streak}勝？！大神饒命', cta: 'quickmatch' }, { t: '{streak}真是個恐怖的連勝怪物…讓我當那個終結者吧' }] },
+    { when: 'streak>=6 && streak<=9', say: [{ t: '{name}都連勝{streak}場了喔，該有人擋一下了吧', cta: 'quickmatch' }, { t: '哇!連{streak}勝，手感正燙喔' }] },
+    { when: 'streak>=2 && streak<=5', say: [{ t: '{name}連{streak}場了耶，讓我來終止你的連勝', cta: 'quickmatch' }, { t: '小連勝而已，別得意' }] },
     // 主線分關卡(你的想法:卡1-1/1-2/1-3都算新手，過1-3才會玩)
     { when: 'beforeStage:1-1', say: [{ t: '{name}第一次來吧？先照新手教學打一遍最快', cta: 'tutorial' }, { t: '新手先走主線邊玩邊學，很好上手的', cta: 'campaign' }] },
     { when: 'afterStage:1-1 && beforeStage:1-2', say: [{ t: '{name}過第一關了！接著會開始用特殊牌，別怕', cta: 'campaign' }, { t: '卡關就多打幾次，boss 牌風固定、摸熟就過' }] },
-    { when: 'afterStage:1-2 && beforeStage:1-3', say: [{ t: '{name}打到這，去設個預設特殊牌超省事', cta: 'loadout' }, { t: '窺牌很好用喔，賭補牌前先看一張' }] },
+    { when: 'afterStage:1-2 && beforeStage:1-3', say: [{ t: '{name}都打到這了，去設個預設特殊牌超省事', cta: 'loadout' }, { t: '「偷窺」牌很好用喔，賭補牌前先看一張' }] },
     { when: 'silverAchv', say: [{ t: '{name}居然有「{achv}」，可以喔' }, { t: '欸!{name} 你「{achv}」這成就好酷' }], cta: 'achvShow', ctaChance: 0.2 },
-    { when: '!hasLoadout && afterStage:1-2', say: [{ t: '{name}都打到這了還沒設預設特殊牌？設一下省超多事' }, { t: '偷偷說{name}，去設個預設特殊牌，每場自動幫你帶' }], cta: 'loadout' },
-    { when: '!showsAchv && afterStage:1-3', say: [{ t: '{name}名片上還沒掛成就喔，解幾個掛上去很帥的' }], cta: 'achvShow' },
+    { when: '!hasLoadout && afterStage:1-2', say: [{ t: '{name}都打到這了還沒設預設特殊牌？去設定一下吧' }, { t: '{name}偷偷告訴你，去設個預設特殊牌，每場自動幫你帶入' }], cta: 'loadout' },
+    { when: '!showsAchv && afterStage:1-3', say: [{ t: '{name}你名片上還沒掛成就喔，解幾個掛上去很帥的' }], cta: 'achvShow' },
     // 過1-3=會玩了→當老手
-    { when: 'afterStage:1-3', say: [{ t: '{name}老手了，來場特殊房刺激一下', cta: 'quickmatch-special' }, { t: '{name}都會玩了，衝排行啊', cta: 'leaderboard', ctaChance: 0.3 }] },
+    { when: 'afterStage:1-3', say: [{ t: '{name}看來是個老手了，來場特殊房刺激一下', cta: 'quickmatch-special' }, { t: '{name}好強，衝排行啊', cta: 'leaderboard', ctaChance: 0.3 }] },
     // 保底(無 when=一定成立)：純邀約
     { say: [{ t: '{name}要不要來一場快速配對？' }, { t: '{name}手癢了嗎，{invite}' }, { t: '{invite}', w: 2 }], cta: 'quickmatch' },
   ],
 
   // ── 主動內容（host 事件/時機觸發）──────────────────────────────────────────
   proactive: {
-    greet_newcomer: [{ t: '{opener}{newcomerName}來啦' }, { t: '歡迎{newcomerName}，缺人陪打嗎', cta: 'quickmatch' }, { t: '{newcomerName}安安，先照新手教學走喔', cta: 'tutorial', ctaChance: 0.5 }],
-    online_count: [{ t: '現在線上{onlineCount}人，蠻熱鬧的嘛' }, { t: '{onlineCount}個人在線，不開一桌太浪費' }],
+    greet_newcomer: [{ t: '{opener}{newcomerName}來啦' }, { t: '歡迎{newcomerName}，缺人陪打嗎', cta: 'quickmatch' }, { t: '{newcomerName}安安，如果沒玩過的話建議先照新手教學走喔', cta: 'tutorial', ctaChance: 0.5 }],
+    online_count: [{ t: '現在線上{onlineCount}人，蠻熱鬧的嘛' }, { t: '有{onlineCount}個人在線耶，快開戰啦' }],
     gossip_gm: [{ t: '你們看過鼓山金城武的玩家資訊嗎，勝率九十幾趴超誇張，作弊484' }, { t: '昨天又被鼓山金城武打爆了' }, { t: '看到鼓山金城武上線我按配對手都會抖' }],
     announce_replay: [{ t: '剛剛{lastWinner}把{lastLoser}打爆了欸' }, { t: '{lastWinner}又贏了，狀態很好' }],
     time_morning: [{ t: '早安，開工先來一場暖身' }, { t: '早啊各位，今天手氣如何' }],
-    time_afternoon: [{ t: '午安～吃飽了就來一場消化一下' }, { t: '下午的班最想摸魚，剛好開一桌' }],
-    time_evening: [{ t: '晚安各位，下班/下課了嗎，來玩', cta: 'quickmatch', ctaChance: 0.3 }, { t: '晚上人比較多，這時段最好配' }],
+    time_afternoon: [{ t: '午安～吃飽了就來一場消化一下' }, { t: '下午的班最想摸魚，剛好來玩一場' }],
+    time_evening: [{ t: '晚安各位，來玩吧', cta: 'quickmatch', ctaChance: 0.3 }, { t: '晚上人比較多，這時段最好配' }],
     time_night: [{ t: '還沒睡喔，手氣不錯就別停啊' }, { t: '深夜場才是真本事，來啊' }],
   },
 

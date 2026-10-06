@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import type { Card as TCard } from '../../../game/cards'
 import Card from '../Card'
 import CardBack from '../CardBack'
+import { useSkipEnterAnim } from './enterAnim'
 
 /**
  * Opponent hand shown as backs. Same size and spacing as your hand.
@@ -32,6 +33,7 @@ export default function OpponentHand({
   const overlap = Math.max(cardW * 0.34, Math.min(ideal, fit))
   const sel = new Set(selectedIdx)
   const lift = Math.round(cardW * 0.42)
+  const skipEnter = useSkipEnterAnim() // 觀戰中途進場 → 不播飛入
   return (
     <div className="ohand" style={{ width: overlap * (n - 1) + cardW, height: cardW * 1.4 + lift }}>
       {Array.from({ length: n }).map((_, i) => (
@@ -39,7 +41,7 @@ export default function OpponentHand({
           key={cards ? cards[i].id : i}
           className="ohand__slot"
           style={{ left: i * overlap, zIndex: sel.has(i) ? 200 + i : i }}
-          initial={{ x: -260, y: -30, opacity: 0, rotate: -12 }}
+          initial={skipEnter ? false : { x: -260, y: -30, opacity: 0, rotate: -12 }}
           animate={{ x: 0, y: sel.has(i) ? lift : 0, opacity: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 26 }}
         >
