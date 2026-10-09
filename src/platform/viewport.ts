@@ -20,6 +20,12 @@ export function initViewportVars(): void {
     const w = vv?.width || window.innerWidth
     if (h > 0) de.style.setProperty('--vvh', `${h}px`)
     if (w > 0) de.style.setProperty('--vvw', `${w}px`)
+    // Where the visible area starts inside the layout viewport. Normally 0; when the
+    // on-screen keyboard opens, iOS Safari / Android Chrome PAN the visible area down
+    // to the focused input (offsetTop > 0). Popups pin their scrim here so they sit
+    // in the strip above the keyboard instead of at the (now off-screen) page top —
+    // otherwise you see the main menu's bottom-left behind the keyboard, not the input.
+    de.style.setProperty('--vvt', `${Math.max(0, vv?.offsetTop ?? 0)}px`)
     // Mobile browser tab (not standalone / desktop): scale every popup down to a
     // "shrunk" version so panel + images + buttons fit the reduced visible area as
     // one uniform unit (see .modal__panel / .cstages__panel — transform:scale).

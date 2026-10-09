@@ -7,7 +7,7 @@ import CHAT from '../data/chatContent'
  * 多分頁劇本模擬：假時鐘 + 共用聊天記錄 + 測試掌控的 host 鎖 + 可選網路延遲。
  * 每個劇本結束都檢查：
  *   ① 不是 host 不准寫（無延遲時嚴格為 0）
- *   ② 任兩則人機訊息間隔 ≥ GAP_MIN(10s) —— 不會有「兩條執行緒 2 秒內各講一句」
+ *   ② 任兩則人機訊息間隔 ≥ GAP_MIN(9s) —— 不會有「兩條執行緒 2 秒內各講一句」
  *   ③ 沒有聽眾時不講
  */
 interface Msg { ts: number; tab: string; text?: string; sticker?: string; isHost: boolean; audience: number }
@@ -232,7 +232,7 @@ describe('大廳聊天導演：多分頁劇本模擬', () => {
     w.healthy()
   })
 
-  it('劇本7 兩分頁搶 host（每 10 秒換一次，持續 2 分鐘）→ 永遠只有 host 在講、間隔都 ≥10 秒', async () => {
+  it('劇本7 兩分頁搶 host（每 10 秒換一次，持續 2 分鐘）→ 永遠只有 host 在講、間隔都 ≥ GAP_MIN(9 秒)', async () => {
     const w = makeWorld()
     const A = w.tab('A'); const B = w.tab('B')
     A.setAudience(2); B.setAudience(2)
@@ -245,7 +245,7 @@ describe('大廳聊天導演：多分頁劇本模擬', () => {
     w.healthy()
   })
 
-  it('劇本7b 同上但有網路延遲（換手瞬間舊 host 剛好在送）→ 間隔仍然 ≥10 秒', async () => {
+  it('劇本7b 同上但有網路延遲（換手瞬間舊 host 剛好在送）→ 間隔仍然 ≥ GAP_MIN(9 秒)', async () => {
     const w = makeWorld({ latency: 300 })
     const A = w.tab('A'); const B = w.tab('B')
     A.setAudience(2); B.setAudience(2)
@@ -298,7 +298,7 @@ describe('大廳聊天導演：隨機壓力測試（3 分頁亂進亂出、亂�
   const TEXTS = ['謝謝', '怎麼玩', '你好爛', '安安', '先走了', '哈哈哈', '今天天氣不錯', '有人嗎']
 
   for (const latency of [0, 300]) {
-    it(`${SEEDS} 個種子 × ${HOURS} 小時（網路延遲 ${latency}ms）：間隔永遠 ≥10s、沒聽眾不講、招呼只在安靜 ≥10 分後`, async () => {
+    it(`${SEEDS} 個種子 × ${HOURS} 小時（網路延遲 ${latency}ms）：間隔永遠 ≥9s、沒聽眾不講、招呼只在安靜 ≥10 分後`, async () => {
       const stats: string[] = []
       for (let seed = 1; seed <= SEEDS; seed++) {
         vi.setSystemTime(new Date('2026-10-06T19:00:00'))

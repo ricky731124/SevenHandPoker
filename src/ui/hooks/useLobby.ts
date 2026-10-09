@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlatformStore } from '../../state/platformStore'
 import { subStageOrder } from '../../game/campaign'
-import { arrivalGreeting, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
+import { arrivalGreeting, syncChatHistory, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
+import { fetchLatestHighlight } from '../../net/replays'
 import { createChatDirector, type ChatDirector } from '../../game/lobbyDirector'
 import { fetchCard } from '../../platform/cards'
 import { subscribeLiveIndex } from '../../net/liveIndex'
@@ -35,11 +36,53 @@ let mActiveUids: string[] = []
 let mMyUid: string | null = null
 let mLiveCode: string | null = null // 當前可觀戰的 live code（spectate CTA 用；null=現在沒 live）
 let mOnline = 0 // 顯示用線上人數（= 角落 OnlineCount：presence 活躍 uid + BOTS_ONLINE 20）
+let mMessages: LobbyMsg[] = []
+let mLastResult: LobbyGlobals['lastResult'] // 最近一場打完的(精華最新一筆、10 分內)→「剛剛誰打敗誰」
+let mLurkers: NonNullable<LobbyGlobals['lurkers']> = [] // 潛水的人 →「點名」
 
-const globals = (): LobbyGlobals => ({ onlineCount: mOnline, hasLive: !!mLiveCode, liveCode: mLiveCode ?? undefined })
+const globals = (): LobbyGlobals => ({
+  onlineCount: mOnline, hasLive: !!mLiveCode, liveCode: mLiveCode ?? undefined,
+  lastResult: mLastResult, lurkers: mLurkers,
+})
 
 const writeUtter = (u: BotUtterance) =>
-  writeChatMessage({ kind: 'bot', botId: u.botId, name: u.name, avatarId: u.avatarId, type: u.type, text: u.text, stickerId: u.stickerId, cta: u.cta })
+  writeChatMessage({ kind: 'bot', botId: u.botId, name: u.name, avatarId: u.avatarId, type: u.type, text: u.text, stickerId: u.stickerId, cta: u.cta, ck: u.ck })
+
+// ─── host 的主動句素材：剛剛誰打敗誰 / 潛水的人（§13.8）────────────────────────────
+const RESULT_FRESH_MS = 10 * 60_000 // 10 分內打完的才算「剛剛」
+const RESULT_POLL_MS = 2 * 60_000   // 最新戰績每 2 分鐘讀一次(一筆 2~5KB,只有 host 讀)
+const LURK_AFTER_MS = 2 * 60_000    // 在大廳待滿 2 分鐘…
+const LURK_QUIET_MS = 10 * 60_000   // …而且 10 分鐘內沒講過話 = 潛水
+let mResultFetchedAt = 0
+const mArrivedAt = new Map<string, number>() // host 本機：uid 這次在大廳從何時開始
+const mNameCache = new Map<string, string | null>() // uid → 名片顯示名(沒名片 = null,不點名)
+
+async function refreshHostFacts(): Promise<void> {
+  const now = serverNow()
+  // ① 剛剛誰打敗誰
+  if (now - mResultFetchedAt >= RESULT_POLL_MS) {
+    mResultFetchedAt = now
+    const r = await fetchLatestHighlight()
+    if (r && !r.abandoned && now - r.endedAt < RESULT_FRESH_MS) {
+      const w = r[r.winner], l = r[r.winner === 'p1' ? 'p2' : 'p1']
+      mLastResult = w?.name && l?.name ? { id: r.id, winner: w.name, loser: l.name } : undefined
+    } else mLastResult = undefined
+  }
+  // ② 潛水的人：在場夠久 + 最近沒講話 + 有名片名字
+  const active = new Set(mActiveUids)
+  for (const u of [...mArrivedAt.keys()]) if (!active.has(u)) mArrivedAt.delete(u)
+  for (const u of active) if (!mArrivedAt.has(u)) mArrivedAt.set(u, now)
+  const spoke = new Set(mMessages.filter((m) => m.kind === 'human' && m.uid && now - m.ts < LURK_QUIET_MS).map((m) => m.uid!))
+  const out: NonNullable<LobbyGlobals['lurkers']> = []
+  for (const [u, at] of mArrivedAt) {
+    if (now - at < LURK_AFTER_MS || spoke.has(u)) continue
+    if (!mNameCache.has(u)) { try { mNameCache.set(u, (await fetchCard(u))?.displayName || null) } catch { mNameCache.set(u, null) } }
+    const name = mNameCache.get(u)
+    if (name) out.push({ uid: u, name })
+  }
+  mLurkers = out
+  pushGlobals()
+}
 
 // 分頁唯一導演：HMR 重新載入本模組時先把舊導演的迴圈關掉，避免同一分頁兩條迴圈同時講。
 const holder = globalThis as { __shpChatDirector?: ChatDirector }
@@ -66,6 +109,7 @@ async function checkNewcomers(): Promise<void> {
     director.onNewcomer(arrivalGreeting(name, director.roster, globals()))
   }
   director.observeActive(mActiveUids, mMyUid)
+  void refreshHostFacts()
 }
 
 export interface UseLobby {
@@ -96,7 +140,12 @@ export function useLobby(): UseLobby {
   useEffect(() => { void ensureLobbyAuth() }, [])
 
   useEffect(() => {
-    const un1 = subscribeChat((all) => setMessages(visibleChat(all)))
+    const un1 = subscribeChat((all) => {
+      const v = visibleChat(all)
+      mMessages = v
+      syncChatHistory(v) // 防重複的記憶 = 聊天室最近講過什麼（換 host / 重整都接得上）
+      setMessages(v)
+    })
     const un2 = subscribeActive((n, uids) => { setActiveCount(n); mActiveUids = [...uids] })
     const un3 = subscribeLiveIndex((entries) => { mLiveCode = entries.find((e) => e.status === 'live')?.code ?? null; pushGlobals() })
     const un4 = subscribeOnlineCount((n) => { mOnline = n; pushGlobals() }) // 與角落在線人數同源(含 +20 保底)

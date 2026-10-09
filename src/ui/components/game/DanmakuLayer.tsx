@@ -1,50 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { DanmakuMsg } from '../../../net/spectate'
+import { admitLines, DANMAKU_LIFE_MS } from './danmakuLines'
 import './DanmakuLayer.css'
 
 /**
- * 彈幕顯示層(§4.6 / #4):右側中間、最多同時 7 行,新的從最下面進、最舊的在最上面;每行存活
- * 5 秒(從出現在畫面上那刻起算);滿 7 行時之後的排隊,等最上面那則消失、其餘往上推,才補進來。
- * 進出場提示(system)也走這裡(#4/#8)。上推動畫用 framer-motion 的 layout。純前端,零 DB。
- * pointer-events:none → 永遠浮在最上但可穿透點到底下的按鈕。
+ * 彈幕顯示層(§4.6 / #4):右側中間、最多同時 6 行,新的從最下面進、最舊的在最上面、整串往上推。
+ * 消失兩種規則(2026-10 使用者定案,見 danmakuLines.ts):
+ *   ① 每行從出現在畫面上那刻起算 15 秒 → 自己滑掉;
+ *   ② 已滿 6 行又來新的 → 最舊那行立刻被擠掉(不用等 15 秒),新的補進最下面。
+ * 進出場提示(system)也走這裡(#4/#8)。上推/滑出動畫用 framer-motion 的 layout + AnimatePresence。
+ * 純前端,零 DB。pointer-events:none → 永遠浮在最上但可穿透點到底下的按鈕。
  *
  * `feed` = append-only 的彈幕串(SpectatorGame 收到就往後加);本層自己認得哪些處理過。
  */
-const MAX_LINES = 6 // 同時最多 6 行(#2)
-const LIFE_MS = 6000 // 每行 6 秒(#2)
-
 export default function DanmakuLayer({ feed }: { feed: DanmakuMsg[] }) {
   const [lines, setLines] = useState<DanmakuMsg[]>([])
-  const queue = useRef<DanmakuMsg[]>([])
   const processed = useRef<Set<string>>(new Set())
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  // 進料:把 feed 裡沒處理過的排進 queue。
+  // 進料:feed 裡沒處理過的直接上畫面;超過上限 → 最舊的擠掉(並取消它的 15 秒計時)。
   useEffect(() => {
+    const fresh: DanmakuMsg[] = []
     for (const m of feed) {
       if (processed.current.has(m.id)) continue
       processed.current.add(m.id)
-      queue.current.push(m)
+      fresh.push(m)
     }
-    setLines((cur) => (cur.length < MAX_LINES && queue.current.length > 0 ? [...cur, queue.current.shift()!] : cur))
+    if (!fresh.length) return
+    setLines((cur) => {
+      const { lines: next, dropped } = admitLines(cur, fresh)
+      for (const d of dropped) {
+        clearTimeout(timers.current[d.id])
+        delete timers.current[d.id]
+      }
+      return next
+    })
   }, [feed])
 
-  // 補位:只要顯示未滿 3 行且 queue 有貨,就補一則(一次補一則,靠多次 render 連補)。
-  useEffect(() => {
-    if (lines.length < MAX_LINES && queue.current.length > 0) {
-      setLines((cur) => (cur.length < MAX_LINES && queue.current.length > 0 ? [...cur, queue.current.shift()!] : cur))
-    }
-  }, [lines])
-
-  // 每行「出現在畫面上那刻」起算 5 秒 → 到點移除;移除後上面的 useEffect 會自動補位。
+  // 每行「出現在畫面上那刻」起算 15 秒 → 到點移除。
   useEffect(() => {
     for (const m of lines) {
       if (timers.current[m.id]) continue
       timers.current[m.id] = setTimeout(() => {
         delete timers.current[m.id]
         setLines((cur) => cur.filter((l) => l.id !== m.id))
-      }, LIFE_MS)
+      }, DANMAKU_LIFE_MS)
     }
   }, [lines])
 

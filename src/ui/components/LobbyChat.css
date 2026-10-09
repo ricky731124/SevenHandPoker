@@ -51,6 +51,11 @@
 
 /* ---- 彈窗（沿用 Modal；固定高度、內容不撐高）---- */
 .lchat-modal .modal__body { padding-top: 6px; }
+/* 手機打字中(鍵盤開著)→ 精簡模式：藏標題列、縮內距，訊息區高度由 JS 算到剛好塞進鍵盤上方(LobbyChat.tsx)。 */
+.modal__panel.lchat-modal--kb { padding-top: 8px; padding-bottom: 8px; }
+.lchat-modal--kb .modal__titlebar { display: none; }
+.lchat-modal--kb .modal__body { padding-top: 0; }
+.lchat-modal--kb .lchat-input-row { margin-top: 6px; }
 .lchat-wrap { position: relative; }
 
 .lchat-list {

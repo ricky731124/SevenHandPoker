@@ -12,10 +12,10 @@ import { BOTS, type BotPersona } from './bots'
  *   - 換手續聊：接手成 host（非冷啟動）→ 引擎沒在跑就補 RESUME 額度(2~4)接著聊。
  *   - 回大廳續聊：host 看到某人離開 ≥ RETURN_GAP_MS 又回來（例：打完一場）→ 同上補 2~4。
  *   - 新到訪 / 真人發言 / 點開聊天室 → 額度回滿 6~9（新到訪、發言另排一句回覆插隊）。
- *   - 聊天已安靜 ≥ QUIET_FAST_MS 時，第一句 1.5~4s 就出來；其餘每則間隔 10~20s。
+ *   - 聊天已安靜 ≥ QUIET_FAST_MS 時，第一句 1.5~4s 就出來；其餘每則間隔 9~16s。
  */
 
-export const GAP_MIN = 10000, GAP_MAX = 20000          // 每則間隔
+export const GAP_MIN = 9000, GAP_MAX = 16000           // 每則間隔 9~16 秒（2026-10 使用者：10~20 → 9~16）
 export const QUOTA_MIN = 6, QUOTA_MAX = 9              // 一輪額度
 export const RESUME_MIN = 2, RESUME_MAX = 4            // 換手 / 回大廳的續聊額度
 export const FAST_MIN = 1500, FAST_MAX = 4000          // 安靜很久後的第一句延遲
@@ -23,6 +23,7 @@ export const QUIET_FAST_MS = 30_000                    // 安靜超過這麼久 
 export const GREET_QUIET_MS = 10 * 60_000              // 冷啟動時安靜超過這麼久才打招呼
 export const RETURN_GAP_MS = 45_000                    // 離開大廳超過這麼久再出現 = 「回大廳」
 export const REPLY_THROTTLE_MS = 15_000                // 同一真人 15s 內最多被回一次
+export const HANDOFF_SETTLE_MS = 2000                  // 剛接手 host 先等 2s：前一任「最後一則」可能還在路上(網路延遲)，等它到了再算間隔
 const SESSION_BOTS = 8
 
 export interface DirectorDeps {
@@ -59,6 +60,7 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
   const rint = (a: number, b: number) => a + Math.floor(R() * (b - a + 1))
 
   let host = false
+  let hostSince = -Infinity // 這次成為 host 的時間
   let audience = 0
   let lastTs: number | null = null
   let globals: LobbyGlobals = { onlineCount: 0, hasLive: false }
@@ -102,6 +104,9 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
         first = false
         if (!alive()) break
         // 硬間隔：聊天室最後一則（不論誰講、哪個分頁講）不到 GAP_MIN → 先等到滿，杜絕跨分頁/換手瞬間連發
+        // 剛接手：前一任送出的那則可能還沒傳到本分頁(lastTs 還是舊的) → 先等它落地再量間隔
+        const settle = HANDOFF_SETTLE_MS - (deps.now() - hostSince)
+        if (settle > 0) { await deps.sleep(settle); if (!alive()) break }
         const since = quietFor()
         if (since < GAP_MIN) { await deps.sleep(GAP_MIN - since + rint(0, 2000)); if (!alive()) break }
         if (!(await deps.verifyHost())) { host = false; break } // 已被別台接手 → 立刻收手
@@ -130,7 +135,7 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
   }
 
   return {
-    setHost: (h) => { host = h },
+    setHost: (h) => { if (h && !host) hostSince = deps.now(); host = h },
     setAudience: (n) => {
       audience = n
       if (n === 0) { roster = []; quota = 0; replies = [] } // 全部離開 → 清本 session
@@ -139,6 +144,7 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
     setGlobals: (g) => { globals = g },
 
     onBecameHost: (cold) => {
+      if (!host) hostSince = deps.now()
       host = true
       if (cold) {
         quota = rint(QUOTA_MIN, QUOTA_MAX)

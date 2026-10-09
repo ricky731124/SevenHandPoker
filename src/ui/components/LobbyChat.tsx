@@ -92,8 +92,44 @@ export default function LobbyChat() {
   const [hasNew, setHasNew] = useState(false)
   const [cardTarget, setCardTarget] = useState<{ uid: string | null; fallback: CardFallback } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const atBottomRef = useRef(true)
   const seenLastRef = useRef<string | null>(null)
+  // 手機打字中（觸控裝置 + 輸入框有 focus = 鍵盤開著）→ 彈窗進「精簡模式」：藏標題列、訊息區縮到
+  // 剛好塞進鍵盤上方的可見區 → 同時看得到鍵盤、輸入框(打了什麼字)和最新幾則訊息。
+  const [typing, setTyping] = useState(false)
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>() // 失焦晚 200ms 才退出精簡模式：手指點按鈕的瞬間版面不跳
+  useEffect(() => () => clearTimeout(blurTimer.current), [])
+  const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+  const kb = typing && coarse
+
+  // 精簡模式：訊息區高度 = 可見高度能塞的量（扣掉彈窗其餘部分）。鍵盤升降/可見區變動時重算，並捲到最新。
+  useEffect(() => {
+    const list = listRef.current
+    if (!kb || !list) { if (list) list.style.height = ''; return }
+    const vv = window.visualViewport
+    const fit = () => {
+      const panel = list.closest('.modal__panel') as HTMLElement | null
+      if (!panel) return
+      const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw-scale')) || 1
+      const visH = vv?.height ?? window.innerHeight
+      const avail = (visH * 0.92) / mw                          // 彈窗最多可用的高度(未縮放前的 px)
+      // 彈窗裡訊息區以外的部分(輸入列/內距/框線)。用 scrollHeight(內容全高)，offsetHeight 會被 max-height 夾住而算錯。
+      const others = panel.scrollHeight - list.offsetHeight
+      list.style.height = `${Math.max(40, Math.min(360, Math.floor(avail - others - 2)))}px`
+      if (atBottomRef.current) list.scrollTop = list.scrollHeight
+    }
+    fit()
+    vv?.addEventListener('resize', fit)
+    vv?.addEventListener('scroll', fit)
+    window.addEventListener('resize', fit)
+    return () => {
+      vv?.removeEventListener('resize', fit)
+      vv?.removeEventListener('scroll', fit)
+      window.removeEventListener('resize', fit)
+      list.style.height = ''
+    }
+  }, [kb])
 
   const scrollToBottom = () => {
     const el = listRef.current
@@ -109,7 +145,7 @@ export default function LobbyChat() {
     if (near) setHasNew(false)
   }
 
-  // 新訊息偵測用「最後一則 id」而非 length（訊息滿 30 則後 length 不再變 → 舊寫法會失效）。
+  // 新訊息偵測用「最後一則 id」而非 length（訊息滿 50 則後 length 不再變 → 舊寫法會失效）。
   const lastId = messages.length ? messages[messages.length - 1].id : null
   useEffect(() => {
     const first = seenLastRef.current === null
@@ -161,7 +197,7 @@ export default function LobbyChat() {
         )}
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} onBack={() => setOpen(false)} title="聊天室" width={460} panelClass="lchat-modal">
+      <Modal open={open} onClose={() => setOpen(false)} onBack={() => setOpen(false)} title="聊天室" width={460} panelClass={`lchat-modal${kb ? ' lchat-modal--kb' : ''}`}>
         <div className="lchat-wrap">
           <div className="lchat-list" ref={listRef} onScroll={onScroll}>
             {messages.length === 0 ? (
@@ -188,17 +224,21 @@ export default function LobbyChat() {
           )}
 
           <div className="lchat-input-row">
-            <button type="button" className="lchat-emoji" onClick={() => { sfx.click(); setTray((v) => !v) }} aria-label="貼圖">😀</button>
+            {/* 按下時不搶 focus(mousedown preventDefault，手機也會發這個事件)：否則手指一碰，輸入框先失焦→彈窗變回原尺寸→按鈕位置跑掉、點不到。 */}
+            <button type="button" className="lchat-emoji" onMouseDown={(e) => e.preventDefault()} onClick={() => { sfx.click(); inputRef.current?.blur(); setTray((v) => !v) }} aria-label="貼圖">😀</button>
             <input
+              ref={inputRef}
               className="lchat-input"
               value={text}
               maxLength={200}
               placeholder="說點什麼…"
-              onFocus={() => { setTray(false) }}
+              onFocus={() => { setTray(false); clearTimeout(blurTimer.current); setTyping(true) }}
+              onBlur={() => { blurTimer.current = setTimeout(() => setTyping(false), 200) }}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitText() } }}
             />
-            <button type="button" className="lchat-send" onClick={submitText} disabled={!text.trim()}>發送</button>
+            {/* 發送也不搶 focus → 送完鍵盤留著、可以接著打下一句 */}
+            <button type="button" className="lchat-send" onMouseDown={(e) => e.preventDefault()} onClick={submitText} disabled={!text.trim()}>發送</button>
           </div>
         </div>
       </Modal>

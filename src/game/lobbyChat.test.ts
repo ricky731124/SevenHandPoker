@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ambientUnit, reactUnit, lintChatContent, type ReactInput } from './lobbyChat'
+import { ambientUnit, reactUnit, lintChatContent, estimateVariety, type ReactInput } from './lobbyChat'
 import { BOTS } from './bots'
 import CHAT from '../data/chatContent'
 
@@ -15,6 +15,14 @@ describe('chatContent 內容檢查', () => {
     const { errors, warnings } = lintChatContent()
     if (warnings.length) console.warn('[chatContent 提醒]\n' + warnings.join('\n'))
     expect(errors, errors.join('\n')).toEqual([])
+  })
+})
+
+describe('chatContent 變化數（量產進度）', () => {
+  it('印出目前估算的變化數', () => {
+    const v = estimateVariety()
+    console.log(`[chatContent 變化數] ≈ ${v.total}（句型 ${v.templates}）`, v.parts)
+    expect(v.total).toBeGreaterThan(0)
   })
 })
 

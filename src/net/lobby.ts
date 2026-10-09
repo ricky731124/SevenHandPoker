@@ -11,7 +11,7 @@ import { BOT_BY_ID } from '../game/bots'
  * 大廳 AI 底層（見 docs/LOBBY-AI-SPEC.md §2/§3）。純 RTDB 原語，不含 React、不含內容。
  *   - lobbyActive/{connId}：誰在大廳「active」（可見且在主畫面、不在對局）→ 即時判定。
  *   - lobbyHost：主持人鎖（心跳 + 交接）。只有 active client 能搶；統一由 host 發環境閒聊。
- *   - lobbyChat：全頻聊天（人機 + 真人），公開讀、登入寫、保留 30 則 / 2 小時。
+ *   - lobbyChat：全頻聊天（人機 + 真人），公開讀、登入寫、顯示 50 則 / 6 小時。
  *
  * 🔒 只寫這三個新節點，絕不碰任何現有節點/真人資料（SPEC §0-A）。
  */
@@ -26,10 +26,11 @@ const COLD_HOST_MS = 30000 // 搶到 host 時,前一任已消失 > 30s(或根本
                            // 15~21s 那種是「交接」(前一任剛掉、兩分頁互搶)→ 不開,避免亂觸發
 const ACTIVE_HEARTBEAT_MS = 20000 // active 每 20s 更新 at
 const ACTIVE_WINDOW_MS = 60000 // active 子節點 at 在 60s 內才算數（防當機殘留）
-const CHAT_RETENTION_MS = 2 * 60 * 60 * 1000 // 訊息保留 2 小時
+const CHAT_RETENTION_MS = 6 * 60 * 60 * 1000 // 訊息保留 6 小時（2026-10 使用者：2 → 6 小時）
 const NEW_ARRIVAL_MS = 15 * 60 * 1000 // lobbySeen:某 uid 缺席/沒紀錄 ≥15 分才算「新到訪」(和在線人數是不同節點/地基,故用 15 分)
-export const CHAT_DISPLAY_MAX = 30 // 顯示最多 30 則
-const CHAT_PRUNE_MAX = 50 // RTDB 保留上限（超過就刪最舊）
+export const CHAT_DISPLAY_MAX = 50 // 顯示最多 50 則（2026-10 使用者：30 → 50）
+const CHAT_FETCH_MAX = 60 // 訂閱最新 60 則（比顯示多一點，過濾掉過期的後仍湊得滿 50）
+const CHAT_PRUNE_MAX = 70 // RTDB 保留上限（超過就刪最舊）
 
 // ---- server 時鐘偏移（比照 presence，讓 at 比對準確）-------------------------
 let _offset = 0
@@ -267,6 +268,7 @@ export interface LobbyMsg {
   stage?: number
   username?: string // 帳號（判 isOwner 專屬彩蛋用；他寫自己的、非機密）
   cta?: { label?: string; action: LobbyCtaAction; room?: 'normal' | 'special'; code?: string }[]
+  ck?: string[] // 人機訊息的冷卻鍵（lobbyChat 防重複用；換 host 後新 host 讀聊天紀錄就知道最近講過什麼）
 }
 
 /** 聊天 CTA 可導向的動作（§13）。多數接既有畫面/彈窗；未接的先當 no-op。 */
@@ -287,6 +289,7 @@ export async function writeChatMessage(msg: Omit<LobbyMsg, 'id' | 'ts'>): Promis
   if (msg.stage != null) payload.stage = msg.stage
   if (msg.username != null) payload.username = msg.username
   if (msg.cta != null) payload.cta = msg.cta
+  if (msg.ck?.length) payload.ck = msg.ck
   try {
     await push(ref(getDb(), 'lobbyChat'), payload)
   } catch {
@@ -294,9 +297,9 @@ export async function writeChatMessage(msg: Omit<LobbyMsg, 'id' | 'ts'>): Promis
   }
 }
 
-/** 訂閱聊天（最新 40 則；顯示端再套 30 則 + 2 小時過濾）。 */
+/** 訂閱聊天（最新 60 則；顯示端再套 50 則 + 6 小時過濾）。 */
 export function subscribeChat(cb: (msgs: LobbyMsg[]) => void): () => void {
-  const q = query(ref(getDb(), 'lobbyChat'), limitToLast(40))
+  const q = query(ref(getDb(), 'lobbyChat'), limitToLast(CHAT_FETCH_MAX))
   const unsub = onValue(q, (snap) => {
     const val = (snap.val() ?? {}) as Record<string, Omit<LobbyMsg, 'id'>>
     const list = Object.entries(val)
@@ -307,7 +310,7 @@ export function subscribeChat(cb: (msgs: LobbyMsg[]) => void): () => void {
   return unsub
 }
 
-/** 清掉超過 2 小時 / 超過 50 則的最舊訊息（host 寫入後順手做）。best-effort。 */
+/** 清掉超過 6 小時 / 超過 70 則的最舊訊息（host 寫入後順手做）。best-effort。 */
 export async function pruneChat(): Promise<void> {
   if (!currentUser()) return
   try {
@@ -325,7 +328,7 @@ export async function pruneChat(): Promise<void> {
   }
 }
 
-/** 顯示過濾：只留 2 小時內、最後 30 則（SPEC §3.2）。 */
+/** 顯示過濾：只留 6 小時內、最後 50 則（SPEC §3.2）。 */
 export function visibleChat(msgs: LobbyMsg[]): LobbyMsg[] {
   const now = nowServer()
   return msgs.filter((m) => typeof m.ts === 'number' && now - m.ts < CHAT_RETENTION_MS).slice(-CHAT_DISPLAY_MAX)

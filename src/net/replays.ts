@@ -1,4 +1,4 @@
-import { onValue, push, query, limitToLast, ref, remove, serverTimestamp } from 'firebase/database'
+import { get, onValue, push, query, limitToLast, ref, remove, serverTimestamp } from 'firebase/database'
 import { getDb } from './firebase'
 import type { PlayerId } from '../game/state'
 import type { Move } from '../game/replay'
@@ -83,6 +83,19 @@ export async function pushUserReplay(uid: string, rec: Omit<ReplayRecord, 'v' | 
     await push(userRef(uid), payloadOf(rec))
   } catch {
     /* best-effort */
+  }
+}
+
+/** 只讀全站精華「最新一筆」(大廳 host 播報「剛剛誰打敗誰」用;一次一筆 2~5KB,呼叫端自己節流)。 */
+export async function fetchLatestHighlight(): Promise<ReplayEntry | null> {
+  try {
+    const snap = await get(query(globalRef(), limitToLast(1)))
+    const all = (snap.val() ?? {}) as Record<string, ReplayRecord>
+    const [id, r] = Object.entries(all)[0] ?? []
+    if (!id || !r?.p1 || !r?.p2) return null
+    return { ...r, id, endedAt: typeof r.endedAt === 'number' ? r.endedAt : 0 }
+  } catch {
+    return null
   }
 }
 

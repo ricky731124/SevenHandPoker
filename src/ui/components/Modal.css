@@ -1,6 +1,10 @@
 .modal__scrim {
   position: fixed;
-  inset: 0;
+  /* top = where the visible area starts (--vvt, see platform/viewport.ts): 0 normally;
+     when the keyboard pans the page down, the scrim follows into the visible strip. */
+  top: var(--vvt, 0px);
+  left: 0;
+  right: 0;
   /* Bind the centring context to the ACTUAL visible area. --vvh is measured from
      visualViewport in JS (see platform/viewport.ts) because dvh on position:fixed
      is unreliable on iOS Safari (clips panels). Falls back to dvh pre-measure.

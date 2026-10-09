@@ -361,7 +361,7 @@ presence/{uid}/lastActive : <serverTimestamp>   # 改為「心跳時間戳」（
 
 ### 4.6 彈幕（罐頭訊息）—— ⚠️ 最終定案(位置/行數/秒數/開關)見 §11.C
 - **觀眾端**：貼圖按鈕改造成「訊息鈕」（icon＋「訊息」），一顆鈕 → tray 文字下拉（pool §9，14 則）→ 點即 `push(spectate/{code}/danmaku, {text, by:myName, at})`。
-- **顯示（定案：右側中間、最多 6 行、每行 6 秒、往上推堆疊）**：新的從最下面進、最舊在最上；滿 6 排隊，最上面 6 秒到消失、其餘上推、排隊的補進來（6 秒從補進來起算）；framer `AnimatePresence`+`layout`。
+- **顯示（定案：右側中間、最多 6 行、每行 15 秒、往上推堆疊；2026-10-09 改）**：新的從最下面進、最舊在最上；每行出現起算 15 秒自己滑掉；**已滿 6 行又來新的 → 最舊那行立刻被擠掉（不排隊、不用等 15 秒）**、其餘上推、新的進最下面（規則在 `danmakuLines.ts`，有單元測試）；framer `AnimatePresence`+`layout`。
 - **玩家端開關**：`showSpectatorDanmaku`（**定案改預設開**），被觀戰時 TopBar 選單多一列「觀眾彈幕 開/關」；host＋guest 都有（見 §11.C/D）。
 - **不記錄 / 不補播**：彈幕不落地，隨房清；用 `subscribeNew`（`startAfter` 只收訂閱後新增的）→ 中途進場、關開開關都不補播舊訊息。
 
@@ -373,7 +373,7 @@ presence/{uid}/lastActive : <serverTimestamp>   # 改為「心跳時間戳」（
 
 ### 4.8 驗收
 - A 玩家與真人/人機對戰 → B、C 開遊戲主畫面看到 Live 卡 → 點進去看到**全開牌桌**、能放大鏡、能發罐頭訊息。
-- 彈幕：右側中間、最多 6 行、6 秒、上推、排隊正確（定案 §11.C）。
+- 彈幕：右側中間、最多 6 行、15 秒、上推、滿了擠掉最舊（2026-10-09 改，定案 §11.C）。
 - 玩家端「觀眾彈幕」開時看得到觀眾彈幕＋進出提示（同一區）。
 - 沒有觀眾時，廣播端不寫 spec（用 network 面板確認）。
 
@@ -591,7 +591,7 @@ type Move =
 
 ### 11.C 彈幕(訊息) / 進出提示（`DanmakuLayer`／`DanmakuBar`／`BroadcasterDanmaku`／`net/spectate.ts`）
 - **送**：觀戰者點「訊息」鈕 → 罐頭文字下拉(§9 pool 14 則)→ 點即 `push(spectate/{code}/danmaku, {text, by, at})`。訪客名字＝§9 pool 挑不撞(存 sessionStorage)、登入用顯示名；名字寫進 `spectate/{code}/watch/{id}`(廣播端數 `.size`)＋進/出場 `push` `spectate/{code}/notice`。
-- **顯示**（`DanmakuLayer`，觀戰＋玩家端共用）：**右側中間**、`z-index:300`「永遠最上」但 `pointer-events:none`(可穿透點按鈕)；**最多 6 行、每行 6 秒**(出現起算)、滿 6 排隊、framer `layout` 上推；**進出提示併入同區**(system 灰字)。
+- **顯示**（`DanmakuLayer`，觀戰＋玩家端共用）：**右側中間**、`z-index:300`「永遠最上」但 `pointer-events:none`(可穿透點按鈕)；**最多 6 行、每行 15 秒**(出現起算)、滿 6 行再來新的 → 最舊立刻擠掉(2026-10-09 改,原為排隊)、framer `layout` 上推；**進出提示併入同區**(system 灰字)。
 - **玩家端(廣播端)看觀眾彈幕**：`gameStore.showSpectatorDanmaku`(**預設開**)；被觀戰時(`broadcastCode` 有值──casual=`_bcast.code`、online host＝netgame startLive 設、**online guest＝`_attachGuest` 也設房號**)TopBar 選單多一列「觀眾彈幕 開/關」；`BroadcasterDanmaku` 開時 `watchDanmaku(code)`(只讀 danmaku+notice) → 同一個 `DanmakuLayer` 顯示。**⚠️ 關掉時 `setFeed([])`**(不清的話再開會把舊 feed 全補播)。
 - **不落地/不補播**：danmaku/notice 用 `subscribeNew`(先讀最後一個 key，再 `startAfter` 只收「訂閱後」新增的) → 中途進場/關開不會補播舊訊息(彈幕本就不長存，隨房清)。
 

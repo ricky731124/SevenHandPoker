@@ -3,7 +3,7 @@ import { ALL_SUB_STAGE_IDS, getSubStage, subStageOrder } from './campaign'
 import { SPECIAL_CARDS, type SpecialCardId } from './specialCards'
 import { getAchievement, TIER_NAME_ZH } from './achievements'
 import { STICKERS } from './stickers'
-import CONTENT, { type Line, type LobbyCtaSpec, type ReactRule } from '../data/chatContent'
+import CONTENT, { type Line, type LobbyCtaSpec, type ReactRule, type ThreadShape } from '../data/chatContent'
 import type { LobbyMsg } from '../net/lobby'
 
 /**
@@ -27,6 +27,7 @@ export interface BotUtterance {
   text?: string
   stickerId?: string
   cta?: NonNullable<LobbyMsg['cta']>
+  ck?: string[] // 冷卻鍵（句型/劇場/主題/已播報的場次…）→ 跟訊息一起存，換 host 也接得上防重複
 }
 
 /** 大廳「當下」的全域事實（host 餵）。 */
@@ -35,8 +36,10 @@ export interface LobbyGlobals {
   hasLive: boolean
   liveCode?: string // 當前可觀戰的 live code（spectate CTA 導向用）
   newcomerName?: string
-  lastWinner?: string
-  lastLoser?: string
+  /** 最近一場打完的對局（精華賽事最新一筆，10 分內）→ announce_replay「剛剛誰打敗誰」。 */
+  lastResult?: { id: string; winner: string; loser: string }
+  /** 在大廳待一陣子、最近都沒講話的真人 → cue_idle「點名潛水的人」。 */
+  lurkers?: { uid: string; name: string }[]
   now?: number
 }
 
@@ -84,6 +87,7 @@ interface Facts {
   newcomerName?: string
   lastWinner?: string
   lastLoser?: string
+  idleName?: string
   isOwner: boolean
   morning: boolean
   afternoon: boolean
@@ -135,15 +139,73 @@ const mkUtter = (b: BotPersona, patch: Partial<BotUtterance>): BotUtterance => (
   botId: b.id, name: b.name, avatarId: b.avatarId, type: 'text', ...patch,
 })
 
-// ─── 全域防重複（host 是唯一嘴巴 → 全域冷卻即可；壓的是「句型」重複感）─────────
-const recent: string[] = []
-function isCooled(key: string): boolean {
-  return recent.includes(key)
+// ─── 全域防重複 ─────────────────────────────────────────────────────────────
+//   冷卻鍵(ck)跟著每則人機訊息存進 lobbyChat → 冷卻狀態 = 「聊天室最近 N 則講過什麼」，
+//   不再只存在 host 分頁的記憶體裡（以前換 host / 重整就失憶 → 十句內又出現同一句）。
+//   鍵的種類：L:句型 · th:劇場 · tp:主題(特殊牌/BOSS/貼圖…) · rp:已播報的場次 · idle:已點名的人。
+//   localKeys = 本分頁剛產生、還沒出現在聊天室的(排隊中的劇場後幾拍/插隊回覆)。
+let chatAge = new Map<string, number>() // 鍵 → 幾則訊息前出現過(0=最新一則)
+const localKeys: string[] = []
+const LOCAL_CAP = 24
+
+/** host 每次聊天室更新就餵進來（useLobby）。只看人機訊息的 ck。 */
+export function syncChatHistory(msgs: LobbyMsg[]): void {
+  const m = new Map<string, number>()
+  for (let i = msgs.length - 1, age = 0; i >= 0; i--, age++) {
+    for (const k of msgs[i].ck ?? []) if (!m.has(k)) m.set(k, age)
+  }
+  chatAge = m
 }
-function noteUsed(key: string): void {
-  recent.push(key)
-  const cap = CONTENT.config.cooldownSize ?? 25
-  while (recent.length > cap) recent.shift()
+/** 這個鍵多久前用過（越小越近；-1 = 本分頁剛用、還沒進聊天室；Infinity = 沒用過）。 */
+function ageOf(key: string): number {
+  const li = localKeys.lastIndexOf(key)
+  if (li >= 0) return -1 - (localKeys.length - 1 - li) * 0.001 // 本地的都算「最新」，越後面越新
+  return chatAge.get(key) ?? Infinity
+}
+const lineWindow = () => CONTENT.config.cooldownSize ?? 30
+const topicWindow = () => CONTENT.config.topicCooldown ?? 8
+function isCooled(key: string, win = lineWindow()): boolean {
+  return ageOf(key) < win
+}
+function noteLocal(keys: string[]): void {
+  localKeys.push(...keys)
+  while (localKeys.length > LOCAL_CAP) localKeys.shift()
+}
+/** 測試用：清空所有冷卻記憶。 */
+export function resetCooldownForTest(): void {
+  chatAge = new Map()
+  localKeys.length = 0
+  onceAt.clear()
+}
+
+/** 句型 → 短鍵（存進 DB 不要整句中文那麼長）。 */
+function hashKey(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+const lineKey = (l: Line) => 'L:' + hashKey(l.t ?? 'stk:' + (l.sticker ?? ''))
+
+/** 主題：同主題的不同句子(「X好用嗎」「X被低估」「哪張特殊牌最好用」)短時間內也算重複。
+ *  優先用句子自己寫的 topic；否則從佔位/字面自動判斷。 */
+const CARD_WORDS = ['特殊牌', '鬼牌', '空白牌']
+function topicOf(text: string | undefined, explicit?: string): string | null {
+  if (explicit) return explicit
+  if (!text) return null
+  if (/\{(anyCard|card|loadoutCard|bossCard)\}/.test(text) || CARD_WORDS.some((w) => text.includes(w)) || BOSS_CARD_NAMES.some((n) => text.includes(n))) return 'card'
+  if (/\{(anyBoss|bossName)\}/.test(text) || BOSS_CHAR_NAMES.some((n) => text.includes(n))) return 'boss'
+  if (/\{(anySticker|sticker)\}/.test(text) || text.includes('貼圖') || text.includes('商城')) return 'sticker'
+  if (text.includes('回放')) return 'replay'
+  if (text.includes('排行')) return 'rank'
+  if (text.includes('鼓山金城武')) return 'gm'
+  return null
+}
+const topicKey = (tp: string) => 'tp:' + tp
+/** 從一群候選挑「最久沒用過」的（全部都在冷卻時的退路，不再隨機撞到剛講過的）。 */
+function leastRecent<T>(arr: T[], keyOf: (x: T) => string): T[] {
+  let best = -Infinity
+  for (const x of arr) best = Math.max(best, ageOf(keyOf(x)))
+  return arr.filter((x) => ageOf(keyOf(x)) === best)
 }
 
 // ─── 事實解析 ────────────────────────────────────────────────────────────────
@@ -189,8 +251,6 @@ function reactFacts(inp: ReactInput, g: LobbyGlobals): Facts {
     hasLive: g.hasLive,
     liveCode: g.liveCode,
     newcomerName: g.newcomerName,
-    lastWinner: g.lastWinner,
-    lastLoser: g.lastLoser,
     isOwner: isOwnerName(inp.username),
     ...timeOfDay(g.now),
   }
@@ -202,7 +262,7 @@ function ambientFacts(g: LobbyGlobals): Facts {
     name: '', registered: true, streak: 0, bestStreak: 0, wins: 0, games: 0, winRate: null,
     achvList: [], hasLoadout: false, loadoutName: null, clearedOrder: -1, boss: null,
     onlineCount: g.onlineCount, hasLive: g.hasLive, liveCode: g.liveCode, newcomerName: g.newcomerName,
-    lastWinner: g.lastWinner, lastLoser: g.lastLoser, isOwner: false,
+    isOwner: false, // lastWinner/lastLoser/idleName 只在挑到那類主動句時才填(ambientProactive)
     ...timeOfDay(g.now),
   }
 }
@@ -287,6 +347,7 @@ function tokenValue(tok: string, F: Facts, minTier: number, rng: () => number): 
     case 'newcomerName': return F.newcomerName || null
     case 'lastWinner': return F.lastWinner || null
     case 'lastLoser': return F.lastLoser || null
+    case 'idleName': return F.idleName || null
     case 'anyCard': return pick(BOSS_CARD_NAMES, rng)
     case 'anyBoss': return pick(BOSS_CHAR_NAMES, rng)
     case 'anySticker': return pick(STICKER_NAMES, rng)
@@ -323,33 +384,46 @@ function resolveCtas(spec: LobbyCtaSpec | undefined, lineChance: number | undefi
 }
 
 // ─── 從 Line[] 挑一句（guard 過濾 + 佔位可解析 + 冷卻 + 加權）───────────────────
-interface Resolved { text?: string; stickerId?: string; cta?: CtaOut[] }
-function pickLine(
-  pool: Line[] | undefined, F: Facts, minTier: number, rng: () => number,
-  ruleCta?: LobbyCtaSpec, ruleChance?: number,
-  slots?: Record<string, string>, // 劇場共用槽
-  noOpener?: boolean,             // 劇場句不加語助詞
-): Resolved | null {
+interface Resolved { text?: string; stickerId?: string; cta?: CtaOut[]; ck: string[] }
+interface PickOpts {
+  minTier?: number
+  ruleCta?: LobbyCtaSpec
+  ruleChance?: number
+  slots?: Record<string, string> // 劇場共用槽
+  noOpener?: boolean             // 劇場句不加語助詞
+  avoidTopic?: boolean           // 環境閒聊：最近聊過的主題也先避開（回真人時不避，人家問特殊牌就答特殊牌）
+}
+function pickLine(pool: Line[] | undefined, F: Facts, rng: () => number, o: PickOpts = {}): Resolved | null {
   if (!pool || !pool.length) return null
-  const ok = pool.filter((l) => evalGuard(l.guard, F) && (l.sticker != null || l.t == null || resolveText(l.t, F, minTier, rng, slots) != null))
+  const minTier = o.minTier ?? 1
+  const ok = pool.filter((l) => evalGuard(l.guard, F) && (l.sticker != null || l.t == null || resolveText(l.t, F, minTier, rng, o.slots) != null))
   if (!ok.length) return null
-  const fresh = ok.filter((l) => !isCooled(l.t ?? l.sticker ?? ''))
-  const cands = fresh.length ? fresh : ok
+  // 冷卻退路：句型+主題都沒用過 → 句型沒用過 → 全都用過就挑「最久以前」的那幾句
+  const fresh = ok.filter((l) => !isCooled(lineKey(l)))
+  const freshTopic = o.avoidTopic ? fresh.filter((l) => { const tp = topicOf(l.t, l.topic); return !tp || !isCooled(topicKey(tp), topicWindow()) }) : fresh
+  const cands = freshTopic.length ? freshTopic : fresh.length ? fresh : leastRecent(ok, lineKey)
   // 加權挑
   const total = cands.reduce((s, l) => s + (l.w ?? 1), 0)
   let r = rng() * total
   let chosen = cands[0]
   for (const l of cands) { r -= l.w ?? 1; if (r <= 0) { chosen = l; break } }
-  noteUsed(chosen.t ?? chosen.sticker ?? '')
-  const cta = resolveCtas(chosen.cta ?? ruleCta, chosen.ctaChance ?? ruleChance, F, rng)
-  if (chosen.sticker != null) return { stickerId: chosen.sticker, cta }
-  let text = resolveText(chosen.t ?? '', F, minTier, rng, slots) ?? ''
+  const tp = topicOf(chosen.t, chosen.topic)
+  const ck = [lineKey(chosen), ...(tp ? [topicKey(tp)] : [])]
+  noteLocal(ck)
+  const cta = resolveCtas(chosen.cta ?? o.ruleCta, chosen.ctaChance ?? o.ruleChance, F, rng)
+  if (chosen.sticker != null) return { stickerId: chosen.sticker, cta, ck }
+  let text = resolveText(chosen.t ?? '', F, minTier, rng, o.slots) ?? ''
   // 單句可自動前綴語助詞（非劇場、opener≠false、句子沒自帶 {opener}）
-  if (!noOpener && chosen.opener !== false && !(chosen.t ?? '').includes('{opener}') && rng() < (CONTENT.config.openerChance ?? 0.4)) {
+  if (!o.noOpener && chosen.opener !== false && !(chosen.t ?? '').includes('{opener}') && rng() < (CONTENT.config.openerChance ?? 0.4)) {
     const op = fragment('opener', rng)
     if (op) text = `${op}${text}`
   }
-  return { text, cta }
+  return { text, cta, ck }
+}
+/** 挑好的句子 → 一則人機訊息（extraCk = 額外要記的冷卻鍵，例：劇場 id、場次）。 */
+function utterOf(b: BotPersona, line: Resolved, extraCk: string[] = []): BotUtterance {
+  const ck = [...new Set([...line.ck, ...extraCk])]
+  return mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta, ck } : { text: line.text, cta: line.cta, ck })
 }
 
 // ─── 對外：冷場首句（招呼）─────────────────────────────────────────────────────
@@ -357,17 +431,31 @@ export function greetingUtter(bots: BotPersona[] = BOTS, rng: () => number = rng
   const b = pick(bots.length ? bots : BOTS, rng)
   const pool = CONTENT.greetings.length ? CONTENT.greetings : CONTENT.singles
   const F = ambientFacts({ onlineCount: 0, hasLive: false })
-  const line = pickLine(pool, F, 1, rng)
-  return mkUtter(b, line?.stickerId ? { type: 'sticker', stickerId: line.stickerId } : { text: line?.text ?? '' })
+  const line = pickLine(pool, F, rng)
+  if (!line) return mkUtter(b, { text: '' })
+  return utterOf(b, { ...line, cta: undefined })
 }
 
 // ─── 對外：有人上線的招呼（帶名字）────────────────────────────────────────────
 export function arrivalGreeting(name: string, bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: () => number = rng0): BotUtterance | null {
   const F = ambientFacts({ ...(g ?? { onlineCount: 0, hasLive: false }), newcomerName: name })
-  const line = pickLine(CONTENT.proactive.greet_newcomer, F, 1, rng)
+  const line = pickLine(CONTENT.proactive.greet_newcomer, F, rng)
   if (!line) return null
-  const b = pick(bots.length ? bots : BOTS, rng)
-  return mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta })
+  return utterOf(pick(bots.length ? bots : BOTS, rng), line)
+}
+
+/** 劇場的冷卻鍵與主題（主題：自己寫的 topic → 共用槽的種類 → 無）。 */
+const threadKey = (th: ThreadShape) => 'th:' + (th.id ?? hashKey(JSON.stringify(th.beats)))
+function threadTopic(th: ThreadShape): string | null {
+  if (th.topic) return th.topic
+  const kinds = Object.values(th.slots ?? {})
+  return kinds.includes('anyCard') ? 'card' : kinds.includes('anyBoss') ? 'boss' : kinds.includes('anySticker') ? 'sticker' : null
+}
+function pickThread(rng: () => number): ThreadShape {
+  const all = CONTENT.threads
+  const fresh = all.filter((th) => !isCooled(threadKey(th)))
+  const freshTopic = fresh.filter((th) => { const tp = threadTopic(th); return !tp || !isCooled(topicKey(tp), topicWindow()) })
+  return pick(freshTopic.length ? freshTopic : fresh.length ? fresh : leastRecent(all, threadKey), rng)
 }
 
 // ─── 對外：一個環境閒聊單元（劇場 / 單句 / 貼圖 / 主動）────────────────────────
@@ -378,7 +466,10 @@ export function ambientUnit(bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: ()
   const cat = weightedCat(w, rng)
 
   if (cat === 'thread' && CONTENT.threads.length) {
-    const shape = pick(CONTENT.threads, rng)
+    const shape = pickThread(rng)
+    const tp = threadTopic(shape)
+    const thCk = [threadKey(shape), ...(tp ? [topicKey(tp)] : [])]
+    noteLocal(thCk)
     const roles = [...new Set(shape.beats.map((b) => b.role))]
     const cast = pickBots(roles.length, rng, roster)
     const byRole: Record<string, BotPersona> = {}
@@ -400,25 +491,29 @@ export function ambientUnit(bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: ()
               : beat.pool ? CONTENT.beatPools[beat.pool]
                 : undefined
       // 槽位在「挑句之前」就帶入(否則含 {card} 的句會被當成無法解析而濾掉);劇場不加 opener。
-      const line = pickLine(pool, F, 1, rng, undefined, undefined, slotVals, true)
+      const line = pickLine(pool, F, rng, { slots: slotVals, noOpener: true })
       if (!line) continue
-      out.push(mkUtter(b, line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta }))
+      out.push(utterOf(b, line, out.length ? [] : thCk)) // 劇場鍵記在第一則
     }
     return out
   }
 
   if (cat === 'sticker' && CONTENT.ambientStickers.length) {
-    return [mkUtter(pick(roster, rng), { type: 'sticker', stickerId: pick(CONTENT.ambientStickers, rng) })]
+    const stkKey = (id: string) => 'stk:' + id
+    const fresh = CONTENT.ambientStickers.filter((id) => !isCooled(stkKey(id), topicWindow()))
+    const id = pick(fresh.length ? fresh : leastRecent(CONTENT.ambientStickers, stkKey), rng)
+    noteLocal([stkKey(id)])
+    return [mkUtter(pick(roster, rng), { type: 'sticker', stickerId: id, ck: [stkKey(id)] })]
   }
 
   if (cat === 'proactive') {
-    const u = ambientProactive(roster, F, rng)
+    const u = ambientProactive(roster, g ?? { onlineCount: 0, hasLive: false }, rng)
     if (u) return [u]
   }
 
   // 預設：單句
-  const line = pickLine(CONTENT.singles, F, 1, rng)
-  return line ? [mkUtter(pick(roster, rng), line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta })] : []
+  const line = pickLine(CONTENT.singles, F, rng, { avoidTopic: true })
+  return line ? [utterOf(pick(roster, rng), line)] : []
 }
 
 type Cat = 'thread' | 'single' | 'sticker' | 'proactive'
@@ -430,18 +525,48 @@ function weightedCat(w: Partial<Record<Cat, number>>, rng: () => number): Cat {
   return 'single'
 }
 
-/** 只用全域事實的主動句（線上人數 / 虛構強者梗 / 時段）。有名字的招呼在 arrivalGreeting。 */
-function ambientProactive(roster: BotPersona[], F: Facts, rng: () => number): BotUtterance | null {
-  const kinds: string[] = ['online_count', 'gossip_gm']
-  if (F.morning) kinds.push('time_morning')
-  if (F.afternoon) kinds.push('time_afternoon')
-  if (F.evening) kinds.push('time_evening')
-  if (F.night) kinds.push('time_night')
-  if (F.lastWinner && F.lastLoser) kinds.push('announce_replay')
-  const kind = pick(kinds, rng)
-  const line = pickLine(CONTENT.proactive[kind], F, 1, rng)
+/** 主動句（線上人數 / 虛構強者梗 / 時段 / 剛剛誰打敗誰 / 點名潛水的人）。有名字的招呼在 arrivalGreeting。
+ *  「剛剛誰打敗誰」每場只播一次、「點名」每人一段時間只點一次（記在聊天室的 ck → 換 host 也算數）。 */
+const EVER = 1e9 // 聊天室看得到的範圍內都算「已用過」
+const IDLE_RECUE_MS = 30 * 60_000 // 同一個人 30 分鐘內最多點名一次
+const onceAt = new Map<string, number>() // 本分頁播過/點過的(聊天室只留 50 則，捲掉後靠這個記住)
+function usedOnce(key: string, ttl: number, now: number): boolean {
+  if (isCooled(key, EVER)) return true
+  const t = onceAt.get(key)
+  return t != null && now - t < ttl
+}
+function ambientProactive(roster: BotPersona[], g: LobbyGlobals, rng: () => number): BotUtterance | null {
+  const now = g.now ?? Date.now()
+  const base = ambientFacts(g)
+  const kinds: [string, number][] = [['online_count', 1], ['gossip_gm', 1]]
+  if (base.morning) kinds.push(['time_morning', 1])
+  if (base.afternoon) kinds.push(['time_afternoon', 1])
+  if (base.evening) kinds.push(['time_evening', 1])
+  if (base.night) kinds.push(['time_night', 1])
+  const res = g.lastResult
+  const rpKey = res ? 'rp:' + res.id : ''
+  if (res && CONTENT.proactive.announce_replay?.length && !usedOnce(rpKey, Infinity, now)) kinds.push(['announce_replay', 3]) // 新鮮戰報優先
+  const lurkers = (g.lurkers ?? []).filter((l) => !usedOnce('idle:' + l.uid, IDLE_RECUE_MS, now))
+  if (lurkers.length && CONTENT.proactive.cue_idle?.length) kinds.push(['cue_idle', 2])
+
+  // 同類主動句(例：線上人數)最近講過、或那類的句子全都最近講過 → 先換別類（句子少的類別才不會一直重複）
+  const hasFreshLine = (k: string) => (CONTENT.proactive[k] ?? []).some((l) => !isCooled(lineKey(l)))
+  const pool = kinds.filter(([k]) => !isCooled('pk:' + k, topicWindow()) && hasFreshLine(k))
+  if (!pool.length) return null // 能講的主動句最近都講過了 → 這輪改講單句(不硬擠同一類)
+  const total = pool.reduce((s, [, w]) => s + w, 0)
+  let r = rng() * total
+  let kind = pool[0][0]
+  for (const [k, w] of pool) { r -= w; if (r <= 0) { kind = k; break } }
+
+  let F = base
+  const extra = ['pk:' + kind]
+  if (kind === 'announce_replay' && res) { F = { ...base, lastWinner: res.winner, lastLoser: res.loser }; extra.push(rpKey) }
+  if (kind === 'cue_idle') { const who = pick(lurkers, rng); F = { ...base, idleName: who.name }; extra.push('idle:' + who.uid) }
+  const line = pickLine(CONTENT.proactive[kind], F, rng)
   if (!line) return null
-  return mkUtter(pick(roster, rng), line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta })
+  noteLocal(extra)
+  for (const k of extra) if (k.startsWith('rp:') || k.startsWith('idle:')) onceAt.set(k, now)
+  return utterOf(pick(roster, rng), line, extra)
 }
 
 /** 這位發言者會用到哪些 reactRules：符合的 exclusive 規則(第一條)獨佔；否則所有符合的非 exclusive 規則。 */
@@ -483,19 +608,18 @@ export function reactUnit(inp: ReactInput, bots: BotPersona[] = BOTS, g?: LobbyG
     }
     minTier = Math.max(1, ...rules.map((r) => achvMinTierOf(r.when))) // 符合的規則都成立 → 取最高階要求
   }
-  const line = pickLine(pool, F, minTier, rng, ruleCta, ruleChance)
+  const line = pickLine(pool, F, rng, { minTier, ruleCta, ruleChance })
   if (!line) return []
   const b0 = pick(roster, rng)
-  const reply = mkUtter(b0, line.stickerId ? { type: 'sticker', stickerId: line.stickerId, cta: line.cta } : { text: line.text, cta: line.cta })
-  const out = [reply]
+  const out = [utterOf(b0, line)]
 
   // ④ 低機率「補刀」：換一隻人機接一句短的（純附和/吐槽，不帶 CTA）
   if (rng() < (CONTENT.config.pileOnChance ?? 0.15) && CONTENT.pileOn?.length) {
-    const pileLine = pickLine(CONTENT.pileOn, F, 1, rng)
+    const pileLine = pickLine(CONTENT.pileOn, F, rng)
     if (pileLine) {
       const others = roster.filter((b) => b.id !== b0.id)
       const b1 = others.length ? pick(others, rng) : b0
-      out.push(mkUtter(b1, pileLine.stickerId ? { type: 'sticker', stickerId: pileLine.stickerId } : { text: pileLine.text }))
+      out.push(utterOf(b1, { ...pileLine, cta: undefined }))
     }
   }
   return out
@@ -531,7 +655,8 @@ const SPEAKER_NUMS = ['streak', 'bestStreak', 'wins', 'games', 'winRate']
 const GLOBAL_NUMS = ['online']
 const CTA_NAMES = [...Object.keys(CTA_LABEL), 'quickmatch-normal', 'quickmatch-special']
 const SLOT_KINDS = ['anyCard', 'anyBoss', 'anySticker']
-const PROACTIVE_KEYS = ['greet_newcomer', 'online_count', 'gossip_gm', 'announce_replay', 'time_morning', 'time_afternoon', 'time_evening', 'time_night']
+const PROACTIVE_KEYS = ['greet_newcomer', 'online_count', 'gossip_gm', 'announce_replay', 'cue_idle', 'time_morning', 'time_afternoon', 'time_evening', 'time_night']
+const PROACTIVE_EXTRA: Record<string, string[]> = { greet_newcomer: ['newcomerName'], announce_replay: ['lastWinner', 'lastLoser'], cue_idle: ['idleName'] }
 
 export interface LintResult { errors: string[]; warnings: string[] }
 
@@ -659,14 +784,74 @@ export function lintChatContent(C: typeof CONTENT = CONTENT): LintResult {
 
   for (const [k, arr] of Object.entries(C.proactive)) {
     if (!PROACTIVE_KEYS.includes(k)) warnings.push(`proactive.${k}：程式不認得這個 key，永遠不會用到（可用：${PROACTIVE_KEYS.join('/')}）`)
-    const extra = k === 'greet_newcomer' ? ['newcomerName'] : k === 'announce_replay' ? ['lastWinner', 'lastLoser'] : []
-    checkLines(arr, `proactive.${k}`, false, extra)
+    checkLines(arr, `proactive.${k}`, false, PROACTIVE_EXTRA[k] ?? [])
   }
   checkLines(C.pileOn, 'pileOn', true)
+
+  // 同一個陣列裡一字不差的重複句（等於權重偷偷 ×2，冷卻也只算一句）
+  const dupCheck = (arr: Line[] | undefined, where: string) => {
+    const seen = new Set<string>()
+    for (const l of arr ?? []) {
+      const k = l.t ?? 'stk:' + l.sticker
+      if (seen.has(k)) warnings.push(`${where}：「${l.t ?? l.sticker}」重複了（想讓它常出現請改 w）`)
+      seen.add(k)
+    }
+  }
+  dupCheck(C.greetings, 'greetings')
+  dupCheck(C.singles, 'singles')
+  for (const [k, arr] of Object.entries(C.beatPools)) dupCheck(arr, `beatPools.${k}`)
+  for (const [k, arr] of Object.entries(C.kwPools)) dupCheck(arr, `kwPools.${k}`)
+  for (const [k, arr] of Object.entries(C.proactive)) dupCheck(arr, `proactive.${k}`)
   return { errors, warnings }
 }
 
+// ─── 變化數估算（量產進度：目標 ≥3000）──────────────────────────────────────────
+//   一句的變化 = 句中每個隨機佔位的選項數相乘（{anyCard}=特殊牌數、{anyBoss}=6…；{name} 這類「對方的資料」算 1）。
+//   劇場 = 每拍選項數相乘（不一定出現的拍 +1 種「沒出現」；共用槽只算一次）。
+//   ⚠️ 不含自動前綴的語助詞(opener)——那個會把數字灌水，不算「有效變化」。
+export interface VarietyReport { total: number; parts: Record<string, number>; templates: number }
+export function estimateVariety(C: typeof CONTENT = CONTENT): VarietyReport {
+  const fragN = (k: string) => C.fragments[k]?.length ?? 0
+  const tokN = (tok: string, slots: string[] = []): number => {
+    if (slots.includes(tok)) return 1 // 共用槽在劇場層級算
+    if (tok === 'anyCard') return BOSS_CARD_NAMES.length
+    if (tok === 'anyBoss') return BOSS_CHAR_NAMES.length
+    if (tok === 'anySticker') return STICKER_NAMES.length
+    if (fragN(tok)) return fragN(tok)
+    return 1
+  }
+  const lineN = (l: Line, slots: string[] = []) =>
+    [...(l.t ?? '').matchAll(/\{(\w+)\}/g)].reduce((p, m) => p * tokN(m[1], slots), 1)
+  const sum = (arr: Line[] | undefined, slots: string[] = []) => (arr ?? []).reduce((s, l) => s + lineN(l, slots), 0)
+  let templates = 0
+  const count = (arr: Line[] | undefined) => { templates += arr?.length ?? 0; return sum(arr) }
+  const parts: Record<string, number> = {}
+  parts['招呼 greetings'] = count(C.greetings)
+  parts['單句 singles'] = count(C.singles)
+  let th = 0
+  for (const t of C.threads) {
+    const slots = Object.keys(t.slots ?? {})
+    const slotMul = Object.values(t.slots ?? {}).reduce((p, k) => p * tokN(k), 1)
+    let n = slotMul
+    for (const b of t.beats) {
+      const opts = b.lines ? sum(b.lines, slots) : b.t != null ? lineN({ t: b.t }, slots) : b.sticker != null ? 1 : sum(C.beatPools[b.pool ?? ''], slots)
+      n *= Math.max(1, opts) + (b.chance != null && b.chance < 1 ? 1 : 0)
+    }
+    th += n
+  }
+  templates += Object.values(C.beatPools).reduce((s, a) => s + a.length, 0)
+  parts['劇場 threads'] = th
+  parts['貼圖回應 stickerReplies'] = Object.values(C.stickerReplies).reduce((s, a) => s + count(a), 0)
+  parts['關鍵字回應 kwPools'] = Object.values(C.kwPools).reduce((s, a) => s + count(a), 0)
+  parts['狀態回應 reactRules'] = C.reactRules.reduce((s, r) => s + count(r.say), 0)
+  parts['主動句 proactive'] = Object.values(C.proactive).reduce((s, a) => s + count(a), 0)
+  parts['補刀 pileOn'] = count(C.pileOn)
+  return { total: Object.values(parts).reduce((a, b) => a + b, 0), parts, templates }
+}
+
 if (import.meta.env.DEV) {
+  const v = estimateVariety()
+  console.log(`%c[chatContent] 變化數 ≈ ${v.total}（目標 3000；句型 ${v.templates} 句）`, 'color:#69c', v.parts)
   const { errors, warnings } = lintChatContent()
   if (errors.length) console.warn(`%c[chatContent] ❌ ${errors.length} 個錯誤（這些句子/規則跑不動）\n` + errors.join('\n'), 'color:#e55')
   if (warnings.length) console.warn(`%c[chatContent] ⚠️ ${warnings.length} 個提醒\n` + warnings.join('\n'), 'color:#c90')
