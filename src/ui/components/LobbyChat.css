@@ -61,6 +61,7 @@
 .lchat-list {
   height: min(46vh, 360px);
   overflow-y: auto;
+  overscroll-behavior: contain; /* 訊息捲到頂/底不連動到彈窗或背後頁面 */
   padding: 4px 2px;
   display: flex;
   flex-direction: column;

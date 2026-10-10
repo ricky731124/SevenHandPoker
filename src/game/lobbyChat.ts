@@ -121,7 +121,10 @@ const STYLE_LABEL: Record<string, string> = { attack: '強攻', hoard: '囤牌',
 const SKILL_LABEL: Record<string, string> = { bluff: '詐唬', draw: '拼牌', jokerTiming: '鬼牌時機', insight: '看破' }
 const BOSS_CARD_NAMES = Object.values(SPECIAL_CARDS).map((c) => c.name)
 const BOSS_CHAR_NAMES = ['鳥鳥', '英國短毛貓', '北極熊', '紅貴賓', '波斯貓', '貓頭鷹']
-const STICKER_NAMES = STICKERS.map((s) => s.name)
+// 貼圖：免費的是表情符號 → 句子裡直接塞 emoji(😠👍…，不用下載)；商城付費貼圖只講名字(聊天室不能用付費貼圖)。
+//   付費貼圖名是純符號的(!!、...)放進「」很怪 → 不拿來講。
+const FREE_STICKER_EMOJI = STICKERS.filter((s) => s.free && s.emoji).map((s) => s.emoji!)
+const SHOP_STICKER_NAMES = STICKERS.filter((s) => !s.free && /[\p{L}\p{N}]/u.test(s.name)).map((s) => s.name)
 
 // ─── 小工具 ──────────────────────────────────────────────────────────────────
 const rng0 = Math.random
@@ -194,7 +197,7 @@ function topicOf(text: string | undefined, explicit?: string): string | null {
   if (!text) return null
   if (/\{(anyCard|card|loadoutCard|bossCard)\}/.test(text) || CARD_WORDS.some((w) => text.includes(w)) || BOSS_CARD_NAMES.some((n) => text.includes(n))) return 'card'
   if (/\{(anyBoss|bossName)\}/.test(text) || BOSS_CHAR_NAMES.some((n) => text.includes(n))) return 'boss'
-  if (/\{(anySticker|sticker)\}/.test(text) || text.includes('貼圖') || text.includes('商城')) return 'sticker'
+  if (/\{(anySticker|shopSticker|sticker)\}/.test(text) || text.includes('貼圖') || text.includes('商城')) return 'sticker'
   if (text.includes('回放')) return 'replay'
   if (text.includes('排行')) return 'rank'
   if (text.includes('鼓山金城武')) return 'gm'
@@ -350,7 +353,8 @@ function tokenValue(tok: string, F: Facts, minTier: number, rng: () => number): 
     case 'idleName': return F.idleName || null
     case 'anyCard': return pick(BOSS_CARD_NAMES, rng)
     case 'anyBoss': return pick(BOSS_CHAR_NAMES, rng)
-    case 'anySticker': return pick(STICKER_NAMES, rng)
+    case 'anySticker': return pick(FREE_STICKER_EMOJI, rng)
+    case 'shopSticker': return pick(SHOP_STICKER_NAMES, rng)
     case 'opener': return fragment('opener', rng)
     case 'invite': return fragment('invite', rng)
     default: { const frag = fragment(tok, rng); return frag || null }
@@ -449,7 +453,7 @@ const threadKey = (th: ThreadShape) => 'th:' + (th.id ?? hashKey(JSON.stringify(
 function threadTopic(th: ThreadShape): string | null {
   if (th.topic) return th.topic
   const kinds = Object.values(th.slots ?? {})
-  return kinds.includes('anyCard') ? 'card' : kinds.includes('anyBoss') ? 'boss' : kinds.includes('anySticker') ? 'sticker' : null
+  return kinds.includes('anyCard') ? 'card' : kinds.includes('anyBoss') ? 'boss' : kinds.includes('anySticker') || kinds.includes('shopSticker') ? 'sticker' : null
 }
 function pickThread(rng: () => number): ThreadShape {
   const all = CONTENT.threads
@@ -477,7 +481,7 @@ export function ambientUnit(bots: BotPersona[] = BOTS, g?: LobbyGlobals, rng: ()
     // thread 內共用槽（例：同一張牌名貫穿問→答→反應）→ 先鎖定一個隨機值
     const slotVals: Record<string, string> = {}
     for (const [k, kind] of Object.entries(shape.slots ?? {})) {
-      slotVals[k] = kind === 'anyCard' ? pick(BOSS_CARD_NAMES, rng) : kind === 'anyBoss' ? pick(BOSS_CHAR_NAMES, rng) : kind === 'anySticker' ? pick(STICKER_NAMES, rng) : ''
+      slotVals[k] = kind === 'anyCard' ? pick(BOSS_CARD_NAMES, rng) : kind === 'anyBoss' ? pick(BOSS_CHAR_NAMES, rng) : kind === 'anySticker' ? pick(FREE_STICKER_EMOJI, rng) : kind === 'shopSticker' ? pick(SHOP_STICKER_NAMES, rng) : ''
     }
     const out: BotUtterance[] = []
     for (const beat of shape.beats) {
@@ -648,13 +652,13 @@ export function reactRulesForTest(inp: ReactInput, g: LobbyGlobals = { onlineCou
 //   DEV 啟動時印在 F12 Console；`npm test` 也會跑（有 error 就測試失敗）。
 //   規則跟上面的引擎放同一個檔，新增佔位/條件/按鈕時兩邊一起改，才不會不同步。
 const SPEAKER_TOKENS = ['name', 'streak', 'bestStreak', 'wins', 'games', 'winRate', 'achv', 'loadoutCard', 'stageNo', 'bossName', 'bossCard', 'bossStyle', 'bossSkill']
-const GLOBAL_TOKENS = ['onlineCount', 'anyCard', 'anyBoss', 'anySticker', 'opener', 'invite']
+const GLOBAL_TOKENS = ['onlineCount', 'anyCard', 'anyBoss', 'anySticker', 'shopSticker', 'opener', 'invite']
 const SPEAKER_GUARDS = ['guest', 'registered', 'isOwner', 'showsAchv', 'silverAchv', 'goldAchv', 'hasLoadout', 'hasBoss']
 const GLOBAL_GUARDS = ['hasLive', 'morning', 'afternoon', 'evening', 'night']
 const SPEAKER_NUMS = ['streak', 'bestStreak', 'wins', 'games', 'winRate']
 const GLOBAL_NUMS = ['online']
 const CTA_NAMES = [...Object.keys(CTA_LABEL), 'quickmatch-normal', 'quickmatch-special']
-const SLOT_KINDS = ['anyCard', 'anyBoss', 'anySticker']
+const SLOT_KINDS = ['anyCard', 'anyBoss', 'anySticker', 'shopSticker']
 const PROACTIVE_KEYS = ['greet_newcomer', 'online_count', 'gossip_gm', 'announce_replay', 'cue_idle', 'time_morning', 'time_afternoon', 'time_evening', 'time_night']
 const PROACTIVE_EXTRA: Record<string, string[]> = { greet_newcomer: ['newcomerName'], announce_replay: ['lastWinner', 'lastLoser'], cue_idle: ['idleName'] }
 
@@ -696,6 +700,7 @@ export function lintChatContent(C: typeof CONTENT = CONTENT): LintResult {
     if (l.t != null && l.sticker != null) warnings.push(`${where}：同時有 t 和 sticker，只會送貼圖`)
     if (l.sticker != null && !stickerIds.has(l.sticker)) errors.push(`${where}：貼圖「${l.sticker}」不存在`)
     if (l.w != null && !(l.w > 0)) errors.push(`${where}：w 要大於 0`)
+    if ((l.t ?? '').includes('「{anySticker}」')) warnings.push(`${where}：{anySticker} 會變成表情符號(😠)，前後不用加「」`)
     if (l.ctaChance != null && (l.ctaChance < 0 || l.ctaChance > 1)) errors.push(`${where}：ctaChance 要在 0~1`)
     for (const c of l.cta == null ? [] : Array.isArray(l.cta) ? l.cta : [l.cta]) {
       if (!CTA_NAMES.includes(c)) errors.push(`${where}：按鈕「${c}」不存在（可用：${CTA_NAMES.join('/')}）`)
@@ -816,7 +821,8 @@ export function estimateVariety(C: typeof CONTENT = CONTENT): VarietyReport {
     if (slots.includes(tok)) return 1 // 共用槽在劇場層級算
     if (tok === 'anyCard') return BOSS_CARD_NAMES.length
     if (tok === 'anyBoss') return BOSS_CHAR_NAMES.length
-    if (tok === 'anySticker') return STICKER_NAMES.length
+    if (tok === 'anySticker') return FREE_STICKER_EMOJI.length
+    if (tok === 'shopSticker') return SHOP_STICKER_NAMES.length
     if (fragN(tok)) return fragN(tok)
     return 1
   }

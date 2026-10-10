@@ -39,6 +39,7 @@
      fits without scrolling). --mw-scale is 1 on standalone/desktop → unchanged. */
   max-height: calc(var(--vvh, 100dvh) * 0.92 / var(--mw-scale, 1));
   overflow: auto;
+  overscroll-behavior: contain; /* 彈窗內捲到底不會把手勢傳給背後頁面(遮罩不會被拖動) */
   color: var(--parch-text);
   /* 木色細滾軸,取代醜白預設 */
   scrollbar-width: thin;

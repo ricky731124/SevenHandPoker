@@ -12,10 +12,10 @@ import { BOTS, type BotPersona } from './bots'
  *   - 換手續聊：接手成 host（非冷啟動）→ 引擎沒在跑就補 RESUME 額度(2~4)接著聊。
  *   - 回大廳續聊：host 看到某人離開 ≥ RETURN_GAP_MS 又回來（例：打完一場）→ 同上補 2~4。
  *   - 新到訪 / 真人發言 / 點開聊天室 → 額度回滿 6~9（新到訪、發言另排一句回覆插隊）。
- *   - 聊天已安靜 ≥ QUIET_FAST_MS 時，第一句 1.5~4s 就出來；其餘每則間隔 9~16s。
+ *   - 聊天已安靜 ≥ QUIET_FAST_MS 時，第一句 1.5~4s 就出來；其餘每則間隔 9~18s。
  */
 
-export const GAP_MIN = 9000, GAP_MAX = 16000           // 每則間隔 9~16 秒（2026-10 使用者：10~20 → 9~16）
+export const GAP_MIN = 9000, GAP_MAX = 18000           // 每則間隔 9~18 秒（2026-10 使用者：10~20 → 9~16 → 9~18）
 export const QUOTA_MIN = 6, QUOTA_MAX = 9              // 一輪額度
 export const RESUME_MIN = 2, RESUME_MAX = 4            // 換手 / 回大廳的續聊額度
 export const FAST_MIN = 1500, FAST_MAX = 4000          // 安靜很久後的第一句延遲

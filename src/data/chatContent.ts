@@ -17,7 +17,7 @@
  *   {winRate} 勝率% · {achv} 他展示的一個成就名(含銅銀金) · {loadoutCard} 他預設特殊牌之一
  *   {stageNo} 他在打第幾關 · {bossName}{bossCard}{bossStyle}{bossSkill} 那關BOSS的名/招牌卡/風格/絕招
  *   {onlineCount} 線上人數 · {newcomerName} 剛上線的人 · {lastWinner}{lastLoser} 剛剛誰贏誰輸 · {idleName} 潛水的人
- *   {anyCard} 隨機特殊牌名 · {anyBoss} 隨機BOSS名 · {anySticker} 隨機貼圖名 · {opener} 語助詞 · {invite} 邀約短語
+ *   {anyCard} 隨機特殊牌名 · {anyBoss} 隨機BOSS名 · {anySticker} 隨機免費貼圖(直接變成表情符號 😠👍…，前後別加「」) · {shopSticker} 隨機商城付費貼圖的名字 · {opener} 語助詞 · {invite} 邀約短語
  *
  * ■ guard 條件（用 && 串接，例 '!hasLoadout && afterStage:1-2'）：
  *   guest/registered · showsAchv/silverAchv/goldAchv(有展示成就/銀以上/金) · hasLoadout(有設預設特殊牌)
@@ -51,7 +51,7 @@ export interface ThreadBeat {
   lines?: Line[]  // 內嵌加權選項（不用另開池，直接寫幾句，各自給 w 決定機率）
   chance?: number // 這一拍出現的機率 0~1（不填=一定出；用來做「不一定有 C」）
 }
-export interface ThreadShape { id?: string; topic?: string; slots?: Record<string, 'anyCard' | 'anyBoss' | 'anySticker'>; beats: ThreadBeat[] }
+export interface ThreadShape { id?: string; topic?: string; slots?: Record<string, 'anyCard' | 'anyBoss' | 'anySticker' | 'shopSticker'>; beats: ThreadBeat[] }
 export interface KwRule { any?: string[]; all?: string[]; intent: string; w?: number }
 export interface ReactRule { when?: string; say: Line[]; cta?: LobbyCtaSpec; ctaChance?: number; exclusive?: boolean }
 export interface ChatConfig {
@@ -228,7 +228,7 @@ const CHAT: ChatContent = {
     { t: '強也是一種罪的話...我們就土城見了' },
     { t: '「{anyCard}」聽說很好用' },
     { t: '打{anyBoss}那關卡好久，有人破解方法嗎' },
-    { t: '「{anySticker}」這張貼圖我超愛用' },
+    { t: '{anySticker}這張貼圖我超愛用' },
     { t: '有沒有人跟我一樣覺得「{anyCard}」被低估了' },
     { t: '{anyBoss}的招牌卡真的機車，慎入' },
     { t: '獨孤求敗！有人能陪我一場嗎', cta: 'quickmatch' },
@@ -272,7 +272,7 @@ const CHAT: ChatContent = {
     { t: '主線第一章打完才算入門吧', cta: 'campaign' },
     { t: '新手教學跑一遍真的比亂打有用', cta: 'tutorial', ctaChance: 0.5 },
     // 貼圖
-    { t: '先說好，輸的人要發「{anySticker}」' },
+    { t: '先說好，輸的人要發{anySticker}' },
     // 心情 / 日常
     { t: '我先去抽根煙冷靜一下，回來繼續' },
     { t: '拿首勝就收工……這是我第三次這樣說' },
@@ -312,8 +312,8 @@ const CHAT: ChatContent = {
     ] },
     { id: 'skit_balance', beats: [            // 已改名(原 skit_flush_fullhouse)
       { role: 'A', t: '這遊戲平衡性不行呀，連第一關的BOSS都這麼難' },
-      { role: 'B', t: '連我這個賣車的都知道遊戲一定沒做好平衡測試' },
-      { role: 'C', t: '還好這邊還有個賣車的，不然都沒人發現遊戲平衡出問題了' },
+      { role: 'B', t: '連我這個做保險的都知道遊戲一定沒做好平衡測試' },
+      { role: 'C', t: '還好這邊還有個做保險的，不然都沒人發現遊戲平衡出問題了' },
     ] },
     // 混合劇場：A 固定 / B 內嵌加權(w，70/20/10) / C 不一定出現(chance)
     { id: 'skit_flush_weighted', beats: [
@@ -343,8 +343,8 @@ const CHAT: ChatContent = {
     { id: 'brag_snark_giveup', beats: [{ role: 'A', pool: 'brag' }, { role: 'B', pool: 'snark' }, { role: 'C', pool: 'giveup' }] },
     // 聊特殊卡（問→答→反應都講同一張 {card}）
     { id: 'skit_specialcard', slots: { card: 'anyCard' }, beats: [{ role: 'A', pool: 'ask_card' }, { role: 'B', pool: 'answer_card' }, { role: 'C', pool: 'react_card' }] },
-    // 聊商城貼圖（共用一個貼圖名 {sticker}）
-    { id: 'skit_shop', slots: { sticker: 'anySticker' }, beats: [{ role: 'A', pool: 'shop_ask' }, { role: 'B', pool: 'shop_reco' }] },
+    // 聊商城貼圖（共用一個「付費貼圖名」{sticker}；聊天室本身不能用付費貼圖，所以只講名字）
+    { id: 'skit_shop', slots: { sticker: 'shopSticker' }, beats: [{ role: 'A', pool: 'shop_ask' }, { role: 'B', pool: 'shop_reco' }] },
     // ↓ 量產第 1 批（2026-10 使用者審過）
     // 聊某隻 BOSS（{boss} 三拍共用同一隻）
     { id: 'boss_talk', slots: { boss: 'anyBoss' }, beats: [{ role: 'A', pool: 'ask_boss' }, { role: 'B', pool: 'answer_boss' }, { role: 'C', pool: 'react_boss', chance: 0.7 }] },
@@ -484,7 +484,7 @@ const CHAT: ChatContent = {
     kw_waiting: [{ t: '再等一下下，這時段人慢慢會多' }, { t: '配不到就先看回放殺時間', cta: 'replays' }, { t: '不然先打幾關主線暖身', cta: 'campaign' }, { t: '配對的時候可以順便解每日任務', cta: 'daily' }, { t: '晚上人比較多' }],  // 已修:replay→replays(正確按鈕名)
     kw_rank: [{ t: '想拚排行就多打真人場，衝上去很爽的', cta: 'leaderboard' }, { t: '連勝是靠實力也靠心態啦' }, { t: '排行榜每天都在變，衝就對了', cta: 'leaderboard' }, { t: '{name}想上榜？先連勝三場再說' }],
     kw_reward: [{ t: '每天記得簽到，免費鑽石別浪費', cta: 'daily' }, { t: '每日任務隨手做一下就有鑽石', cta: 'daily' }, { t: '簽到、打一場、贏一場，每天都有鑽石', cta: 'daily' }, { t: '鑽石可以去商城換貼圖', cta: 'shop' }],
-    kw_sticker: [{ t: '我最愛「{anySticker}」那張，超好用' }, { t: '商城偶爾有限定貼圖，可以逛逛', cta: 'shop' }, { t: '「{anySticker}」那張我也有，超常用' }, { t: '貼圖洗版我第一個衝' }],
+    kw_sticker: [{ t: '我最愛{anySticker}那張，超好用' }, { t: '商城偶爾有限定貼圖，可以逛逛', cta: 'shop' }, { t: '{anySticker}那張我也有，超常用' }, { t: '貼圖洗版我第一個衝' }],
     kw_greet: [{ t: 'hi～{name}' }, { t: '{name}你好呀，來玩嗎', cta: 'quickmatch', ctaChance: 0.3 }, { t: '安安，正缺對手' }, { t: '{name}安安～' }, { t: '嗨{name}，今天手氣好嗎' }, { t: '{name}來啦，等你好久' }],
     kw_thanks: [{ t: '不客氣啦' }, { t: '小事，多多交流呀' }, { t: '客氣什麼，{invite}' }, { t: '不用謝，下次牌桌上手下留情就好' }],
     kw_praise: [{ t: '過獎過獎（其實我也覺得）' }, { t: '哪裡，運氣好而已啦' }, { t: '再來一場你就知道我多強', cta: 'quickmatch' }, { t: '你也不差啊{name}' }, { t: '被誇了，我要截圖' }],

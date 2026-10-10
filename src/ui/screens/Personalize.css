@@ -1,7 +1,7 @@
 /* Full-screen backdrop: clicking outside the panel returns to the menu. */
 .pz-screen {
   position: fixed;
-  top: 0;
+  top: var(--vvt, 0px); /* 打字時跟著鍵盤上方的可見區(platform/viewport.ts) */
   left: 0;
   right: 0;
   /* Center within the ACTUAL visible area (--vvh), not the large iOS viewport —

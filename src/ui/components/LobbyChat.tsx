@@ -137,13 +137,27 @@ export default function LobbyChat() {
     atBottomRef.current = true
     setHasNew(false)
   }
+  // 自己剛發言後的 3 秒「黏在最底」：手機上按發送 → 鍵盤收起 → 訊息區從精簡變回原尺寸、可見區連續變動，
+  // 這段期間的捲動事件不可信(會把「在最底」誤判成否 → 自己的訊息進來時不捲)。手指一碰訊息區就取消黏底。
+  const stickUntil = useRef(0)
+  const touching = useRef(false)
   const onScroll = () => {
     const el = listRef.current
     if (!el) return
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    if (!near && !touching.current && Date.now() < stickUntil.current) { el.scrollTop = el.scrollHeight; return }
     atBottomRef.current = near
     if (near) setHasNew(false)
   }
+  const stopSticking = () => { stickUntil.current = 0 }
+  // 訊息區本身尺寸變了（鍵盤升降、精簡模式進出、轉向）→ 原本在最底的就維持在最底。
+  useEffect(() => {
+    const el = listRef.current
+    if (!open || !el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (atBottomRef.current || Date.now() < stickUntil.current) el.scrollTop = el.scrollHeight })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
 
   // 新訊息偵測用「最後一則 id」而非 length（訊息滿 50 則後 length 不再變 → 舊寫法會失效）。
   const lastId = messages.length ? messages[messages.length - 1].id : null
@@ -154,7 +168,9 @@ export default function LobbyChat() {
     if (!changed || first) return
     if (open) {
       // 收到新訊息不發音效(會一直「搭搭搭」很吵,使用者要求拿掉)。只處理捲動。
-      if (atBottomRef.current) scrollToBottom()
+      const last = messages[messages.length - 1]
+      const mine = last?.kind === 'human' && !!myUid && last.uid === myUid
+      if (mine || atBottomRef.current || Date.now() < stickUntil.current) scrollToBottom() // 自己的訊息一律捲到看得到
       else setHasNew(true)
     }
   }, [lastId, open])
@@ -168,9 +184,10 @@ export default function LobbyChat() {
     if (!t) return
     send({ text: t.slice(0, 200) })
     setText('')
-    atBottomRef.current = true // 自己發言 → 視為在追最新、之後自動捲到底看得到自己
+    stickUntil.current = Date.now() + 3000 // 自己發言 → 黏在最底 3 秒(鍵盤收起的版面變動期間也不會跑掉)
+    scrollToBottom()
   }
-  const sendSticker = (id: string) => { send({ stickerId: id }); setTray(false); atBottomRef.current = true }
+  const sendSticker = (id: string) => { send({ stickerId: id }); setTray(false); stickUntil.current = Date.now() + 3000; scrollToBottom() }
   // 點頭像 → 開玩家資訊卡（人機用 botId，PlayerInfoCard 內建 fetchBotCard 顯示 persona 卡、不露餡）。
   const openCard = (m: LobbyMsg) => {
     sfx.click()
@@ -199,7 +216,15 @@ export default function LobbyChat() {
 
       <Modal open={open} onClose={() => setOpen(false)} onBack={() => setOpen(false)} title="聊天室" width={460} panelClass={`lchat-modal${kb ? ' lchat-modal--kb' : ''}`}>
         <div className="lchat-wrap">
-          <div className="lchat-list" ref={listRef} onScroll={onScroll}>
+          <div
+            className="lchat-list"
+            ref={listRef}
+            onScroll={onScroll}
+            onTouchStart={() => { touching.current = true; stopSticking() }}
+            onTouchEnd={() => { touching.current = false }}
+            onTouchCancel={() => { touching.current = false }}
+            onWheel={stopSticking}
+          >
             {messages.length === 0 ? (
               <p className="lchat-empty">還沒有人說話，來打聲招呼吧！</p>
             ) : (

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { ambientUnit, reactUnit, lintChatContent, estimateVariety, type ReactInput } from './lobbyChat'
 import { BOTS } from './bots'
 import CHAT from '../data/chatContent'
+import { STICKERS } from './stickers'
 
 const RUNS = 3000
 
@@ -23,6 +24,26 @@ describe('chatContent 變化數（量產進度）', () => {
     const v = estimateVariety()
     console.log(`[chatContent 變化數] ≈ ${v.total}（句型 ${v.templates}）`, v.parts)
     expect(v.total).toBeGreaterThan(0)
+  })
+})
+
+describe('貼圖在句子裡：免費 → 表情符號；商城 → 只講付費貼圖名', () => {
+  it('不會出現「生氣」這種免費貼圖名，句子裡是 😠 這類表情；商城劇場只講付費貼圖', () => {
+    const freeNames = STICKERS.filter((s) => s.free).map((s) => s.name)
+    const freeEmoji = STICKERS.filter((s) => s.free).map((s) => s.emoji!)
+    const paidNames = STICKERS.filter((s) => !s.free).map((s) => s.name)
+    const texts: string[] = []
+    for (let i = 0; i < RUNS * 3; i++) for (const u of ambientUnit(BOTS, { onlineCount: 21, hasLive: false })) if (u.text) texts.push(u.text)
+    for (let i = 0; i < 400; i++) for (const u of reactUnit(speaker({ text: '貼圖好用嗎', clearedOrder: 4 }), BOTS, { onlineCount: 21, hasLive: false })) if (u.text) texts.push(u.text)
+    // 「XX」裡包的若是免費貼圖名 → 錯
+    const bad = texts.filter((t) => freeNames.some((n) => t.includes(`「${n}」`)))
+    expect(bad).toEqual([])
+    // 確實有句子帶免費表情、也確實有商城劇場講付費貼圖名(且不含純符號名 !! / ...)
+    expect(texts.some((t) => freeEmoji.some((e) => t.includes(e)) && /貼圖|那張|輸的人/.test(t))).toBe(true)
+    const shop = texts.filter((t) => /必買|貼圖好用嗎|洗一排/.test(t))
+    expect(shop.length).toBeGreaterThan(0)
+    expect(shop.every((t) => paidNames.some((n) => t.includes(`「${n}」`)))).toBe(true)
+    expect(shop.some((t) => t.includes('「!!」') || t.includes('「...」'))).toBe(false)
   })
 })
 
