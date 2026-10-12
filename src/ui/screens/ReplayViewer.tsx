@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import type { ReplayEntry } from '../../net/replays'
-import { buildFrames } from '../../game/replay'
+import { buildFrames, OUTDATED_NOTICE } from '../../game/replay'
+import { useToastStore } from '../../state/toastStore'
 import { sfx } from '../../audio/sfx'
 import { GameBoard } from './Game'
 import './Game.css'
@@ -47,6 +48,8 @@ export default function ReplayViewer() {
       names: { p1: info.p1.name, p2: info.p2.name },
     })
     startReplay(frames, info)
+    // 舊版看不懂這場(用到新卡)→ 一進來先提示;回放會播到看得懂的最後一步為止
+    if (frames[frames.length - 1]?.outdated) useToastStore.getState().show(OUTDATED_NOTICE)
     return () => exitSpectate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rec])

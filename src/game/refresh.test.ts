@@ -105,6 +105,37 @@ describe('強迫更新 — 回放重現', () => {
   })
 })
 
+describe('回放 — 舊版看新版場次不會整場打不開', () => {
+  const seed = 777
+  const g = createGame(seed, 'p1')
+  const pick = normals(g.hands.p1).slice(0, 2).map((x) => x.id)
+
+  it('不認得的卡 → 停在前一步、最後一幀是更新提示', () => {
+    const moves = [{ t: 'special', by: 'p1', card: 'boom' }, { t: 'pick', by: 'p1', ids: pick }] as unknown as Move[]
+    const frames = buildFrames({ seed, firstPicker: 'p1', moves })
+    expect(frames).toHaveLength(2) // 開局 + 提示
+    expect(frames[1].outdated).toBe(true)
+    expect(frames[1].action).toContain('更新')
+  })
+
+  it('重放後手牌對不上(選到不在手上的牌)→ 停在最後一個正確的幀', () => {
+    const moves: Move[] = [
+      { t: 'pick', by: 'p1', ids: pick },
+      { t: 'place', by: 'p2', slot: 0 },
+      { t: 'pick', by: 'p2', ids: ['NOT_A_CARD'] },
+    ]
+    const frames = buildFrames({ seed, firstPicker: 'p1', moves })
+    expect(frames.at(-1)!.outdated).toBe(true)
+    expect(frames.filter((f) => f.outdated)).toHaveLength(1)
+    expect(frames.length).toBeGreaterThan(3) // 前面正常的幀都還在
+  })
+
+  it('正常場次不會有提示幀', () => {
+    const frames = buildFrames({ seed, firstPicker: 'p1', moves: [{ t: 'pick', by: 'p1', ids: pick }] })
+    expect(frames.some((f) => f.outdated)).toBe(false)
+  })
+})
+
 // ---- boss AI ---------------------------------------------------------------
 
 /** p2 = boss。可控:boss 已出幾手、對手(p1)手牌、雙方硬幣、對手是否用過特殊牌、boss 手牌。 */

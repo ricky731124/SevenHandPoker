@@ -80,6 +80,8 @@ export interface ReplayFrame {
   drawN?: number
   /** 強迫更新那一幀:被重抽的是誰 → 播放器前進到這幀時播重抽動畫。 */
   refreshTarget?: PlayerId
+  /** 回放在這幀之後套不下去(版本太舊)→ 這幀是提示幀,播放器要跳 toast 提示更新。 */
+  outdated?: boolean
 }
 
 /** buildFrames 的輸入(不綁 net 層的 ReplayRecord,保持 game/ 純淨)。 */
@@ -128,70 +130,88 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
     return false
   }
 
+  // 舊版程式看新版錄的回放(例:還沒更新的手機點開用了新卡的場次)→ 不認得的卡、或重放後
+  // 手牌對不上而套不下去 → 停在最後一個正確的幀並提示,而不是整場回放打不開。
+  const stopHere = () => {
+    add(g, undefined, OUTDATED_NOTICE)
+    frames[frames.length - 1].outdated = true
+  }
   for (const m of input.moves) {
-    if (m.t === 'pick') {
-      g = applyPick(g, m.by, m.ids)
-      add(g, name(m.by), `出 ${m.ids.length} 張`) // 選牌無音效
-    } else if (m.t === 'special') {
-      const def = getSpecialCard(m.card)
-      const before = m.targetId ? g.hands[m.by].find((c) => c.id === m.targetId) : undefined
-      if (def?.suit && m.targetId) {
-        g = applySuit(g, m.by, m.targetId, def.suit)
-        const after = g.hands[m.by].find((c) => c.id === m.targetId)
-        const detail = before && after ? `:${cardFace(before)}→${cardFace(after)}` : ''
-        add(g, name(m.by), `使用「${def.name}」${detail}`, 'special')
-      } else if (m.card === 'swap' && m.targetId) {
-        const prevIds = new Set(g.hands[m.by].map((c) => c.id))
-        g = applySwap(g, m.by, m.targetId, replayRng(m.rng))
-        const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
-        const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
-        add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
-      } else if (m.card === 'refresh') {
-        const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
-        const n = g.hands[foe].filter((c) => !isBlank(c) && !isJoker(c)).length
-        g = applyRefresh(g, m.by, replayRng(m.rng))
-        add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
-        frames[frames.length - 1].refreshTarget = foe
-      } else {
-        // peek / spy:不改牌面,只記用過。
-        g = markSpecialUsed(g, m.by)
-        add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`, 'special')
-      }
-    } else if (m.t === 'place') {
-      g = applyPlace(g, m.by, m.slot)
-      // 有開牌 → 講開牌結果(actor=放牌者);沒開牌 → 只講「將對手牌放第幾格」。(slot 對使用者從 1 起算)
-      const sd = g.lastShowdown
-      if (sd) {
-        const w = sd.winner === 'both' ? '雙方' : name(sd.winner)
-        const p1Won = sd.winner === 'p1' || sd.winner === 'both' // §10:搶金幣以下方 p1 角度
-        add(g, name(m.by), `第 ${sd.slot + 1} 格開牌・${sd.p1Name} vs ${sd.p2Name}・${w}勝`, p1Won ? 'showdown-win' : 'showdown-lose')
-      } else {
-        add(g, name(m.by), `將對手牌放第 ${m.slot + 1} 格`, 'place')
-      }
-      // 自動補出「開牌→翻幣→補牌」的後續幀(棋譜不記,決定性推得出來)。
-      if (g.phase === 'showdown') {
-        const resolved = resolveShowdown(g)
-        if (resolved.phase === 'ended') {
-          g = resolved
-          pushEndedIfDone()
-          break
+    if (m.t === 'special' && !getSpecialCard(m.card)) {
+      stopHere()
+      break
+    }
+    try {
+      if (m.t === 'pick') {
+        g = applyPick(g, m.by, m.ids)
+        add(g, name(m.by), `出 ${m.ids.length} 張`) // 選牌無音效
+      } else if (m.t === 'special') {
+        const def = getSpecialCard(m.card)
+        const before = m.targetId ? g.hands[m.by].find((c) => c.id === m.targetId) : undefined
+        if (def?.suit && m.targetId) {
+          g = applySuit(g, m.by, m.targetId, def.suit)
+          const after = g.hands[m.by].find((c) => c.id === m.targetId)
+          const detail = before && after ? `:${cardFace(before)}→${cardFace(after)}` : ''
+          add(g, name(m.by), `使用「${def.name}」${detail}`, 'special')
+        } else if (m.card === 'swap' && m.targetId) {
+          const prevIds = new Set(g.hands[m.by].map((c) => c.id))
+          g = applySwap(g, m.by, m.targetId, replayRng(m.rng))
+          const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
+          const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
+          add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
+        } else if (m.card === 'refresh') {
+          const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
+          const n = g.hands[foe].filter((c) => !isBlank(c) && !isJoker(c)).length
+          g = applyRefresh(g, m.by, replayRng(m.rng))
+          add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
+          frames[frames.length - 1].refreshTarget = foe
+        } else {
+          // peek / spy:不改牌面,只記用過。
+          g = markSpecialUsed(g, m.by)
+          add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`, 'special')
         }
-        g = resolved // → 'draw'
+      } else if (m.t === 'place') {
+        g = applyPlace(g, m.by, m.slot)
+        // 有開牌 → 講開牌結果(actor=放牌者);沒開牌 → 只講「將對手牌放第幾格」。(slot 對使用者從 1 起算)
+        const sd = g.lastShowdown
+        if (sd) {
+          const w = sd.winner === 'both' ? '雙方' : name(sd.winner)
+          const p1Won = sd.winner === 'p1' || sd.winner === 'both' // §10:搶金幣以下方 p1 角度
+          add(g, name(m.by), `第 ${sd.slot + 1} 格開牌・${sd.p1Name} vs ${sd.p2Name}・${w}勝`, p1Won ? 'showdown-win' : 'showdown-lose')
+        } else {
+          add(g, name(m.by), `將對手牌放第 ${m.slot + 1} 格`, 'place')
+        }
+        // 自動補出「開牌→翻幣→補牌」的後續幀(棋譜不記,決定性推得出來)。
+        if (g.phase === 'showdown') {
+          const resolved = resolveShowdown(g)
+          if (resolved.phase === 'ended') {
+            g = resolved
+            pushEndedIfDone()
+            break
+          }
+          g = resolved // → 'draw'
+        }
+        if (g.phase === 'draw') {
+          const drawer = g.postPicker
+          const after = applyDraw(g)
+          const n = drawer ? after.hands[drawer].length - g.hands[drawer].length : 0
+          // §10:只有下方 p1 補牌才放聲(對手補牌靜音,和正常對局一致)。
+          if (n > 0) add(after, name(drawer!), `補 ${n} 張`, drawer === 'p1' ? 'draw' : undefined, n)
+          g = after // → 'pick'
+        }
+        if (pushEndedIfDone()) break // applyPlace 直接判定結束(無開牌的保險路徑)
       }
-      if (g.phase === 'draw') {
-        const drawer = g.postPicker
-        const after = applyDraw(g)
-        const n = drawer ? after.hands[drawer].length - g.hands[drawer].length : 0
-        // §10:只有下方 p1 補牌才放聲(對手補牌靜音,和正常對局一致)。
-        if (n > 0) add(after, name(drawer!), `補 ${n} 張`, drawer === 'p1' ? 'draw' : undefined, n)
-        g = after // → 'pick'
-      }
-      if (pushEndedIfDone()) break // applyPlace 直接判定結束(無開牌的保險路徑)
+    } catch {
+      stopHere()
+      break
     }
   }
 
   return frames
 }
+
+/** 回放套不下去時最後一幀的字幕(見 buildFrames 的 stopHere)。 */
+export const OUTDATED_NOTICE = '這場用到新版本的卡片，請更新遊戲後再看'
 
 /** 拖進度用:第 k 幀的牌桌狀態。frames 已內含各幀 state → O(1)、拖拉極順。 */
 export function stateAtFrame(frames: ReplayFrame[], k: number): GameState | null {
