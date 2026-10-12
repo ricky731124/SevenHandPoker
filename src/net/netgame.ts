@@ -25,7 +25,7 @@ import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type
 import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
 import { fetchCard } from '../platform/cards'
-import { applySuit, applySwap, markSpecialUsed, peekNextDraw } from '../game/state'
+import { applyRefresh, applySuit, applySwap, canRefresh, markSpecialUsed, peekNextDraw } from '../game/state'
 import { recordingRng } from '../game/replay'
 import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
@@ -134,7 +134,8 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     sendLive: makeThrottledLive(code, 'host'),
     sendRematch: () => void dbSet(rematchRef(code, 'host'), true),
     sendReady: () => void dbSet(readyRef(code, 'host'), true),
-    sendFx: (msg: string) => void dbSet(fxRef(code), { msg, id: Date.now() }),
+    // card 只在有值時才寫(RTDB set() 不收 undefined 欄位)
+    sendFx: (msg: string, card?: SpecialCardId) => void dbSet(fxRef(code), card ? { msg, card, id: Date.now() } : { msg, id: Date.now() }),
     sendPause: (p: PauseState) => void dbSet(pauseRef(code), p),
     sendEmote: (e: EmoteMsg) => void dbSet(emoteRef(code), e),
     teardown: teardownFor(code, 'host'),
@@ -262,6 +263,18 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: intent.card, n: Date.now() } })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: intent.card, targetId: intent.targetId, rng: rec?.out })
         useGameStore.getState().flashStatus('對方似乎使用了特殊牌') // host is the foe
+      } else if (intent.card === 'refresh') {
+        // 強迫更新:guest 打 host(我)→ 我的手牌洗回牌堆重抽。不能用(對手沒普通牌/牌堆空)→ 回報 guest。
+        if (!canRefresh(e, 'p2')) {
+          void dbSet(fxRef(code), { msg: '無法使用「強迫更新」', id: Date.now() })
+          return
+        }
+        const rec = recordingRng()
+        const next = applyRefresh(e, 'p2', rec.rng)
+        const n = Date.now()
+        useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n }, refreshFx: { target: 'p1', n }, selected: [] })
+        useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', rng: rec.out })
+        useGameStore.getState().flashStatus(`對手對你使用了「${def.name}」，你的手牌已重抽`)
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
         const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
@@ -409,8 +422,10 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       fxInit = false
       return
     }
-    const fx = snap.val() as { msg?: string } | null
+    const fx = snap.val() as { msg?: string; card?: SpecialCardId; id?: number } | null
     if (fx?.msg) useGameStore.getState().flashStatus(fx.msg)
+    // host 對我(guest)用了強迫更新 → 播重抽動畫(新手牌由 guest-view 同步過來)
+    if (fx?.card === 'refresh') useGameStore.setState({ refreshFx: { target: 'p2', n: fx.id ?? Date.now() }, selected: [] })
   })
   // host → guest private peek/spy result.
   let infoInit = true

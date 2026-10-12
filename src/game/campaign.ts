@@ -49,6 +49,8 @@ export interface CampaignStage {
   name: string
   /** boss 立繪 = 該關要解鎖的頭像 id */
   bossAvatar: string
+  /** 角色名(= 頭像名;對局/VS/牌桌顯示這個,地圖標題才用關卡名 name) */
+  bossName: string
   signatureCard: SpecialCardId
   /** boss 牌風(主策略機率 + 副技能%);每小關套用,執行力來自 SubStage */
   profile: BossProfile
@@ -116,6 +118,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 1,
     name: '哪裡來的鎹鴉?',
     bossAvatar: 'bird',
+    bossName: '鳥鳥',
     signatureCard: 'peek',
     // 愛詐唬的賭徒:主打強攻,peek 餵拼牌(看下張值不值得等)。
     profile: {
@@ -133,6 +136,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 2,
     name: '明天開始168',
     bossAvatar: 'cat2', // 英國短毛貓 = cat2.png(已存在)
+    bossName: '英國短毛貓',
     signatureCard: 'spy',
     // 龜到你發火:主打囤牌,spy 給合法高看破(看穿你的詐唬)。
     profile: {
@@ -150,6 +154,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 3,
     name: '魚與熊掌我全都要',
     bossAvatar: 'bear', // 北極熊(bear.png)
+    bossName: '北極熊',
     signatureCard: 'clubs',
     // 全能猛獸:平衡為主、火力足,鬼牌留成陰險終結技。
     profile: {
@@ -167,6 +172,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 4,
     name: '萌即是正義', // 關卡名(暫定,可改);對局顯示角色名=紅貴賓 dog
     bossAvatar: 'dog', // 紅貴賓(dog.png)
+    bossName: '紅貴賓',
     signatureCard: 'diamonds',
     // 想做什麼就做什麼、完全看心情:主風格三分天下、技能都平平、隨興打。
     profile: {
@@ -184,6 +190,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 5,
     name: '奴才別打擾朕睡覺',
     bossAvatar: 'cat3', // 波斯貓(cat3.png)
+    bossName: '波斯貓',
     signatureCard: 'hearts', // 正中紅心
     // 慵懶的貴族:平衡為主、幾乎不詐唬,鬼牌留到高槓桿才慢條斯理地終結。
     profile: {
@@ -201,6 +208,7 @@ export const CAMPAIGN: CampaignStage[] = [
     index: 6,
     name: '情緒勒索的吉祥物',
     bossAvatar: 'bird2', // 貓頭鷹(bird2.png)
+    bossName: '貓頭鷹',
     signatureCard: 'spades', // 塊桃鴨
     // 高智商夜行者:極重平衡與看破,鬼牌時機幾乎必抓,壓迫感最強的收尾王。
     profile: {
@@ -211,6 +219,24 @@ export const CAMPAIGN: CampaignStage[] = [
       insight: 60,
     },
     subStages: subStages('s6', 6, 'spades', 'bird2'),
+    nodePositions: NODE_POS,
+  },
+  {
+    id: 's7',
+    index: 7,
+    name: '不可以色色',
+    bossAvatar: 'shiba', // 柴柴(shiba.png)
+    bossName: '柴柴',
+    signatureCard: 'refresh', // 強迫更新
+    // 正義柴柴:重囤牌、看破極高——一眼看穿你在囤什麼,再用強迫更新把你的好牌洗掉。
+    profile: {
+      pickMain: { attack: 30, hoard: 60, balance: 10 },
+      bluff: 40,
+      draw: 20,
+      jokerTiming: 30,
+      insight: 90,
+    },
+    subStages: subStages('s7', 7, 'refresh', 'shiba'),
     nodePositions: NODE_POS,
   },
 ]
@@ -267,7 +293,7 @@ export function rollBossRuntime(
   sub: SubStage,
   rng: () => number = Math.random,
 ): BossRuntime {
-  return { profile: stage.profile, main: rollMain(stage.profile, rng), execution: sub.execution }
+  return { profile: stage.profile, main: rollMain(stage.profile, rng), execution: sub.execution, signature: stage.signatureCard }
 }
 
 // ---- BO series (pure logic; the store just drives matches with it) --------

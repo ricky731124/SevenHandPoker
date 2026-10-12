@@ -21,6 +21,7 @@ import type { Card } from './cards'
 import { isBlank, isJoker, isSpecial } from './cards'
 import { CATEGORY, compareHands, compareValue, evaluate } from './evaluate'
 import {
+  canRefresh,
   countCoins,
   emptySlotsFor,
   isTargetable,
@@ -68,6 +69,8 @@ export interface BossRuntime {
    *  PICK side to infer the foe's best reachable hand and bring forward the boss's
    *  cash-out (stop hoarding once the foe clearly holds a monster). */
   spyHand?: Card[] | null
+  /** 這隻 boss 自己的招牌卡(主線才有;快速配對人機沒有)。強迫更新靠它分辨「柴柴本尊」要不要優先用。 */
+  signature?: SpecialCardId
 }
 
 type Rng = () => number
@@ -575,19 +578,49 @@ export function bossPlace(state: GameState, me: PlayerId, rt: BossRuntime, rng: 
  *   spy 對高看破 boss 加成、peek 對高拼牌 boss 加成 → 高看破/高拼牌 boss 早期就偏好資訊牌。
  * Returns { card, targetId? } — peek/spy carry no target.
  */
+/**
+ * 強迫更新的觸發條件數(0~4,越多越想用):對方用過特殊牌、對方在囤牌(已出過牌、手上普通牌仍 ≥10)、
+ * 自己落後(硬幣比對方少)、自己牌爛(手牌湊不到三條以上)。只讀公開資訊 + 自己手牌,不偷看。
+ */
+export function refreshTriggers(state: GameState, me: PlayerId): number {
+  const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+  const foeUsed = state.specialUsed[foe]
+  const foeHoarding = state.placementsDone[foe] >= 1 && state.hands[foe].filter(isTargetable).length >= 10
+  const behind = countCoins(state, foe) > countCoins(state, me)
+  const weak = bestCategoryOf(state.hands[me]) <= CATEGORY.TWO_PAIR
+  return [foeUsed, foeHoarding, behind, weak].filter(Boolean).length
+}
+
 export function bossChooseSpecial(
   state: GameState,
   me: PlayerId,
   loadout: SpecialCardId[],
   profile?: BossProfile,
+  opts: { signature?: SpecialCardId; rng?: Rng } = {},
 ): { card: SpecialCardId; targetId?: string } | null {
   if (state.specialUsed[me]) return null
   const hand = state.hands[me]
   const insight = profile?.insight ?? 0
   const draw = profile?.draw ?? 0
+  const rng = opts.rng ?? Math.random
 
   type Cand = { card: SpecialCardId; targetId?: string; score: number }
   const cands: Cand[] = []
+
+  // 強迫更新(使用者 2026-10-11 定案):只在 boss 自己的前 4 手內考慮。
+  //  - 柴柴 7-2(只帶這張):有觸發條件就用;到第 4 手還沒用 → 強制用(推廣這張卡,一定要讓玩家看到)。
+  //  - 柴柴 7-3(卡池):前 4 手優先等這張(其他卡先不用),每手機率較高;過了第 4 手才換其他卡。
+  //  - 其他 boss / 快速配對人機:有觸發條件才小機率用。
+  if (loadout.includes('refresh') && state.placementsDone[me] < 4 && canRefresh(state, me)) {
+    const conds = refreshTriggers(state, me)
+    const own = opts.signature === 'refresh'
+    if (own && loadout.length === 1) {
+      if (conds > 0 || state.placementsDone[me] === 3) return { card: 'refresh' }
+      return null
+    }
+    if (own) return rng() < Math.min(0.9, 0.3 + 0.2 * conds) ? { card: 'refresh' } : null
+    if (conds > 0 && rng() < Math.min(0.25, 0.08 + 0.06 * (conds - 1))) return { card: 'refresh' }
+  }
 
   // suit-bloom → ONLY to complete/keep a real 5-card flush (SPEC 使用者 2026-08-16):
   //   花色牌一定是拿來湊同花/同花順。必須已握 ≥4 張該花色,轉「第 5 張」才成同花;而且不去

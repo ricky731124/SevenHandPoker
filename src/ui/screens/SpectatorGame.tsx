@@ -108,6 +108,8 @@ export default function SpectatorGame() {
       const byName = fx.by === 'p1' ? m?.p1?.name || '玩家1' : m?.p2?.name || '玩家2'
       const cardName = getSpecialCard(fx.card)?.name ?? '特殊牌'
       useToastStore.getState().show(`${byName} 使用了「${cardName}」`)
+      // 強迫更新 → 觀戰也播被打那一方的重抽動畫
+      if (fx.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.by === 'p1' ? 'p2' : 'p1', n: fx.n } })
     }
     const h = joinSpectate(code, {
       onSpec: (eng, view) => {

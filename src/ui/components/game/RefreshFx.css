@@ -1,0 +1,35 @@
+/* 強迫更新動畫層:鋪滿 .game,不吃點擊 */
+.refresh-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+}
+.refresh-fx__card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+}
+.refresh-fx__label {
+  position: absolute;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #6b3fa0;
+  color: #fff;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* 播放期間藏起被打那一方的真手牌,結束再露出(新手牌) */
+.game--rf-me .game__hand,
+.game--rf-foe .game__ohand {
+  opacity: 0;
+}
+.game__hand,
+.game__ohand {
+  transition: opacity 0.18s ease;
+}

@@ -40,6 +40,7 @@ export function SpecialCardArt({ id, color, uid }: { id: string; color: string; 
       {id === 'swap' && <SwapArt color={color} />}
       {id === 'peek' && <PeekArt color={color} />}
       {id === 'spy' && <SpyArt color={color} />}
+      {id === 'refresh' && <RefreshArt color={color} />}
       {SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS]?.suit && (
         <SuitBloomArt suit={SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS].suit!} color={color} />
       )}
@@ -112,6 +113,31 @@ function SpyArt({ color }: { color: string }) {
       />
       <ellipse cx="54" cy="54" rx="5" ry="3" fill="#fff" opacity="0.7" transform="rotate(-30 54 54)" />
       <path d="M74 74 L90 92" stroke={color} strokeWidth="8" strokeLinecap="round" />
+    </g>
+  )
+}
+
+/** 強迫更新 — the opponent's fanned hand (backs) caught in a big refresh loop,
+ *  with an "updating…" progress bar underneath: their cards are being reloaded. */
+function RefreshArt({ color }: { color: string }) {
+  return (
+    <g>
+      {/* refresh loop: two arcs chasing each other, arrowheads at the ends */}
+      <g fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 50 A 29 29 0 0 1 72 30" />
+        <path d="M64 25 L73 30 L70 40" />
+        <path d="M78 66 A 29 29 0 0 1 28 86" />
+        <path d="M36 91 L27 86 L30 76" />
+      </g>
+      {/* opponent hand (backs), tumbling inside the loop */}
+      <g stroke="#fffdf5" strokeWidth="1.6">
+        <rect x="31" y="44" width="18" height="26" rx="3" fill={color} fillOpacity="0.8" transform="rotate(-22 40 57)" />
+        <rect x="41" y="40" width="18" height="26" rx="3" fill={color} transform="rotate(4 50 53)" />
+        <rect x="51" y="46" width="18" height="26" rx="3" fill={color} fillOpacity="0.8" transform="rotate(26 60 59)" />
+      </g>
+      {/* "updating" bar */}
+      <rect x="26" y="100" width="48" height="8" rx="4" fill="#fffdf5" stroke={color} strokeWidth="1.8" />
+      <rect x="28" y="102" width="30" height="4" rx="2" fill={color} />
     </g>
   )
 }

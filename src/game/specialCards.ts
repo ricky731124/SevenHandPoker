@@ -13,7 +13,7 @@
 
 import type { Suit } from './cards'
 
-export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades'
+export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh'
 
 export interface SpecialCardDef {
   id: SpecialCardId
@@ -99,6 +99,15 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     needsTarget: true,
     accent: '#33384a',
     suit: 'S',
+  },
+  refresh: {
+    id: 'refresh',
+    name: '強迫更新',
+    short: '對手手牌全部重抽',
+    desc: '對手的手牌（空白牌、鬼牌除外）全部洗回牌堆，整副重洗後再抽回相同張數。因為會影響對手，對手會被告知。',
+    affectsFoe: true,
+    needsTarget: false,
+    accent: '#6b3fa0',
   },
 }
 

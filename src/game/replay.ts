@@ -2,6 +2,7 @@ import {
   applyDraw,
   applyPick,
   applyPlace,
+  applyRefresh,
   applySuit,
   applySwap,
   createGame,
@@ -26,6 +27,7 @@ import { getSpecialCard, type SpecialCardId } from './specialCards'
  *      · 偷天換日(swap)會改牌面 → 另記 `targetId`(棄掉哪張)+ `rng`(當時那次隨機抽/塞的
  *        兩個 Math.random 輸出,回放照吐一次 → 抽到的新牌、牌堆順序完全重現,決定性)。
  *      · 花色類(踏雪尋梅/正中紅心…)是決定性的,只需 `targetId`(把哪張改花色),不需 `rng`。
+ *      · 強迫更新(refresh)把對手手牌洗回牌堆重抽 → 只記 `rng`(一個值 = 重洗的種子),回放照吐即重現。
  *      · 偷窺/讓我看看(peek/spy)不改任何牌面,只記「有這一步、用了什麼」→ 回放照樣顯示玩家用過。
  */
 export type Move =
@@ -76,6 +78,8 @@ export interface ReplayFrame {
   sound?: ReplaySound
   /** draw 音效要放幾聲(補幾張)。 */
   drawN?: number
+  /** 強迫更新那一幀:被重抽的是誰 → 播放器前進到這幀時播重抽動畫。 */
+  refreshTarget?: PlayerId
 }
 
 /** buildFrames 的輸入(不綁 net 層的 ReplayRecord,保持 game/ 純淨)。 */
@@ -142,6 +146,12 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
         const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
         const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
         add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
+      } else if (m.card === 'refresh') {
+        const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
+        const n = g.hands[foe].filter((c) => !isBlank(c) && !isJoker(c)).length
+        g = applyRefresh(g, m.by, replayRng(m.rng))
+        add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
+        frames[frames.length - 1].refreshTarget = foe
       } else {
         // peek / spy:不改牌面,只記用過。
         g = markSpecialUsed(g, m.by)

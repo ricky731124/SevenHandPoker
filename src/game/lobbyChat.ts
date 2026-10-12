@@ -1,5 +1,5 @@
 import { BOTS, type BotPersona } from './bots'
-import { ALL_SUB_STAGE_IDS, getSubStage, subStageOrder } from './campaign'
+import { ALL_SUB_STAGE_IDS, CAMPAIGN, getSubStage, subStageOrder } from './campaign'
 import { SPECIAL_CARDS, type SpecialCardId } from './specialCards'
 import { getAchievement, TIER_NAME_ZH } from './achievements'
 import { STICKERS } from './stickers'
@@ -113,14 +113,12 @@ export function isOwnerName(username: string | null | undefined): boolean {
 }
 
 // ─── 靜態對照（從遊戲資料取真值，避免亂命名）──────────────────────────────────
-/** boss 頭像 id → 角色名（= PlayerAvatar 的 AVATARS 名；此處內建以免 game 層依賴 ui）。 */
-const BOSS_NAME: Record<string, string> = {
-  cat: '橘貓', bird: '鳥鳥', cat2: '英國短毛貓', bear: '北極熊', dog: '紅貴賓', cat3: '波斯貓', bird2: '貓頭鷹',
-}
+/** boss 頭像 id → 角色名（直接讀關卡資料 CAMPAIGN.bossName，新增關卡不用改這裡）。 */
+const BOSS_NAME: Record<string, string> = Object.fromEntries(CAMPAIGN.map((s) => [s.bossAvatar, s.bossName]))
 const STYLE_LABEL: Record<string, string> = { attack: '強攻', hoard: '囤牌', balance: '平衡' }
 const SKILL_LABEL: Record<string, string> = { bluff: '詐唬', draw: '拼牌', jokerTiming: '鬼牌時機', insight: '看破' }
 const BOSS_CARD_NAMES = Object.values(SPECIAL_CARDS).map((c) => c.name)
-const BOSS_CHAR_NAMES = ['鳥鳥', '英國短毛貓', '北極熊', '紅貴賓', '波斯貓', '貓頭鷹']
+const BOSS_CHAR_NAMES = CAMPAIGN.map((s) => s.bossName)
 // 貼圖：免費的是表情符號 → 句子裡直接塞 emoji(😠👍…，不用下載)；商城付費貼圖只講名字(聊天室不能用付費貼圖)。
 //   付費貼圖名是純符號的(!!、...)放進「」很怪 → 不拿來講。
 const FREE_STICKER_EMOJI = STICKERS.filter((s) => s.free && s.emoji).map((s) => s.emoji!)

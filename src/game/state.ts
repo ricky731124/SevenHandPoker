@@ -380,6 +380,44 @@ export function applySuit(state: GameState, player: PlayerId, cardId: string, su
 }
 
 /** 踏雪尋梅: re-suit a card to clubs. (Back-compat wrapper over applySuit.) */
+/** 強迫更新 可用嗎:對手手上要有普通牌(空白/鬼牌不算)、牌堆不能是空的(空的話洗回去抽到的還是同一批)。 */
+export function canRefresh(state: GameState, player: PlayerId): boolean {
+  return state.deck.length > 0 && state.hands[otherPlayer(player)].some(isTargetable)
+}
+
+/**
+ * 強迫更新 (refresh): the FOE's normal hand cards go back into the deck, the whole
+ * deck is reshuffled, and the foe draws the same number back off the top — so both
+ * the foe's hand and the deck order change. The off-deck blank/joker stay in hand
+ * (they never belong to the 52-deck). A re-suited card (踏雪尋梅…) returns with its
+ * ORIGINAL suit — its id is still the original card's, and keeping the new suit
+ * would put a duplicate (e.g. two ♠A) into the deck.
+ * Only ONE rng() call (→ a shuffle seed), so a replay records a single number.
+ */
+export function applyRefresh(state: GameState, player: PlayerId, rng: () => number = Math.random): GameState {
+  if (!canRefresh(state, player)) return state
+  const foe = otherPlayer(player)
+  const hand = state.hands[foe]
+  const back = hand.filter(isTargetable).map(restoreSuit)
+  const keep = hand.filter((c) => !isTargetable(c))
+  const seed = Math.floor(rng() * 0x100000000) >>> 0
+  const deck = shuffle([...state.deck, ...back], mulberry32(seed))
+  const drawn = deck.splice(0, back.length)
+  return {
+    ...state,
+    deck,
+    hands: { ...state.hands, [foe]: [...drawn, ...keep] },
+    specialUsed: { ...state.specialUsed, [player]: true },
+  }
+}
+
+/** 被花色卡改過的牌 → 變回原花色(不留 undefined 欄位,RTDB set() 才不會出錯)。 */
+function restoreSuit(c: Card): Card {
+  if (!c.resuitFrom) return c
+  const { resuitFrom, ...rest } = c
+  return { ...rest, suit: resuitFrom }
+}
+
 export function applyClubs(state: GameState, player: PlayerId, cardId: string): GameState {
   return applySuit(state, player, cardId, 'C')
 }

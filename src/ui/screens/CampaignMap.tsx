@@ -36,7 +36,7 @@ export default function CampaignMap() {
   }
 
   const clearedIds = Object.keys(clearedAt ?? {})
-  const bg = `${import.meta.env.BASE_URL}maps/stage${stage.index}.png`
+  const bg = `${import.meta.env.BASE_URL}maps/stage${stage.index}.webp` // 網頁用 webp(~150KB);PNG 母檔留著,改圖後跑 build-img 重產
   const pts = stage.nodePositions.map((p) => `${p.x},${p.y}`).join(' ')
 
   return (

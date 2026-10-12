@@ -7,8 +7,10 @@ import {
   applyDraw,
   applyPick,
   applyPlace,
+  applyRefresh,
   applySuit,
   applySwap,
+  canRefresh,
   createGame,
   emptySlotsFor,
   markSpecialUsed,
@@ -151,6 +153,8 @@ function playFrameSound(f: ReplayFrame | undefined): void {
     case 'showdown-win': sfx.showdown(); setTimeout(() => sfx.coinWin(), 400); break
     case 'showdown-lose': sfx.showdown(); setTimeout(() => sfx.coinFail(), 400); break
   }
+  // 強迫更新那一步 → 回放也播重抽動畫(拖拉/上一步不呼叫這裡,所以不會亂播)
+  if (f?.refreshTarget) useGameStore.setState({ refreshFx: { target: f.refreshTarget, n: Date.now() } })
 }
 
 /** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
@@ -240,7 +244,8 @@ export interface OnlineInfo {
   /** signal "I've confirmed my pre-match loadout" (special-room B barrier) */
   sendReady: () => void
   /** host → guest: a foe-facing special-card notice to toast (guest = no-op) */
-  sendFx: (msg: string) => void
+  /** card:對手那端要額外演出的卡(目前只有 refresh → guest 播重抽動畫) */
+  sendFx: (msg: string, card?: SpecialCardId) => void
   /** write the shared pause state (both sides read it back) */
   sendPause: (p: PauseState) => void
   /** broadcast a sticker (貼圖) to the opponent — cosmetic, off the engine */
@@ -302,6 +307,9 @@ interface GameStore {
   spectateWatchers: number
   /** 廣播用:剛用出的特殊牌通知(誰/哪張/n)。玩家自己看的提示走 statusOverride;這個是給觀戰的。 */
   specFx: SpecFx | null
+  /** 強迫更新動畫觸發器:誰的手牌被重抽(target)+ n 去重。RefreshFx 看到新的 n 就播一次
+   *  「舊牌飛回牌堆→洗牌→新牌發回」。單機/host/guest/觀戰各自在收到效果時設。 */
+  refreshFx: { target: PlayerId; n: number } | null
 
   // UI
   selected: string[]
@@ -546,6 +554,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   spectateMyName: '',
   spectateWatchers: 0,
   specFx: null,
+  refreshFx: null,
 
   selected: [],
   confirm: null,
@@ -701,7 +710,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (get().status === 'playing' && get().engine) return
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
+    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
     sfx.deal() // 開局發牌
     persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
     const foe = get().casualFoe
@@ -713,7 +722,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _bcast?.stop() // §5.4 leaving → tear down the Live/spectate nodes (unless已 ended,則留 24h)
     _bcast = null
     clearLocalMatch() // §3.7 leaving → drop the local snapshot/marker
-    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
+    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
   },
 
   applySpectate: (engine, info, live) => {
@@ -1459,6 +1468,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       sfx.click()
       set({ specialTargeting: id, specialTrayOpen: false })
+    } else if (id === 'refresh') {
+      // 強迫更新:對手手牌洗回牌堆重抽。guest 端只看得到牌堆張數 → 先擋空牌堆,其餘交給 host 判。
+      if (online?.role === 'guest' ? engine.deck.length === 0 : !canRefresh(engine, me)) {
+        sfx.error()
+        useToastStore.getState().show(engine.deck.length === 0 ? '牌堆已空，無法重洗' : '對手沒有可重洗的牌')
+        return
+      }
+      sfx.special()
+      set({ specialTrayOpen: false })
+      if (online?.role === 'guest') {
+        online.send({ type: 'special', card: id })
+        set({ refreshFx: { target: otherPlayer(me), n: Date.now() } }) // 對手(host)手牌的重抽動畫,本機先播
+        get().flashStatus(`你已使用了「${def.name}」`)
+        return
+      }
+      const foe = otherPlayer(me)
+      const rec = recordingRng() // §6:重洗是隨機的 → 錄下種子,回放照吐即重現
+      const next = applyRefresh(engine, me, rec.rng)
+      const n = Date.now()
+      get().recordMove({ t: 'special', by: me, card: id, rng: rec.out })
+      // 對手若是 boss/人機且偷看過自己下次補牌 → 牌堆重洗後作廢(合法資訊已過期)
+      const aiBoss = get().aiBoss
+      set({
+        engine: next,
+        specFx: { by: me, card: id, n },
+        refreshFx: { target: foe, n },
+        ...(aiBoss?.peekDraw ? { aiBoss: { ...aiBoss, peekDraw: null } } : {}),
+      })
+      _bcast?.onEngine(next)
+      pushCasualExtras()
+      persistLocalMatch(get())
+      get().flashStatus(`你已使用了「${def.name}」`)
+      if (online?.role === 'host') online.sendFx(`對手對你使用了「${def.name}」，你的手牌已重抽`, id)
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
       // back on the private info channel (netgame → showSpecialInfo).
@@ -1535,13 +1577,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (ai === me || engine.specialUsed[ai]) return false
     // Campaign bosses use bossChooseSpecial (handles their signature incl. peek/
     // spy); the plain single-player AI keeps the default value-only policy.
-    const decision = aiBoss ? bossChooseSpecial(engine, ai, aiLoadout, aiBoss.profile) : aiChooseSpecial(engine, ai, aiLoadout)
+    const decision = aiBoss
+      ? bossChooseSpecial(engine, ai, aiLoadout, aiBoss.profile, { signature: aiBoss.signature })
+      : aiChooseSpecial(engine, ai, aiLoadout)
     if (!decision) return false
     const def = getSpecialCard(decision.card)
     let next: GameState
-    const rec = decision.card === 'swap' ? recordingRng() : null // §6:swap 才需錄 rng
+    const rec = decision.card === 'swap' || decision.card === 'refresh' ? recordingRng() : null // §6:有隨機的才錄 rng
     if (def?.suit && decision.targetId) next = applySuit(engine, ai, decision.targetId, def.suit)
     else if (decision.card === 'swap' && decision.targetId) next = applySwap(engine, ai, decision.targetId, rec!.rng)
+    else if (decision.card === 'refresh') next = applyRefresh(engine, ai, rec!.rng)
     else next = markSpecialUsed(engine, ai) // peek / spy: no board change, just the one-shot
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
     sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
@@ -1551,12 +1596,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (aiBoss && decision.card === 'spy') set({ aiBoss: { ...aiBoss, spySeen: true, spyHand: next.hands[otherPlayer(ai)] } })
     else if (aiBoss && decision.card === 'peek') set({ aiBoss: { ...aiBoss, peekDraw: peekNextDraw(next, ai) } })
     // §特殊牌:記通知 + 鏡射給觀戰(bot 換牌也要即時更新,否則觀戰看到的牌對不上)。
-    set({ engine: next, specFx: { by: ai, card: decision.card, n: Date.now() } })
+    const n = Date.now()
+    const refreshed = decision.card === 'refresh'
+    set({
+      engine: next,
+      specFx: { by: ai, card: decision.card, n },
+      // 強迫更新打的是我 → 播重抽動畫;我手上舊牌的選取全部作廢
+      ...(refreshed ? { refreshFx: { target: otherPlayer(ai), n }, selected: [] } : {}),
+    })
     _bcast?.onEngine(next)
     pushCasualExtras()
     persistLocalMatch(get())
-    // Visibility (SPEC §15): spy affects me (I'm told); others → a generic notice.
-    get().flashStatus(decision.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
+    // Visibility (SPEC §15): spy / refresh affect me (I'm told); others → a generic notice.
+    get().flashStatus(
+      decision.card === 'spy'
+        ? '對手正在查看你的手牌'
+        : refreshed
+          ? `對手對你使用了「${def?.name ?? '強迫更新'}」，你的手牌已重抽`
+          : '對方似乎使用了特殊牌',
+    )
     return true
   },
 

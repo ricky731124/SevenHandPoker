@@ -7,3 +7,4 @@ dist-ssr
 .env.local
 src/net/firebaseConfig.local.ts
 _sfx_src
+_art_src
