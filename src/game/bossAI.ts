@@ -623,8 +623,8 @@ export function bossChooseSpecial(
 
   // 爆破(使用者 2026-10-13 定案):隨機炸對手一張 → 對手手牌越少越可能炸到關鍵牌,所以中後期用。
   //  - 啄木鳥 8-2(只帶這張):有觸發條件就用;到自己第 5 手還沒用 → 強制用(讓玩家一定看得到)。
-  //  - 啄木鳥 8-3(卡池,使用者 2026-10-13 改):每一手都一樣——有條件就用爆破;沒條件就 10% 改用其他卡
-  //    (照下面一般選卡挑,這手不會是爆破),90% 這手不用卡。
+  //  - 啄木鳥 8-3(卡池,使用者 2026-10-13/14 改):每一手都一樣——有條件就用爆破;沒條件就 12% 改用其他卡
+  //    (照下面一般選卡挑,這手不會是爆破),88% 這手不用卡。
   //  - 其他 boss / 快速配對人機:有觸發條件才小機率用。
   // 放在強迫更新前面:8-3 本尊等爆破時,不能被卡池裡的強迫更新搶先用掉。
   if (loadout.includes('explode') && canExplode(state, me)) {
@@ -633,8 +633,8 @@ export function bossChooseSpecial(
     if (own && loadout.length === 1) return conds > 0 || state.placementsDone[me] >= 4 ? { card: 'explode' } : null
     if (own) {
       if (conds > 0) return { card: 'explode' }
-      if (rng() >= 0.1) return null
-      loadout = loadout.filter((c) => c !== 'explode') // 10%:往下走一般選卡,只挑其他卡
+      if (rng() >= 0.12) return null
+      loadout = loadout.filter((c) => c !== 'explode') // 12%:往下走一般選卡,只挑其他卡
     } else if (conds > 0 && rng() < Math.min(0.25, 0.08 + 0.06 * (conds - 1))) return { card: 'explode' }
   }
 

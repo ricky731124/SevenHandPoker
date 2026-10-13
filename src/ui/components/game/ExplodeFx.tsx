@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useGameStore } from '../../../state/gameStore'
+import { EXPLODE_FX_MS, useGameStore } from '../../../state/gameStore'
 import type { PlayerId } from '../../../game/state'
 import type { Card as TCard } from '../../../game/cards'
 import Card from '../Card'
 import CardBack from '../CardBack'
 import './ExplodeFx.css'
 
-/** 動畫總長(ms):炸彈從頭像扔到那張牌 → 牌原地浮起抖兩下 → 爆開消失。 */
-const DURATION = 1800
+/** 動畫總長(ms):炸彈從頭像扔到那張牌 → 牌原地浮起抖兩下 → 爆開消失(使用者:放慢,讓人看得到炸彈)。 */
+const DURATION = EXPLODE_FX_MS
 
 type Box = { x: number; y: number; w: number; h: number }
 
@@ -140,44 +140,46 @@ function Boom({ run, cardW }: { run: Run; cardW: number }) {
   const cx = slot.x + slot.w / 2
   const cy = slot.y + slot.h / 2
   const burstY = cy + lift // 爆炸點 = 牌浮起後的中心
-  const B = 36 // 炸彈 emoji 大小
-  // 炸彈走拋物線:中點往上抬一點
+  const B = 44 // 炸彈 emoji 大小(放大一點,飛行中看得出是炸彈)
+  // 炸彈直線飛到牌上(使用者:直線,看得出是扔過去),等速、邊飛邊轉
   const midX = (run.from.x + cx) / 2
-  const midY = Math.min(run.from.y, cy) - slot.h * 0.8
+  const midY = (run.from.y + cy) / 2
   const dur = DURATION / 1000
+  // 時間軸(秒):炸彈飛 1.1 秒 → 牌浮起 → 抖 → 爆炸 → 字留到最後
+  const T = { land: 1.1, bombEnd: 1.3, risen: 1.65, boom: 2.35, cardEnd: 2.75 }
   return (
     <>
-      {/* 被炸的牌:從頭到尾待在原位(蓋住已經拿掉的真牌的空位)→ 炸彈落下後浮起、抖、爆掉 */}
+      {/* 被炸的牌:炸彈飛行時待在原位(蓋住真牌的空位)→ 炸彈落下後慢慢浮起 → 抖兩下 → 爆掉 */}
       <motion.div
         key={`card-${run.n}`}
         className="explode-fx__card"
         style={{ left: slot.x, top: slot.y }}
         initial={{ opacity: 1, x: 0, y: 0, scale: 1, rotate: 0 }}
         animate={{
-          opacity: [1, 1, 1, 1, 1, 1, 0, 0],
-          y: [0, 0, lift, lift, lift, lift, lift, lift],
-          x: [0, 0, 0, -6, 6, -5, 0, 0],
-          scale: [1, 1, 1.15, 1.15, 1.15, 1.2, 1.6, 1.6],
-          rotate: [0, 0, 0, -7, 7, -5, 18, 18],
+          opacity: [1, 1, 1, 1, 1, 1, 1, 1, 0],
+          y: [0, 0, lift, lift, lift, lift, lift, lift, lift],
+          x: [0, 0, 0, -6, 6, -6, 6, 0, 0],
+          scale: [1, 1, 1.15, 1.15, 1.15, 1.15, 1.15, 1.18, 1.7],
+          rotate: [0, 0, 0, -6, 6, -6, 6, 0, 15],
         }}
-        transition={{ duration: dur, times: [0, 0.32, 0.45, 0.52, 0.58, 0.64, 0.74, 1] }}
+        transition={{ duration: T.cardEnd, times: [0, T.land, T.risen, 1.8, 1.95, 2.1, 2.25, T.boom, T.cardEnd].map((t) => t / T.cardEnd), ease: 'easeInOut' }}
       >
         {run.card ? <Card card={run.card} w={cardW} /> : <CardBack w={cardW} />}
       </motion.div>
-      {/* 炸彈:從頭像拋過去,落到牌上就縮小消失 */}
+      {/* 炸彈:從頭像直線飛到牌上(1.1 秒,看得清楚);落到牌上縮小消失 */}
       <motion.div
         key={`bomb-${run.n}`}
         className="explode-fx__bomb"
         style={{ left: 0, top: 0 }}
-        initial={{ x: run.from.x - B / 2, y: run.from.y - B / 2, rotate: 0, scale: 0.7, opacity: 1 }}
+        initial={{ x: run.from.x - B / 2, y: run.from.y - B / 2, rotate: 0, scale: 0.8, opacity: 1 }}
         animate={{
-          x: [run.from.x - B / 2, midX - B / 2, cx - B / 2, cx - B / 2, cx - B / 2],
-          y: [run.from.y - B / 2, midY - B / 2, cy - B / 2, cy - B / 2, cy - B / 2],
-          rotate: [0, 270, 540, 600, 600],
-          scale: [0.7, 1.2, 1, 0.3, 0.3],
-          opacity: [1, 1, 1, 0, 0],
+          x: [run.from.x - B / 2, midX - B / 2, cx - B / 2, cx - B / 2],
+          y: [run.from.y - B / 2, midY - B / 2, cy - B / 2, cy - B / 2],
+          rotate: [0, 180, 360, 380],
+          scale: [0.8, 1.1, 1, 0.3],
+          opacity: [1, 1, 1, 0],
         }}
-        transition={{ duration: dur, times: [0, 0.15, 0.3, 0.36, 1] }}
+        transition={{ duration: T.bombEnd, times: [0, T.land / 2, T.land, T.bombEnd].map((t) => t / T.bombEnd), ease: 'linear' }}
       >
         💣
       </motion.div>
@@ -186,9 +188,9 @@ function Boom({ run, cardW }: { run: Run; cardW: number }) {
         key={`flash-${run.n}`}
         className="explode-fx__flash"
         style={{ left: cx - cardW, top: burstY - cardW }}
-        initial={{ opacity: 0, scale: 0.2 }}
-        animate={{ opacity: [0, 0, 1, 0, 0], scale: [0.2, 0.2, 1.3, 1.8, 1.8] }}
-        transition={{ duration: dur, times: [0, 0.64, 0.72, 0.95, 1] }}
+        initial={{ opacity: 0, scale: 0.3 }}
+        animate={{ opacity: [0, 1, 0], scale: [0.3, 1.4, 1.9] }}
+        transition={{ delay: T.boom, duration: 0.6, ease: 'easeOut' }}
       >
         <div style={{ width: cardW * 2, height: cardW * 2 }} />
       </motion.div>
@@ -201,12 +203,8 @@ function Boom({ run, cardW }: { run: Run; cardW: number }) {
             className={`explode-fx__spark explode-fx__spark--${i % 3}`}
             style={{ left: cx - 5, top: burstY - 5 }}
             initial={{ opacity: 0, x: 0, y: 0 }}
-            animate={{
-              opacity: [0, 0, 1, 0],
-              x: [0, 0, Math.cos(a) * dist, Math.cos(a) * dist],
-              y: [0, 0, Math.sin(a) * dist, Math.sin(a) * dist],
-            }}
-            transition={{ duration: dur, times: [0, 0.66, 0.92, 1] }}
+            animate={{ opacity: [0, 1, 0], x: [0, Math.cos(a) * dist * 0.7, Math.cos(a) * dist], y: [0, Math.sin(a) * dist * 0.7, Math.sin(a) * dist] }}
+            transition={{ delay: T.boom, duration: 0.7, ease: 'easeOut' }}
           />
         )
       })}
@@ -215,8 +213,8 @@ function Boom({ run, cardW }: { run: Run; cardW: number }) {
         className="explode-fx__label"
         style={{ left: cx, top: burstY + Math.sign(lift) * slot.h * 0.95 }}
         initial={{ opacity: 0, scale: 0.6, x: '-50%', y: '-50%' }}
-        animate={{ opacity: [0, 0, 1, 1, 0], scale: [0.6, 0.6, 1.15, 1, 0.95], x: '-50%', y: '-50%' }}
-        transition={{ duration: dur, times: [0, 0.66, 0.76, 0.92, 1] }}
+        animate={{ opacity: [0, 1, 1, 0], scale: [0.6, 1.15, 1, 0.95], x: '-50%', y: '-50%' }}
+        transition={{ delay: T.boom, duration: dur - T.boom, times: [0, 0.2, 0.85, 1], ease: 'easeOut' }}
       >
         爆破！
       </motion.div>

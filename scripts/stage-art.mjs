@@ -13,19 +13,28 @@
 // 原圖留在 _art_src/stage{N}/(不進 git)當備份,要重調就從那裡重跑。
 //
 // 選項:--heal-map x,y,w,h[,dy]  地圖若有浮水印,用下方紋理羽化補掉該矩形(dy 預設 = h+8)
+//       --map-crop x,y,w        先從原圖裁出這塊再縮放(高度自動 = w×800/1328,維持地圖比例)。
+//                               用途:主角壓在節點上時,裁掉一側讓主角移到節點之間(第 8 關:裁左邊)。
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import ffmpeg from 'ffmpeg-static'
 import { load, writePng, keyFlood, removeCornerMark, healFromBelow, scanWM, bleed } from './imglib.mjs'
 
-const [N, AVATAR, STICKER, MODE = 'preview'] = process.argv.slice(2).filter((a) => !a.startsWith('--'))
+// 旗標後面那個值不能被當成位置參數(之前 --heal-map 的值會被誤讀成 MODE)
+const argv = process.argv.slice(2)
+const flagVal = (name) => {
+  const i = argv.indexOf(name)
+  return i >= 0 && argv[i + 1] ? argv[i + 1].split(',').map(Number) : null
+}
+const positional = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && argv[i - 1].startsWith('--')))
+const [N, AVATAR, STICKER, MODE = 'preview'] = positional
 if (!N || !AVATAR || !STICKER) {
-  console.error('用法: node scripts/stage-art.mjs <N> <avatarId> <stickerId> [commit]')
+  console.error('用法: node scripts/stage-art.mjs <N> <avatarId> <stickerId> [commit] [--heal-map x,y,w,h] [--map-crop x,y,w]')
   process.exit(1)
 }
-const healArg = process.argv.find((a) => a.startsWith('--heal-map'))
-const heal = healArg ? process.argv[process.argv.indexOf(healArg) + 1].split(',').map(Number) : null
+const heal = flagVal('--heal-map')
+const mapCrop = flagVal('--map-crop')
 
 const SRC = path.resolve('_art_src', `stage${N}`)
 const PUB = path.resolve('public')
@@ -69,8 +78,19 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
 
 // ---- map:檢查/補浮水印 → 1328×800 → webp ------------------------------------
 {
-  const im = load(path.join(SRC, 'map.png'))
+  let im = load(path.join(SRC, 'map.png'))
   if (heal) healFromBelow(im, heal[0], heal[1], heal[2], heal[3], heal[4] ?? heal[3] + 8)
+  if (mapCrop) {
+    // 裁出 x,y 起、寬 w、高 w×800/1328 的區塊(超出原圖就夾回邊界)
+    const w = Math.min(mapCrop[2], im.width)
+    const h = Math.min(Math.round((w * 800) / 1328), im.height)
+    const x0 = Math.max(0, Math.min(mapCrop[0], im.width - w))
+    const y0 = Math.max(0, Math.min(mapCrop[1], im.height - h))
+    const data = new Uint8Array(w * h * 4)
+    for (let y = 0; y < h; y++) data.set(im.data.subarray(((y0 + y) * im.width + x0) * 4, ((y0 + y) * im.width + x0 + w) * 4), y * w * 4)
+    console.log(`map   裁切 x=${x0} y=${y0} ${w}x${h}`)
+    im = { data, width: w, height: h }
+  }
   writePng(tmp, im)
   const master = dst(`maps/stage${N}.png`)
   scaleTo(tmp, master, 1328, 800, 'cover')

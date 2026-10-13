@@ -137,22 +137,22 @@ describe('bossChooseSpecial — 爆破出手時機', () => {
     for (const picks of [0, 3, 5])
       expect(bossChooseSpecial(bossState({ picks, foeHand: few }), 'p2', [...pool], undefined, { ...sig, rng: R(0.99) })).toEqual({ card: 'explode' })
   })
-  it('8-3:沒條件 → 10% 改用其他卡(照一般選卡,不會是爆破)、90% 這手不用卡', () => {
+  it('8-3:沒條件 → 12% 改用其他卡(照一般選卡,不會是爆破)、88% 這手不用卡', () => {
     const pool = ['swap', 'spy', 'refresh', 'explode'] as const
     for (const picks of [0, 5]) {
       const d = bossChooseSpecial(bossState({ picks }), 'p2', [...pool], undefined, { ...sig, rng: R(0.05) })
       expect(d).not.toBeNull() // 一般選卡挑到的(這裡可能是強迫更新或讓我看看)
       expect(d!.card).not.toBe('explode')
-      expect(bossChooseSpecial(bossState({ picks }), 'p2', [...pool], undefined, { ...sig, rng: R(0.1) })).toBeNull()
+      expect(bossChooseSpecial(bossState({ picks }), 'p2', [...pool], undefined, { ...sig, rng: R(0.12) })).toBeNull()
     }
   })
-  it('8-3:大量擲骰,沒條件時用其他卡的比例約 10%', () => {
+  it('8-3:大量擲骰,沒條件時用其他卡的比例約 12%', () => {
     let seed = 1
     const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
     let used = 0
     for (let i = 0; i < 4000; i++) if (bossChooseSpecial(bossState({}), 'p2', ['spy', 'explode'], undefined, { ...sig, rng })) used++
-    expect(used / 4000).toBeGreaterThan(0.08)
-    expect(used / 4000).toBeLessThan(0.12)
+    expect(used / 4000).toBeGreaterThan(0.1)
+    expect(used / 4000).toBeLessThan(0.14)
   })
   it('其他 boss / 快速配對人機:沒條件絕不用;有條件只小機率用', () => {
     expect(bossChooseSpecial(bossState({}), 'p2', ['explode'], undefined, { rng: R(0.01) })).toBeNull()

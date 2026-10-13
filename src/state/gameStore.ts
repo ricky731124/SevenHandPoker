@@ -146,6 +146,8 @@ function beginCasualBroadcast(
 
 /** 爆破「炸掉了 ♠K」提示停留時間(使用者:比一般 3 秒多 2 秒)。 */
 export const EXPLODE_NOTICE_MS = 5000
+/** 爆破動畫總長(ms)。AI 用完爆破後會等動畫播完才出下一手(Game.tsx),讓玩家看得清楚、有時間想。 */
+export const EXPLODE_FX_MS = 3400
 
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
 function playFrameSound(f: ReplayFrame | undefined): void {

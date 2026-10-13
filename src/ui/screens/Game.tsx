@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
-import { useGameStore } from '../../state/gameStore'
+import { EXPLODE_FX_MS, useGameStore } from '../../state/gameStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
@@ -380,6 +380,10 @@ export function GameBoard() {
           delay = rand(1500, 4000)
         }
       }
+      // 剛用了爆破 → 等爆破動畫播完(再多停一下)才出牌,玩家才看得清楚、來得及想(使用者 2026-10-14)
+      const fx = useGameStore.getState().explodeFx
+      const fxLeft = fx ? EXPLODE_FX_MS - (Date.now() - fx.n) : 0
+      if (fxLeft > 0) delay = Math.max(delay, fxLeft + 400)
       timer = setTimeout(() => {
         // The AI may spend its one-shot special before picking (#13). If it
         // does, the engine changes → this effect re-runs (now specialUsed) and
