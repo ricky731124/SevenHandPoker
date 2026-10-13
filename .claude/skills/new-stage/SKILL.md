@@ -103,6 +103,7 @@ C 類清單(照強迫更新的做法):
 
 ## 7. 收尾
 
+- **push 前一定跑 `npx tsc -b --force` + `npm run build`**:平常的 `tsc -b` 走增量快取,可能漏檢查新檔(第 7 關就因測試檔用了 `Array.prototype.at` 讓 CI build 失敗、部署沒上)。程式裡也別用 `.at()`(專案 lib 不含)。
 - 照 commit 規矩:使用者說 commit 才 commit;push 若遇到認證失敗(這個 shell 不能跳登入視窗),請使用者自己在終端機跑 `git push origin main`。
 - 使用者要調難度時再跑模擬(很花時間,不要每次都跑):
   `SIM=1 SIM_N=300 npx vitest run src/game/difficulty.sim.test.ts`(PowerShell:`$env:SIM='1'; npx vitest run src/game/difficulty.sim.test.ts`),會印出全部關卡三小關的單局勝率、玩家過關率、boss 用卡率。太難就調該關 `subStages(...)` 的執行力三段。
