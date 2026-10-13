@@ -50,6 +50,7 @@ export default function Hand({ cards, selected, sortMode, sortDir, interactive, 
           <motion.div
             key={c.id}
             className="hand__slot"
+            data-card-id={c.id} // 爆破動畫用:找被炸那張牌的位置
             style={{ left: i * overlap, zIndex: i }}
             initial={skipEnter ? false : { x: -320 - i * overlap * 0.25, y: -210, rotate: -22, opacity: 0, scale: 0.82 }}
             animate={{ x: 0, y: 0, rotate: 0, opacity: 1, scale: 1 }}

@@ -1,16 +1,19 @@
 import { create } from 'zustand'
-import type { Card } from '../game/cards'
+import { cardFaceText, type Card } from '../game/cards'
 import { evaluate } from '../game/evaluate'
 import { randomSeed } from '../game/rng'
 import { sortHand, type SortDir, type SortMode } from '../game/sort'
 import {
   applyDraw,
   applyPick,
+  applyExplode,
   applyPlace,
   applyRefresh,
   applySuit,
   applySwap,
+  canExplode,
   canRefresh,
+  removedCard,
   createGame,
   emptySlotsFor,
   markSpecialUsed,
@@ -141,6 +144,9 @@ function beginCasualBroadcast(
   if (foe.botId) void fetchBotRecord(foe.botId).then((r) => patchLivePlayerRecord(code, 'p2', r.wins, r.games))
 }
 
+/** 爆破「炸掉了 ♠K」提示停留時間(使用者:比一般 3 秒多 2 秒)。 */
+export const EXPLODE_NOTICE_MS = 5000
+
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
 function playFrameSound(f: ReplayFrame | undefined): void {
   switch (f?.sound) {
@@ -155,8 +161,8 @@ function playFrameSound(f: ReplayFrame | undefined): void {
   }
   // 強迫更新那一步 → 回放也播重抽動畫(拖拉/上一步不呼叫這裡,所以不會亂播)
   if (f?.refreshTarget) useGameStore.setState({ refreshFx: { target: f.refreshTarget, n: Date.now() } })
+  if (f?.explode) useGameStore.setState({ explodeFx: { ...f.explode, n: Date.now() } })
 }
-
 /** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
  *  + localStorage marker (close-reconcile). No-op for online / undealt / ended. */
 function persistLocalMatch(s: GameStore): void {
@@ -244,8 +250,8 @@ export interface OnlineInfo {
   /** signal "I've confirmed my pre-match loadout" (special-room B barrier) */
   sendReady: () => void
   /** host → guest: a foe-facing special-card notice to toast (guest = no-op) */
-  /** card:對手那端要額外演出的卡(目前只有 refresh → guest 播重抽動畫) */
-  sendFx: (msg: string, card?: SpecialCardId) => void
+  /** fx:對手那端要額外演出的卡(refresh 重抽 / explode 爆炸),target = 被打的是誰,victim = 被炸的牌 */
+  sendFx: (msg: string, fx?: { card: SpecialCardId; target: PlayerId; victim?: Card; index?: number }) => void
   /** write the shared pause state (both sides read it back) */
   sendPause: (p: PauseState) => void
   /** broadcast a sticker (貼圖) to the opponent — cosmetic, off the engine */
@@ -310,6 +316,9 @@ interface GameStore {
   /** 強迫更新動畫觸發器:誰的手牌被重抽(target)+ n 去重。RefreshFx 看到新的 n 就播一次
    *  「舊牌飛回牌堆→洗牌→新牌發回」。單機/host/guest/觀戰各自在收到效果時設。 */
   refreshFx: { target: PlayerId; n: number } | null
+  /** 爆破動畫觸發器:炸了誰(target)的哪張(card,不知道時 undefined → 用牌背演)+ n 去重。
+   *  index = 那張牌在被炸前手牌陣列的第幾張(對手手牌是牌背、找不到 id 時用來定位)。 */
+  explodeFx: { target: PlayerId; card?: Card; index?: number; n: number } | null
 
   // UI
   selected: string[]
@@ -512,7 +521,8 @@ interface GameStore {
   /** #8:切換「觀眾彈幕」開關。 */
   toggleSpectatorDanmaku: () => void
   /** briefly show a message in the center status area (5s), then revert */
-  flashStatus: (msg: string) => void
+  /** 狀態列短暫提示;ms 預設 3 秒(爆破的「炸掉了 ♠K」用 EXPLODE_NOTICE_MS 多停一下) */
+  flashStatus: (msg: string, ms?: number) => void
   /** guest: show a peek/spy result pushed from the host's private info channel */
   showSpecialInfo: (info: SpecialInfo) => void
   openSpecialTray: () => void
@@ -555,6 +565,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   spectateWatchers: 0,
   specFx: null,
   refreshFx: null,
+  explodeFx: null,
 
   selected: [],
   confirm: null,
@@ -710,7 +721,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (get().status === 'playing' && get().engine) return
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
+    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
     sfx.deal() // 開局發牌
     persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
     const foe = get().casualFoe
@@ -722,7 +733,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _bcast?.stop() // §5.4 leaving → tear down the Live/spectate nodes (unless已 ended,則留 24h)
     _bcast = null
     clearLocalMatch() // §3.7 leaving → drop the local snapshot/marker
-    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
+    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, explodeFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
   },
 
   applySpectate: (engine, info, live) => {
@@ -1399,11 +1410,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setLoadoutReady: () => set({ loadoutReady: true, loadoutWaiting: false }),
 
-  flashStatus: (msg) => {
+  flashStatus: (msg, ms = 3000) => {
     set({ statusOverride: msg })
     setTimeout(() => {
       if (get().statusOverride === msg) set({ statusOverride: null })
-    }, 3000)
+    }, ms)
   },
 
   applyPause: (p) => set({ onlinePause: p }),
@@ -1500,7 +1511,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pushCasualExtras()
       persistLocalMatch(get())
       get().flashStatus(`你已使用了「${def.name}」`)
-      if (online?.role === 'host') online.sendFx(`對手對你使用了「${def.name}」，你的手牌已重抽`, id)
+      if (online?.role === 'host') online.sendFx(`對手對你使用了「${def.name}」，你的手牌已重抽`, { card: id, target: foe })
+    } else if (id === 'explode') {
+      // 爆破:隨機炸掉對手一張(開局空白/鬼牌除外)。guest 看不到對手是哪些牌 → 交給 host 判,
+      // host 回 fx 告訴 guest 炸到哪張(雙方都看得到炸掉的牌,使用者定案)。
+      if (online?.role !== 'guest' && !canExplode(engine, me)) {
+        sfx.error()
+        useToastStore.getState().show('對手沒有可以炸的牌')
+        return
+      }
+      sfx.special()
+      set({ specialTrayOpen: false })
+      if (online?.role === 'guest') {
+        online.send({ type: 'special', card: id })
+        get().flashStatus(`你已使用了「${def.name}」`)
+        return
+      }
+      const foe = otherPlayer(me)
+      const rec = recordingRng() // §6:炸哪張是隨機的 → 錄下來,回放照吐即重現
+      const next = applyExplode(engine, me, rec.rng)
+      const gone = removedCard(engine.hands[foe], next.hands[foe])
+      const n = Date.now()
+      get().recordMove({ t: 'special', by: me, card: id, rng: rec.out })
+      const index = gone ? engine.hands[foe].findIndex((c) => c.id === gone.id) : undefined
+      set({ engine: next, specFx: { by: me, card: id, n }, explodeFx: { target: foe, card: gone, index, n } })
+      _bcast?.onEngine(next)
+      pushCasualExtras()
+      persistLocalMatch(get())
+      get().flashStatus(`你用「${def.name}」炸掉了對手的 ${cardFaceText(gone)}`, EXPLODE_NOTICE_MS)
+      if (online?.role === 'host') online.sendFx(`對手用「${def.name}」炸掉了你的 ${cardFaceText(gone)}`, { card: id, target: foe, victim: gone, index })
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
       // back on the private info channel (netgame → showSpecialInfo).
@@ -1583,10 +1622,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!decision) return false
     const def = getSpecialCard(decision.card)
     let next: GameState
-    const rec = decision.card === 'swap' || decision.card === 'refresh' ? recordingRng() : null // §6:有隨機的才錄 rng
+    const randomCard = decision.card === 'swap' || decision.card === 'refresh' || decision.card === 'explode'
+    const rec = randomCard ? recordingRng() : null // §6:有隨機的才錄 rng
     if (def?.suit && decision.targetId) next = applySuit(engine, ai, decision.targetId, def.suit)
     else if (decision.card === 'swap' && decision.targetId) next = applySwap(engine, ai, decision.targetId, rec!.rng)
     else if (decision.card === 'refresh') next = applyRefresh(engine, ai, rec!.rng)
+    else if (decision.card === 'explode') next = applyExplode(engine, ai, rec!.rng)
     else next = markSpecialUsed(engine, ai) // peek / spy: no board change, just the one-shot
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
     sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
@@ -1598,22 +1639,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // §特殊牌:記通知 + 鏡射給觀戰(bot 換牌也要即時更新,否則觀戰看到的牌對不上)。
     const n = Date.now()
     const refreshed = decision.card === 'refresh'
+    const victim = decision.card === 'explode' ? removedCard(engine.hands[otherPlayer(ai)], next.hands[otherPlayer(ai)]) : undefined
     set({
       engine: next,
       specFx: { by: ai, card: decision.card, n },
       // 強迫更新打的是我 → 播重抽動畫;我手上舊牌的選取全部作廢
       ...(refreshed ? { refreshFx: { target: otherPlayer(ai), n }, selected: [] } : {}),
+      // 爆破打的是我 → 播爆炸動畫;被炸的那張若在我的選取裡要拿掉
+      ...(decision.card === 'explode'
+        ? { explodeFx: { target: otherPlayer(ai), card: victim, index: victim ? engine.hands[otherPlayer(ai)].findIndex((c) => c.id === victim.id) : undefined, n }, selected: get().selected.filter((id) => id !== victim?.id) }
+        : {}),
     })
     _bcast?.onEngine(next)
     pushCasualExtras()
     persistLocalMatch(get())
-    // Visibility (SPEC §15): spy / refresh affect me (I'm told); others → a generic notice.
+    // Visibility (SPEC §15): spy / refresh / explode affect me (I'm told); others → a generic notice.
     get().flashStatus(
       decision.card === 'spy'
         ? '對手正在查看你的手牌'
         : refreshed
           ? `對手對你使用了「${def?.name ?? '強迫更新'}」，你的手牌已重抽`
-          : '對方似乎使用了特殊牌',
+          : decision.card === 'explode'
+            ? `對手用「${def?.name ?? '爆破'}」炸掉了你的 ${cardFaceText(victim)}`
+            : '對方似乎使用了特殊牌',
+      decision.card === 'explode' ? EXPLODE_NOTICE_MS : undefined,
     )
     return true
   },

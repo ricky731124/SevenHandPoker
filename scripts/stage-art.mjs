@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import ffmpeg from 'ffmpeg-static'
-import { load, writePng, dechroma, keyFlood, removeCornerMark, healFromBelow, scanWM, bleed } from './imglib.mjs'
+import { load, writePng, keyFlood, removeCornerMark, healFromBelow, scanWM, bleed } from './imglib.mjs'
 
 const [N, AVATAR, STICKER, MODE = 'preview'] = process.argv.slice(2).filter((a) => !a.startsWith('--'))
 if (!N || !AVATAR || !STICKER) {
@@ -56,14 +56,15 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
 {
   const im = load(path.join(SRC, 'boss.png'))
   const marks = removeCornerMark(im)
-  const keyed = dechroma(im)
+  // 從四邊+同色口袋 flood 去背(會連外圈淡綠光暈一起去掉;全圖 dechroma 會留一圈淡綠,第 8 關踩過)
+  const keyed = keyFlood(im) + '%'
   bleed(im) // 透明像素補上鄰近顏色,縮圖時邊緣才不會滲綠
   writePng(tmp, im)
   const master = dst(`${AVATAR}.png`)
   scaleTo(tmp, master, 1150, 912, 'cover')
   const av = dst(`avatars/${AVATAR}.webp`)
   webp(master, av, { maxSide: 512, quality: 82, alpha: true })
-  console.log(`boss  ${im.width}x${im.height} 浮水印${marks.length}處 ${JSON.stringify(marks)} 去背${keyed}px → ${kb(master)} / webp ${kb(av)}`)
+  console.log(`boss  ${im.width}x${im.height} 浮水印${marks.length}處 ${JSON.stringify(marks)} 去背${keyed} → ${kb(master)} / webp ${kb(av)}`)
 }
 
 // ---- map:檢查/補浮水印 → 1328×800 → webp ------------------------------------

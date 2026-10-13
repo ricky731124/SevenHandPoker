@@ -55,7 +55,7 @@ node scripts/build-img.mjs                                       # 註冊頭像�
 ```
 
 - avatarId 用英文小寫(如 `shiba`);stickerId = `stickers.ts` 最後一張 +1。
-- 會自動:去綠背、偵測右下浮水印塗回綠再去背、貼圖連白色割線邊一起去並清碎點、透明邊補色防縮圖滲綠、boss 1150×912、地圖 1328×800 + webp、貼圖 512×512。
+- 會自動:去綠背(從四邊+跟背景同色的口袋 flood,含外圈淡綠光暈)、偵測右下浮水印塗回綠再去背、貼圖連白色割線邊一起去並清碎點、透明邊補色防縮圖滲綠、boss 1150×912、地圖 1328×800 + webp、貼圖 512×512。
 - **一定要目視檢查**:把預覽疊到紫底再看(檢視器會把透明區顯示成綠色,看不出去背成果):
   `ffmpeg -f lavfi -i color=c=0x6a2c8c:s=1150x1024 -i <png> -filter_complex "[0][1]overlay=0:0:shortest=1" -frames:v 1 out.png`(ffmpeg 用 `node -e "console.log(require('ffmpeg-static'))"` 拿路徑)。
 - 地圖的浮水印不在綠底上,看輸出的 `浮水印掃描` 和右下角裁圖判斷;有的話加 `--heal-map x,y,w,h`。
@@ -89,6 +89,14 @@ C 類清單(照強迫更新的做法):
 8. `SpecialCard.tsx`:畫卡圖(SVG,0..100×118 畫布)。
 9. 動畫元件掛在 `Game.tsx` 的 `.game` 裡(參考 `RefreshFx.tsx`)。
 10. `bots.ts`:挑幾隻人機門面牌組加這張(快配人機實際用卡 = 玩家已解鎖池隨機 3 張,自動)。
+11. `difficulty.sim.test.ts` 的 `bossSpecial` 加這張卡的套用分支(不然模擬裡 boss 用了也沒效果)。
+
+C 類的經驗(第 8 關爆破):
+- 「打對手、對方看得到結果」的卡:guest 看不到對手手牌 → guest 只送 intent,由 host 判定+算結果,再用 `sendFx(msg, { card, target, victim })` 回報;guest 的 fx 處理依 `target` 決定動畫播在哪一方。
+- 被拿掉/換掉的牌用 `removedCard(before, after)` 比對出來(提示文字用 `cardFaceText`);觀戰端用前後兩個快照比對。
+- 「預設型」空白/鬼牌用 `isStarterSpecial`(看 id),不要用 `isSpecial`(看 kind)——未來模式會有非預設的鬼牌/空白。
+- boss 時機若是「本尊前幾手只等這張」,這段判斷要放在 `bossChooseSpecial` 其他卡判斷**之前**,而且一定要有時間上限(到第幾手就回到一般選卡),否則條件一直不成立 boss 就永遠不用卡。
+- framer-motion 的 keyframes:每個屬性的陣列長度要和 `times` 一樣,`times` 最後一個要是 1。
 
 ## 6. 自測(交付前自己做足,不要叫使用者測)
 

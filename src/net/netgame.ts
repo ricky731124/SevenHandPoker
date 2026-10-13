@@ -20,12 +20,23 @@ import {
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
 import { usePlatformStore } from '../state/platformStore'
-import { useGameStore, specExtrasOf, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
+import { useGameStore, specExtrasOf, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
 import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
 import { fetchCard } from '../platform/cards'
-import { applyRefresh, applySuit, applySwap, canRefresh, markSpecialUsed, peekNextDraw } from '../game/state'
+import {
+  applyExplode,
+  applyRefresh,
+  applySuit,
+  applySwap,
+  canExplode,
+  canRefresh,
+  markSpecialUsed,
+  peekNextDraw,
+  removedCard,
+} from '../game/state'
+import { cardFaceText } from '../game/cards'
 import { recordingRng } from '../game/replay'
 import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
@@ -134,8 +145,15 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     sendLive: makeThrottledLive(code, 'host'),
     sendRematch: () => void dbSet(rematchRef(code, 'host'), true),
     sendReady: () => void dbSet(readyRef(code, 'host'), true),
-    // card 只在有值時才寫(RTDB set() 不收 undefined 欄位)
-    sendFx: (msg: string, card?: SpecialCardId) => void dbSet(fxRef(code), card ? { msg, card, id: Date.now() } : { msg, id: Date.now() }),
+    // fx 欄位只在有值時才寫(RTDB set() 不收 undefined 欄位)
+    sendFx: (msg: string, fx?: { card: SpecialCardId; target: 'p1' | 'p2'; victim?: Card; index?: number }) =>
+      void dbSet(fxRef(code), {
+        msg,
+        id: Date.now(),
+        ...(fx ? { card: fx.card, target: fx.target } : {}),
+        ...(fx?.victim ? { victim: cleanCards([fx.victim])[0] } : {}),
+        ...(fx?.index !== undefined && fx.index >= 0 ? { index: fx.index } : {}),
+      }),
     sendPause: (p: PauseState) => void dbSet(pauseRef(code), p),
     sendEmote: (e: EmoteMsg) => void dbSet(emoteRef(code), e),
     teardown: teardownFor(code, 'host'),
@@ -275,6 +293,34 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n }, refreshFx: { target: 'p1', n }, selected: [] })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', rng: rec.out })
         useGameStore.getState().flashStatus(`對手對你使用了「${def.name}」，你的手牌已重抽`)
+      } else if (intent.card === 'explode') {
+        // 爆破:guest 炸 host(我)一張。guest 看不到我的牌 → 由我判能不能用、炸到哪張,再回 fx 告訴 guest。
+        if (!canExplode(e, 'p2')) {
+          void dbSet(fxRef(code), { msg: '對手沒有可以炸的牌', id: Date.now() })
+          return
+        }
+        const rec = recordingRng()
+        const next = applyExplode(e, 'p2', rec.rng)
+        const gone = removedCard(e.hands.p1, next.hands.p1)
+        const index = gone ? e.hands.p1.findIndex((c) => c.id === gone.id) : -1
+        const n = Date.now()
+        const g = useGameStore.getState()
+        useGameStore.setState({
+          engine: next,
+          specFx: { by: 'p2', card: 'explode', n },
+          explodeFx: { target: 'p1', card: gone, index, n },
+          selected: g.selected.filter((id) => id !== gone?.id),
+        })
+        g.recordMove({ t: 'special', by: 'p2', card: 'explode', rng: rec.out })
+        const face = cardFaceText(gone)
+        g.flashStatus(`對手用「${def.name}」炸掉了你的 ${face}`, EXPLODE_NOTICE_MS)
+        void dbSet(fxRef(code), {
+          msg: `你用「${def.name}」炸掉了對手的 ${face}`,
+          id: n,
+          card: 'explode',
+          target: 'p1',
+          ...(gone ? { victim: cleanCards([gone])[0], index } : {}),
+        })
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
         const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
@@ -422,10 +468,20 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       fxInit = false
       return
     }
-    const fx = snap.val() as { msg?: string; card?: SpecialCardId; id?: number } | null
-    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg)
+    const fx = snap.val() as { msg?: string; card?: SpecialCardId; target?: 'p1' | 'p2'; victim?: Card; index?: number; id?: number } | null
+    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, fx.card === 'explode' ? EXPLODE_NOTICE_MS : undefined)
+    const n = fx?.id ?? Date.now()
     // host 對我(guest)用了強迫更新 → 播重抽動畫(新手牌由 guest-view 同步過來)
-    if (fx?.card === 'refresh') useGameStore.setState({ refreshFx: { target: 'p2', n: fx.id ?? Date.now() }, selected: [] })
+    if (fx?.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.target ?? 'p2', n }, selected: [] })
+    // 爆破:host 炸我(target p2)或我炸 host(target p1,host 回報炸到哪張)→ 播爆炸動畫
+    if (fx?.card === 'explode') {
+      const target = fx.target ?? 'p2'
+      const g = useGameStore.getState()
+      useGameStore.setState({
+        explodeFx: { target, card: fx.victim, index: fx.index, n },
+        ...(target === 'p2' ? { selected: g.selected.filter((id) => id !== fx.victim?.id) } : {}),
+      })
+    }
   })
   // host → guest private peek/spy result.
   let infoInit = true

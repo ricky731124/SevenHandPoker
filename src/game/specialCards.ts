@@ -13,7 +13,7 @@
 
 import type { Suit } from './cards'
 
-export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh'
+export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh' | 'explode'
 
 export interface SpecialCardDef {
   id: SpecialCardId
@@ -108,6 +108,15 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#6b3fa0',
+  },
+  explode: {
+    id: 'explode',
+    name: '爆破',
+    short: '炸掉對手一張手牌',
+    desc: '隨機炸掉對手一張手牌（開局的空白牌、鬼牌除外），被炸的牌直接消失。',
+    affectsFoe: true,
+    needsTarget: false,
+    accent: '#d9480f',
   },
 }
 

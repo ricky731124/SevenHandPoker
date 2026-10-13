@@ -1,12 +1,14 @@
 import {
   applyDraw,
   applyPick,
+  applyExplode,
   applyPlace,
   applyRefresh,
   applySuit,
   applySwap,
   createGame,
   markSpecialUsed,
+  removedCard,
   resolveShowdown,
   type GameState,
   type PlayerId,
@@ -28,6 +30,7 @@ import { getSpecialCard, type SpecialCardId } from './specialCards'
  *        兩個 Math.random 輸出,回放照吐一次 → 抽到的新牌、牌堆順序完全重現,決定性)。
  *      · 花色類(踏雪尋梅/正中紅心…)是決定性的,只需 `targetId`(把哪張改花色),不需 `rng`。
  *      · 強迫更新(refresh)把對手手牌洗回牌堆重抽 → 只記 `rng`(一個值 = 重洗的種子),回放照吐即重現。
+ *      · 爆破(explode)隨機炸掉對手一張 → 只記 `rng`(一個值 = 炸哪張)。
  *      · 偷窺/讓我看看(peek/spy)不改任何牌面,只記「有這一步、用了什麼」→ 回放照樣顯示玩家用過。
  */
 export type Move =
@@ -80,6 +83,8 @@ export interface ReplayFrame {
   drawN?: number
   /** 強迫更新那一幀:被重抽的是誰 → 播放器前進到這幀時播重抽動畫。 */
   refreshTarget?: PlayerId
+  /** 爆破那一幀:炸了誰的哪張 → 播放器前進到這幀時播爆炸動畫。 */
+  explode?: { target: PlayerId; card?: Card }
   /** 回放在這幀之後套不下去(版本太舊)→ 這幀是提示幀,播放器要跳 toast 提示更新。 */
   outdated?: boolean
 }
@@ -165,6 +170,13 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
           g = applyRefresh(g, m.by, replayRng(m.rng))
           add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
           frames[frames.length - 1].refreshTarget = foe
+        } else if (m.card === 'explode') {
+          const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
+          const prev = g.hands[foe]
+          g = applyExplode(g, m.by, replayRng(m.rng))
+          const gone = removedCard(prev, g.hands[foe])
+          add(g, name(m.by), `使用「${def?.name ?? '爆破'}」:炸掉 ${name(foe)} 的 ${gone ? cardFace(gone) : '一張牌'}`, 'special')
+          frames[frames.length - 1].explode = { target: foe, card: gone }
         } else {
           // peek / spy:不改牌面,只記用過。
           g = markSpecialUsed(g, m.by)

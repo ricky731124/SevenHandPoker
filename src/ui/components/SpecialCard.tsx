@@ -41,6 +41,7 @@ export function SpecialCardArt({ id, color, uid }: { id: string; color: string; 
       {id === 'peek' && <PeekArt color={color} />}
       {id === 'spy' && <SpyArt color={color} />}
       {id === 'refresh' && <RefreshArt color={color} />}
+      {id === 'explode' && <ExplodeArt color={color} />}
       {SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS]?.suit && (
         <SuitBloomArt suit={SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS].suit!} color={color} />
       )}
@@ -138,6 +139,35 @@ function RefreshArt({ color }: { color: string }) {
       {/* "updating" bar */}
       <rect x="26" y="100" width="48" height="8" rx="4" fill="#fffdf5" stroke={color} strokeWidth="1.8" />
       <rect x="28" y="102" width="30" height="4" rx="2" fill={color} />
+    </g>
+  )
+}
+
+/** 爆破 — a lit bomb in front of a starburst, with a playing card blown to pieces. */
+function ExplodeArt({ color }: { color: string }) {
+  return (
+    <g>
+      {/* starburst */}
+      <path
+        d="M50 22 L57 42 L77 34 L66 52 L86 60 L65 66 L72 88 L53 74 L44 94 L40 72 L18 80 L30 62 L12 52 L33 46 L26 26 L44 40 Z"
+        fill="#ffd166"
+        stroke={color}
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      {/* card fragments flying off */}
+      <g stroke={color} strokeWidth="1.6" fill="#fffdf5">
+        <path d="M14 30 l10 -4 3 9 -10 4 z" transform="rotate(-18 19 32)" />
+        <path d="M80 24 l9 2 -2 10 -9 -2 z" transform="rotate(22 84 30)" />
+        <path d="M78 88 l10 1 -1 8 -10 -1 z" />
+      </g>
+      {/* bomb */}
+      <circle cx="47" cy="62" r="16" fill="#2b2b33" stroke="#fffdf5" strokeWidth="1.5" />
+      <ellipse cx="41" cy="56" rx="4.5" ry="3" fill="#fff" opacity="0.45" transform="rotate(-30 41 56)" />
+      <rect x="54" y="42" width="8" height="7" rx="1.5" fill="#55555f" transform="rotate(35 58 45)" />
+      {/* fuse + spark */}
+      <path d="M61 42 Q66 34 72 36" fill="none" stroke="#7a5230" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M72 36 l2 -5 1.5 5 5 1.5 -5 1.5 -1.5 5 -2 -5 -5 -1.5 z" fill="#ff7b00" stroke="#fff3c4" strokeWidth="0.8" />
     </g>
   )
 }

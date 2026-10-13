@@ -1,5 +1,5 @@
 import type { Card, Suit } from './cards'
-import { isSpecial, makeBlank, makeDeck, makeJoker } from './cards'
+import { isSpecial, isStarterSpecial, makeBlank, makeDeck, makeJoker } from './cards'
 import { compareValue, evaluate } from './evaluate'
 import { mulberry32, shuffle } from './rng'
 
@@ -409,6 +409,40 @@ export function applyRefresh(state: GameState, player: PlayerId, rng: () => numb
     hands: { ...state.hands, [foe]: [...drawn, ...keep] },
     specialUsed: { ...state.specialUsed, [player]: true },
   }
+}
+
+/** 爆破可以炸的牌:對手手上除了開局給的空白/鬼牌以外的牌。 */
+export function explodeTargets(state: GameState, player: PlayerId): Card[] {
+  return state.hands[otherPlayer(player)].filter((c) => !isStarterSpecial(c))
+}
+
+export function canExplode(state: GameState, player: PlayerId): boolean {
+  return explodeTargets(state, player).length > 0
+}
+
+/**
+ * 爆破 (explode): blow up ONE random card in the foe's hand (never their starter
+ * blank/joker). The card leaves the game for good — not back into the deck, not
+ * onto the board — so later effects that pull from the deck or the played piles
+ * can never bring it back. One rng() call → which target, so a replay records one
+ * number.
+ */
+export function applyExplode(state: GameState, player: PlayerId, rng: () => number = Math.random): GameState {
+  const targets = explodeTargets(state, player)
+  if (!targets.length) return state
+  const victim = targets[Math.min(targets.length - 1, Math.floor(rng() * targets.length))]
+  const foe = otherPlayer(player)
+  return {
+    ...state,
+    hands: { ...state.hands, [foe]: state.hands[foe].filter((c) => c.id !== victim.id) },
+    specialUsed: { ...state.specialUsed, [player]: true },
+  }
+}
+
+/** 前後兩個手牌比對,找出被拿掉的那張(爆破後用來顯示「炸掉了 ♠K」)。 */
+export function removedCard(before: Card[], after: Card[]): Card | undefined {
+  const left = new Set(after.map((c) => c.id))
+  return before.find((c) => !left.has(c.id))
 }
 
 /** 被花色卡改過的牌 → 變回原花色(不留 undefined 欄位,RTDB set() 才不會出錯)。 */

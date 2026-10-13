@@ -239,6 +239,24 @@ export const CAMPAIGN: CampaignStage[] = [
     subStages: subStages('s7', 7, 'refresh', 'shiba'),
     nodePositions: NODE_POS,
   },
+  {
+    id: 's8',
+    index: 8,
+    name: '沒事就小啄一下',
+    bossAvatar: 'woodpecker', // 啄木鳥(woodpecker.png)
+    bossName: '啄木鳥',
+    signatureCard: 'explode', // 爆破
+    // 爆破狂:幾乎全押強攻、愛拼牌,中後期看你手牌變少或快贏了就炸你一張。
+    profile: {
+      pickMain: { attack: 90, hoard: 0, balance: 10 },
+      bluff: 10,
+      draw: 60,
+      jokerTiming: 40,
+      insight: 50,
+    },
+    subStages: subStages('s8', 8, 'explode', 'woodpecker'),
+    nodePositions: NODE_POS,
+  },
 ]
 
 // ---- lookups -------------------------------------------------------------

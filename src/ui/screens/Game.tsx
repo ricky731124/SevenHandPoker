@@ -20,6 +20,7 @@ import Hand from '../components/game/Hand'
 import OpponentHand from '../components/game/OpponentHand'
 import SlotView from '../components/game/SlotView'
 import RefreshFx from '../components/game/RefreshFx'
+import ExplodeFx from '../components/game/ExplodeFx'
 import TopBar from '../components/game/TopBar'
 import CoinToss from '../components/game/CoinToss'
 import VsIntro from '../components/game/VsIntro'
@@ -733,6 +734,8 @@ export function GameBoard() {
 
       {/* 強迫更新:被打那一方手牌飛回牌堆→洗牌→發回(單機/連線/觀戰共用) */}
       <RefreshFx me={me} cardW={sz.card} />
+      {/* 爆破:炸彈飛到被炸那一方手牌 → 那張牌抖一抖爆掉 */}
+      <ExplodeFx me={me} cardW={sz.card} />
 
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on

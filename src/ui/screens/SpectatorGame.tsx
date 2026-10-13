@@ -4,7 +4,7 @@ import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import { joinSpectate, type LiveMeta } from '../../net/spectate'
 import type { SpecView } from '../../net/sync'
-import type { GameState } from '../../game/state'
+import { removedCard, type GameState } from '../../game/state'
 import { getSpecialCard } from '../../game/specialCards'
 import { useToastStore } from '../../state/toastStore'
 import { GameBoard } from './Game'
@@ -94,7 +94,7 @@ export default function SpectatorGame() {
     prevEngRef.current = null
     // §特殊牌:誰用了哪張 → 跳 toast。⚠️ 進場「第一張」spec 帶的 fx 是**進場前**就用過的
     //   (我第 6 手才進來、對手第 4 手用的)→ 只記 n、不 toast;之後 n 有變(進場後新用的)才 toast(#5)。
-    const toastFx = (view: SpecView | null) => {
+    const toastFx = (view: SpecView | null, eng: GameState | null) => {
       const fx = view?.fx
       if (!fxPrimed.current) {
         fxPrimed.current = true
@@ -110,10 +110,17 @@ export default function SpectatorGame() {
       useToastStore.getState().show(`${byName} 使用了「${cardName}」`)
       // 強迫更新 → 觀戰也播被打那一方的重抽動畫
       if (fx.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.by === 'p1' ? 'p2' : 'p1', n: fx.n } })
+      // 爆破 → 觀戰播被炸那一方的爆炸動畫;炸到哪張用前後兩個快照的手牌比對出來
+      if (fx.card === 'explode') {
+        const target = fx.by === 'p1' ? 'p2' : 'p1'
+        const prev = prevEngRef.current
+        const card = prev && eng ? removedCard(prev.hands[target], eng.hands[target]) : undefined
+        useGameStore.setState({ explodeFx: { target, card, n: fx.n } })
+      }
     }
     const h = joinSpectate(code, {
       onSpec: (eng, view) => {
-        toastFx(view)
+        toastFx(view, eng)
         if (!eng) return
         // §10 音效:比對前後快照補回音效(下方 p1 角度);首張只記、不發聲(不補播進場前的)。
         if (prevEngRef.current) spectateSound(prevEngRef.current, eng)

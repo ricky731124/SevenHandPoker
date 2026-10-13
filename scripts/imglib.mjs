@@ -64,6 +64,19 @@ export function dechroma(img) {
   return keyed
 }
 
+/** 四個角落各 12×12 的平均色 = 綠幕背景色。 */
+function cornerColor(img) {
+  const { data, width, height } = img
+  let r = 0, g = 0, b = 0, n = 0
+  for (const [cx, cy] of [[0, 0], [width - 12, 0], [0, height - 12], [width - 12, height - 12]])
+    for (let y = cy; y < cy + 12; y++)
+      for (let x = cx; x < cx + 12; x++) {
+        const i = (y * width + x) * 4
+        r += data[i]; g += data[i + 1]; b += data[i + 2]; n++
+      }
+  return [r / n, g / n, b / n]
+}
+
 /** 貼圖去背:從四邊往內 flood-fill「綠(+白色割線邊)」,只刪跟背景連通的,圖內白色保留。
  *  回傳刪除百分比。 */
 export function keyFlood(img, { white = false } = {}) {
@@ -72,7 +85,9 @@ export function keyFlood(img, { white = false } = {}) {
   const bg = new Uint8Array(N)
   const isBg = (idx) => {
     const r = data[idx * 4], g = data[idx * 4 + 1], b = data[idx * 4 + 2]
-    return isGreenPx(r, g, b) || (white && isWhitePx(r, g, b))
+    // 第三項 = AI 圖常見的「淡綠光暈」(偏亮、微綠,例 152/175/132);深色描邊(偏暗)不算,不會被吃掉
+    const paleGreenHalo = g - Math.max(r, b) > 15 && r + g + b > 350
+    return isGreenPx(r, g, b) || paleGreenHalo || (white && isWhitePx(r, g, b))
   }
   const stack = []
   const push = (x, y) => {
@@ -84,6 +99,13 @@ export function keyFlood(img, { white = false } = {}) {
   }
   for (let x = 0; x < width; x++) { push(x, 0); push(x, height - 1) }
   for (let y = 0; y < height; y++) { push(0, y); push(width - 1, y) }
+  // 被主體圍起來的綠色口袋(例:槍和身體之間)碰不到四邊 → 跟背景同色的像素也當起點,
+  // 連帶把口袋邊緣那圈淡綠一起吃掉。只認「跟四角背景色很接近」的,主體裡的綠色(青蛙之類)不受影響。
+  const bgc = cornerColor(img)
+  for (let i = 0; i < N; i++) {
+    const d = Math.abs(data[i * 4] - bgc[0]) + Math.abs(data[i * 4 + 1] - bgc[1]) + Math.abs(data[i * 4 + 2] - bgc[2])
+    if (d < 40) push(i % width, (i - (i % width)) / width)
+  }
   while (stack.length) {
     const idx = stack.pop()
     const x = idx % width, y = (idx - x) / width

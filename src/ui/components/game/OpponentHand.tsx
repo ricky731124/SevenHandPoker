@@ -40,6 +40,9 @@ export default function OpponentHand({
         <motion.div
           key={cards ? cards[i].id : i}
           className="ohand__slot"
+          // 爆破動畫用:觀戰全開時用牌 id 找位置;牌背時用第幾張(data-idx)
+          data-card-id={cards ? cards[i].id : undefined}
+          data-idx={i}
           style={{ left: i * overlap, zIndex: sel.has(i) ? 200 + i : i }}
           initial={skipEnter ? false : { x: -260, y: -30, opacity: 0, rotate: -12 }}
           animate={{ x: 0, y: sel.has(i) ? lift : 0, opacity: 1, rotate: 0 }}

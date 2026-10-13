@@ -39,6 +39,18 @@ export function makeJoker(owner: string): Card {
   return { id: `JOKER_${owner}`, suit: 'S', rank: 14, kind: 'joker' }
 }
 
+/** 開局發給玩家的那張空白/鬼牌(看 id,不看 kind)。之後若有模式把一般牌換成鬼牌/空白,
+ *  那些牌 kind 也是 joker/blank,但不是「預設型」——爆破這類效果要能打到它們,所以用 id 判斷。 */
+export const isStarterSpecial = (c: Card): boolean => /^(BLANK|JOKER)_p[12]$/.test(c.id)
+
+/** 提示用的牌面文字:「♠K」「鬼牌」「空白牌」;沒有牌 → 「一張牌」。 */
+export function cardFaceText(c: Card | undefined): string {
+  if (!c) return '一張牌'
+  if (c.kind === 'joker') return '鬼牌'
+  if (c.kind === 'blank') return '空白牌'
+  return `${SUIT_SYMBOL[c.suit]}${rankLabel(c.rank)}`
+}
+
 /** Suit precedence for the final tiebreak (higher index = stronger). */
 export const SUIT_ORDER: Record<Suit, number> = { C: 0, D: 1, H: 2, S: 3 }
 
