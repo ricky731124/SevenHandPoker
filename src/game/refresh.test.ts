@@ -125,7 +125,7 @@ describe('回放 — 舊版看新版場次不會整場打不開', () => {
       { t: 'pick', by: 'p2', ids: ['NOT_A_CARD'] },
     ]
     const frames = buildFrames({ seed, firstPicker: 'p1', moves })
-    expect(frames.at(-1)!.outdated).toBe(true)
+    expect(frames[frames.length - 1].outdated).toBe(true)
     expect(frames.filter((f) => f.outdated)).toHaveLength(1)
     expect(frames.length).toBeGreaterThan(3) // 前面正常的幀都還在
   })
