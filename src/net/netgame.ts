@@ -20,18 +20,21 @@ import {
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
 import { usePlatformStore } from '../state/platformStore'
-import { useGameStore, specExtrasOf, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
+import { useGameStore, specExtrasOf, DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
 import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
 import { fetchCard } from '../platform/cards'
 import {
+  applyDeathEye,
   applyExplode,
   applyRefresh,
   applySuit,
   applySwap,
+  canDeathEye,
   canExplode,
   canRefresh,
+  deathEyeSlots,
   markSpecialUsed,
   peekNextDraw,
   removedCard,
@@ -146,13 +149,14 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     sendRematch: () => void dbSet(rematchRef(code, 'host'), true),
     sendReady: () => void dbSet(readyRef(code, 'host'), true),
     // fx 欄位只在有值時才寫(RTDB set() 不收 undefined 欄位)
-    sendFx: (msg: string, fx?: { card: SpecialCardId; target: 'p1' | 'p2'; victim?: Card; index?: number }) =>
+    sendFx: (msg: string, fx?: { card: SpecialCardId; target: 'p1' | 'p2'; victim?: Card; index?: number; slots?: number[] }) =>
       void dbSet(fxRef(code), {
         msg,
         id: Date.now(),
         ...(fx ? { card: fx.card, target: fx.target } : {}),
         ...(fx?.victim ? { victim: cleanCards([fx.victim])[0] } : {}),
         ...(fx?.index !== undefined && fx.index >= 0 ? { index: fx.index } : {}),
+        ...(fx?.slots?.length ? { slots: fx.slots } : {}),
       }),
     sendPause: (p: PauseState) => void dbSet(pauseRef(code), p),
     sendEmote: (e: EmoteMsg) => void dbSet(emoteRef(code), e),
@@ -321,6 +325,18 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           target: 'p1',
           ...(gone ? { victim: cleanCards([gone])[0], index } : {}),
         })
+      } else if (intent.card === 'deathEye') {
+        // 死神之眼:guest 透視 host(我)決鬥區的牌堆。guest 本機已先播動畫;翻開的真牌靠 guest-view 同步。
+        if (!canDeathEye(e, 'p2')) {
+          void dbSet(fxRef(code), { msg: '對手決鬥區沒有可以透視的牌', id: Date.now() })
+          return
+        }
+        const slots = deathEyeSlots(e, 'p2')
+        const next = applyDeathEye(e, 'p2')
+        const n = Date.now()
+        useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'deathEye', n }, deathEyeFx: { target: 'p1', slots, n } })
+        useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'deathEye' })
+        useGameStore.getState().flashStatus(DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS)
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
         const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
@@ -468,9 +484,12 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       fxInit = false
       return
     }
-    const fx = snap.val() as { msg?: string; card?: SpecialCardId; target?: 'p1' | 'p2'; victim?: Card; index?: number; id?: number } | null
-    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, fx.card === 'explode' ? EXPLODE_NOTICE_MS : undefined)
+    const fx = snap.val() as { msg?: string; card?: SpecialCardId; target?: 'p1' | 'p2'; victim?: Card; index?: number; slots?: number[]; id?: number } | null
+    const longNotice = fx?.card === 'explode' || fx?.card === 'deathEye'
+    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, longNotice ? EXPLODE_NOTICE_MS : undefined)
     const n = fx?.id ?? Date.now()
+    // host 對我(guest)用了死神之眼 → 播透視動畫(我那幾堆翻開;翻開狀態由 guest-view 同步過來)
+    if (fx?.card === 'deathEye') useGameStore.setState({ deathEyeFx: { target: fx.target ?? 'p2', slots: fx.slots ?? [], n } })
     // host 對我(guest)用了強迫更新 → 播重抽動畫(新手牌由 guest-view 同步過來)
     if (fx?.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.target ?? 'p2', n }, selected: [] })
     // 爆破:host 炸我(target p2)或我炸 host(target p1,host 回報炸到哪張)→ 播爆炸動畫

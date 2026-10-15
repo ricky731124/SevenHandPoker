@@ -27,6 +27,10 @@ interface Props {
   /** spectator (§4.3): reveal BOTH piles face-up regardless of `slot.owner`, and
    *  make both magnifiable. Never placeable. */
   revealAll?: boolean
+  /** 死神之眼:這格對手那堆被我翻開了(對決前保持正面、可放大鏡看)。 */
+  foeExposed?: boolean
+  /** 死神之眼:這格我自己那堆被對手翻開了(正面朝上,讓我知道被看光了)。 */
+  meExposed?: boolean
 }
 
 function Pile({
@@ -36,6 +40,7 @@ function Pile({
   onOpen,
   cardW,
   stackUp,
+  fxKey,
 }: {
   cards: TCard[]
   faceUp: boolean
@@ -44,6 +49,8 @@ function Pile({
   cardW: number
   /** stack the extra cards away from the central coin (top pile up, bottom down) */
   stackUp: boolean
+  /** 「格子-哪一方」(如 3-p2):死神之眼動畫用來找這堆牌的位置 */
+  fxKey?: string
 }) {
   const h = Math.round(cardW * 1.4)
   const skipEnter = useSkipEnterAnim() // 觀戰中途進場 → 不播飛入
@@ -54,6 +61,7 @@ function Pile({
   return (
     <div
       className={`pile${openable ? ' pile--openable' : ''}`}
+      data-pile={fxKey}
       onClick={openable ? onOpen : undefined}
       style={{ width: cardW, height: h }}
     >
@@ -75,13 +83,15 @@ function Pile({
   )
 }
 
-export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false, magnifyOnly, dropHint, revealAll = false }: Props) {
+export default function SlotView({ slot, index, me, placeable, onPlace, onMagnify, cardW, coinSize, highlight = false, magnifyOnly, dropHint, revealAll = false, foeExposed = false, meExposed = false }: Props) {
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const opened = slot.owner !== null
   const faceUp = opened || revealAll // spectator: 兩邊暗牌都翻正
+  const topUp = faceUp || foeExposed
+  const bottomUp = faceUp || meExposed
   const topCards = slot[foe]
   const bottomCards = slot[me]
-  const foeMagnifiable = faceUp && topCards.length > 0 && (!magnifyOnly || magnifyOnly === foe)
+  const foeMagnifiable = topUp && topCards.length > 0 && (!magnifyOnly || magnifyOnly === foe)
   const myMagnifiable = bottomCards.length > 0 && (!magnifyOnly || magnifyOnly === me)
 
   return (
@@ -97,7 +107,7 @@ export default function SlotView({ slot, index, me, placeable, onPlace, onMagnif
           {dropHint && <span className="slot__drop-hint">{dropHint}</span>}
         </button>
       ) : (
-        <Pile cards={topCards} faceUp={faceUp} openable={foeMagnifiable} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} />
+        <Pile cards={topCards} faceUp={topUp} openable={foeMagnifiable} onOpen={() => onMagnify(foe, index)} cardW={cardW} stackUp={false} fxKey={`${index}-${foe}`} />
       )}
 
       <div className="slot__coin" style={{ height: coinSize }}>
@@ -105,7 +115,7 @@ export default function SlotView({ slot, index, me, placeable, onPlace, onMagnif
       </div>
 
       {/* Bottom: my side — face-down until this slot's showdown; always magnifiable */}
-      <Pile cards={bottomCards} faceUp={faceUp} openable={myMagnifiable} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} />
+      <Pile cards={bottomCards} faceUp={bottomUp} openable={myMagnifiable} onOpen={() => onMagnify(me, index)} cardW={cardW} stackUp={false} fxKey={`${index}-${me}`} />
     </div>
   )
 }

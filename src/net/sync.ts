@@ -52,6 +52,8 @@ export interface SyncGame {
   lastShowdown: Showdown | null
   /** one-shot special-card budget per player, so the guest can grey its button */
   specialUsed: Record<PlayerId, boolean>
+  /** 死神之眼翻開的格子(GameState.exposed)。RTDB 會丟空陣列 → 讀端一律 ?? []。 */
+  exposed?: { p1?: number[]; p2?: number[] }
 }
 
 const HIDDEN: Card = { id: '_', suit: 'S', rank: 2 }
@@ -74,7 +76,9 @@ function cleanShowdown(sd: Showdown): Showdown {
 
 /** Host → RTDB. `foeSel` is the host's pushed-out pick (only meaningful while the host has a pending pick). */
 export function serializeForGuest(engine: GameState, foeSel: { total: number; idx: number[] } | null): SyncGame {
-  return {
+  // 死神之眼:host(p1)被 guest 翻開的牌堆 → 真牌照送(guest 看得到);沒翻開的照舊只送張數。
+  const hostExposed = engine.exposed?.p1 ?? []
+  const out: SyncGame = {
     phase: engine.phase,
     turn: engine.turn,
     postPicker: engine.postPicker,
@@ -84,10 +88,10 @@ export function serializeForGuest(engine: GameState, foeSel: { total: number; id
     deckCount: engine.deck.length,
     hostHandCount: engine.hands.p1.length,
     guestHand: engine.hands.p2,
-    slots: engine.slots.map((s) => ({
+    slots: engine.slots.map((s, i) => ({
       owner: s.owner,
       p1Count: s.p1.length,
-      p1Cards: s.owner ? s.p1 : null,
+      p1Cards: s.owner || hostExposed.includes(i) ? s.p1 : null,
       p2: s.p2,
     })),
     pending: engine.pendingPick ? { by: engine.pendingPick.by, count: engine.pendingPick.cards.length } : null,
@@ -95,6 +99,8 @@ export function serializeForGuest(engine: GameState, foeSel: { total: number; id
     lastShowdown: engine.lastShowdown ? cleanShowdown(engine.lastShowdown) : null,
     specialUsed: engine.specialUsed,
   }
+  if (engine.exposed) out.exposed = engine.exposed
+  return out
 }
 
 /* ---- Spectator view (§4.1): everything face-up -----------------------------
@@ -208,6 +214,7 @@ export function deserializeForSpectator(v: SpecView): GameState {
  * as backs, so their placeholder values are never shown.
  */
 export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: { total: number; idx: number[] } | null } {
+  const exposed = { p1: g.exposed?.p1 ?? [], p2: g.exposed?.p2 ?? [] }
   const engine: GameState = {
     seed: 0,
     hands: {
@@ -219,7 +226,8 @@ export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: {
     placementsDone: { p1: 0, p2: 0 },
     slots: (g.slots ?? []).map((s, i) => ({
       owner: s.owner ?? null,
-      p1: s.owner ? (s.p1Cards ?? []) : hidden(s.p1Count, `s${i}p1_`),
+      // 對決過、或被死神之眼翻開(host 有送真牌)→ 真牌;其餘只知張數
+      p1: (s.owner || exposed.p1.includes(i)) && s.p1Cards ? s.p1Cards : hidden(s.p1Count, `s${i}p1_`),
       p2: s.p2 ?? [],
     })),
     turn: g.turn,
@@ -234,6 +242,7 @@ export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: {
     tieBreakWinner: 'p1',
     // Host-arbitrated special-card budget (RTDB may drop an all-false object).
     specialUsed: g.specialUsed ?? { p1: false, p2: false },
+    exposed,
   }
   // RTDB drops empty arrays, so a foeSel that was {total, idx:[]} reads back
   // without idx — normalise so the UI never touches idx.length on undefined.

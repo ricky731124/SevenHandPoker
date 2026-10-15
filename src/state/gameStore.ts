@@ -6,12 +6,15 @@ import { sortHand, type SortDir, type SortMode } from '../game/sort'
 import {
   applyDraw,
   applyPick,
+  applyDeathEye,
   applyExplode,
   applyPlace,
   applyRefresh,
   applySuit,
   applySwap,
+  canDeathEye,
   canExplode,
+  deathEyeSlots,
   canRefresh,
   removedCard,
   createGame,
@@ -148,6 +151,10 @@ function beginCasualBroadcast(
 export const EXPLODE_NOTICE_MS = 5000
 /** 爆破動畫總長(ms)。AI 用完爆破後會等動畫播完才出下一手(Game.tsx),讓玩家看得清楚、有時間想。 */
 export const EXPLODE_FX_MS = 3400
+/** 死神之眼動畫總長(ms):眼睛張開閃光 → 蓋牌依序翻開。AI 用完也等播完才出牌。 */
+export const DEATH_EYE_FX_MS = 3200
+/** 死神之眼的提示文字(使用者定)。 */
+export const DEATH_EYE_VICTIM_MSG = '對手用了死神之眼，你目前決鬥區的牌被看光了'
 
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
 function playFrameSound(f: ReplayFrame | undefined): void {
@@ -164,6 +171,7 @@ function playFrameSound(f: ReplayFrame | undefined): void {
   // 強迫更新那一步 → 回放也播重抽動畫(拖拉/上一步不呼叫這裡,所以不會亂播)
   if (f?.refreshTarget) useGameStore.setState({ refreshFx: { target: f.refreshTarget, n: Date.now() } })
   if (f?.explode) useGameStore.setState({ explodeFx: { ...f.explode, n: Date.now() } })
+  if (f?.deathEye) useGameStore.setState({ deathEyeFx: { ...f.deathEye, n: Date.now() } })
 }
 /** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
  *  + localStorage marker (close-reconcile). No-op for online / undealt / ended. */
@@ -253,7 +261,7 @@ export interface OnlineInfo {
   sendReady: () => void
   /** host → guest: a foe-facing special-card notice to toast (guest = no-op) */
   /** fx:對手那端要額外演出的卡(refresh 重抽 / explode 爆炸),target = 被打的是誰,victim = 被炸的牌 */
-  sendFx: (msg: string, fx?: { card: SpecialCardId; target: PlayerId; victim?: Card; index?: number }) => void
+  sendFx: (msg: string, fx?: { card: SpecialCardId; target: PlayerId; victim?: Card; index?: number; slots?: number[] }) => void
   /** write the shared pause state (both sides read it back) */
   sendPause: (p: PauseState) => void
   /** broadcast a sticker (貼圖) to the opponent — cosmetic, off the engine */
@@ -321,6 +329,8 @@ interface GameStore {
   /** 爆破動畫觸發器:炸了誰(target)的哪張(card,不知道時 undefined → 用牌背演)+ n 去重。
    *  index = 那張牌在被炸前手牌陣列的第幾張(對手手牌是牌背、找不到 id 時用來定位)。 */
   explodeFx: { target: PlayerId; card?: Card; index?: number; n: number } | null
+  /** 死神之眼動畫觸發器:翻開了誰(target)的哪幾格(slots)+ n 去重。DeathEyeFx 看到新的 n 播一次。 */
+  deathEyeFx: { target: PlayerId; slots: number[]; n: number } | null
 
   // UI
   selected: string[]
@@ -568,6 +578,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   specFx: null,
   refreshFx: null,
   explodeFx: null,
+  deathEyeFx: null,
 
   selected: [],
   confirm: null,
@@ -723,7 +734,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (get().status === 'playing' && get().engine) return
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
+    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
     sfx.deal() // 開局發牌
     persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
     const foe = get().casualFoe
@@ -735,7 +746,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _bcast?.stop() // §5.4 leaving → tear down the Live/spectate nodes (unless已 ended,則留 24h)
     _bcast = null
     clearLocalMatch() // §3.7 leaving → drop the local snapshot/marker
-    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, explodeFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
+    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
   },
 
   applySpectate: (engine, info, live) => {
@@ -1542,6 +1553,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
       persistLocalMatch(get())
       get().flashStatus(`你用「${def.name}」炸掉了對手的 ${cardFaceText(gone)}`, EXPLODE_NOTICE_MS)
       if (online?.role === 'host') online.sendFx(`對手用「${def.name}」炸掉了你的 ${cardFaceText(gone)}`, { card: id, target: foe, victim: gone, index })
+    } else if (id === 'deathEye') {
+      // 死神之眼:翻開對手目前在決鬥區、還沒對決的牌堆(之後放的不算)。堆數/張數是公開資訊 →
+      // guest 也能先擋「沒有可看的」;翻開後的真牌由 host 套用後經 guest-view 同步過來。
+      if (!canDeathEye(engine, me)) {
+        sfx.error()
+        useToastStore.getState().show('對手決鬥區沒有可以透視的牌')
+        return
+      }
+      sfx.special()
+      set({ specialTrayOpen: false })
+      const foe = otherPlayer(me)
+      const slots = deathEyeSlots(engine, me)
+      const n = Date.now()
+      if (online?.role === 'guest') {
+        online.send({ type: 'special', card: id })
+        set({ deathEyeFx: { target: foe, slots, n } }) // 本機先播;翻開的牌等 host 同步過來
+        get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`)
+        return
+      }
+      const next = applyDeathEye(engine, me)
+      get().recordMove({ t: 'special', by: me, card: id }) // 決定性,不用 rng
+      set({ engine: next, specFx: { by: me, card: id, n }, deathEyeFx: { target: foe, slots, n } })
+      _bcast?.onEngine(next)
+      pushCasualExtras()
+      persistLocalMatch(get())
+      get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`)
+      if (online?.role === 'host') online.sendFx(DEATH_EYE_VICTIM_MSG, { card: id, target: foe, slots })
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
       // back on the private info channel (netgame → showSpecialInfo).
@@ -1630,6 +1668,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else if (decision.card === 'swap' && decision.targetId) next = applySwap(engine, ai, decision.targetId, rec!.rng)
     else if (decision.card === 'refresh') next = applyRefresh(engine, ai, rec!.rng)
     else if (decision.card === 'explode') next = applyExplode(engine, ai, rec!.rng)
+    else if (decision.card === 'deathEye') next = applyDeathEye(engine, ai)
     else next = markSpecialUsed(engine, ai) // peek / spy: no board change, just the one-shot
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
     sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
@@ -1651,6 +1690,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...(decision.card === 'explode'
         ? { explodeFx: { target: otherPlayer(ai), card: victim, index: victim ? engine.hands[otherPlayer(ai)].findIndex((c) => c.id === victim.id) : undefined, n }, selected: get().selected.filter((id) => id !== victim?.id) }
         : {}),
+      // 死神之眼看的是我 → 播透視動畫(我那幾堆翻開)
+      ...(decision.card === 'deathEye' ? { deathEyeFx: { target: otherPlayer(ai), slots: deathEyeSlots(engine, ai), n } } : {}),
     })
     _bcast?.onEngine(next)
     pushCasualExtras()
@@ -1663,8 +1704,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? `對手對你使用了「${def?.name ?? '強迫更新'}」，你的手牌已重抽`
           : decision.card === 'explode'
             ? `對手用「${def?.name ?? '爆破'}」炸掉了你的 ${cardFaceText(victim)}`
-            : '對方似乎使用了特殊牌',
-      decision.card === 'explode' ? EXPLODE_NOTICE_MS : undefined,
+            : decision.card === 'deathEye'
+              ? DEATH_EYE_VICTIM_MSG
+              : '對方似乎使用了特殊牌',
+      decision.card === 'explode' || decision.card === 'deathEye' ? EXPLODE_NOTICE_MS : undefined,
     )
     return true
   },

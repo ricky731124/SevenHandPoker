@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
-import { EXPLODE_FX_MS, useGameStore } from '../../state/gameStore'
+import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, useGameStore } from '../../state/gameStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
@@ -21,6 +21,7 @@ import OpponentHand from '../components/game/OpponentHand'
 import SlotView from '../components/game/SlotView'
 import RefreshFx from '../components/game/RefreshFx'
 import ExplodeFx from '../components/game/ExplodeFx'
+import DeathEyeFx from '../components/game/DeathEyeFx'
 import TopBar from '../components/game/TopBar'
 import CoinToss from '../components/game/CoinToss'
 import VsIntro from '../components/game/VsIntro'
@@ -384,6 +385,10 @@ export function GameBoard() {
       const fx = useGameStore.getState().explodeFx
       const fxLeft = fx ? EXPLODE_FX_MS - (Date.now() - fx.n) : 0
       if (fxLeft > 0) delay = Math.max(delay, fxLeft + 400)
+      // 死神之眼同理:等透視動畫播完再出牌
+      const eye = useGameStore.getState().deathEyeFx
+      const eyeLeft = eye ? DEATH_EYE_FX_MS - (Date.now() - eye.n) : 0
+      if (eyeLeft > 0) delay = Math.max(delay, eyeLeft + 400)
       timer = setTimeout(() => {
         // The AI may spend its one-shot special before picking (#13). If it
         // does, the engine changes → this effect re-runs (now specialUsed) and
@@ -687,6 +692,8 @@ export function GameBoard() {
               cardW={sz.card}
               coinSize={sz.coin}
               revealAll={!!spec}
+              foeExposed={(engine.exposed?.[otherPlayer(me)] ?? []).includes(i)}
+              meExposed={(engine.exposed?.[me] ?? []).includes(i)}
             />
           ))}
         </div>
@@ -741,6 +748,8 @@ export function GameBoard() {
       {/* 爆破:炸彈飛到被炸那一方手牌 → 那張牌抖一抖爆掉。一般對局不會有爆破 → 不掛;
           觀戰/回放不一定知道雙方帶什麼卡 → 照掛(沒有輪詢,只在牌局變動時量一次) */}
       {(g.special || spec || replay) && <ExplodeFx me={me} cardW={sz.card} />}
+      {/* 死神之眼:眼睛張開閃光 → 被看的那幾堆依序翻開 */}
+      {(g.special || spec || replay) && <DeathEyeFx me={me} cardW={sz.card} />}
 
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on

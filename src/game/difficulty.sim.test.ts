@@ -12,6 +12,7 @@ import { mulberry32 } from './rng'
 import { getSpecialCard, type SpecialCardId } from './specialCards'
 import {
   applyDraw,
+  applyDeathEye,
   applyExplode,
   applyPick,
   applyPlace,
@@ -40,6 +41,7 @@ function bossSpecial(g: GameState, me: PlayerId, loadout: SpecialCardId[], rt: B
   else if (d.card === 'swap' && d.targetId) next = applySwap(g, me, d.targetId, rng)
   else if (d.card === 'refresh') next = applyRefresh(g, me, rng)
   else if (d.card === 'explode') next = applyExplode(g, me, rng)
+  else if (d.card === 'deathEye') next = applyDeathEye(g, me)
   else next = markSpecialUsed(g, me)
   if (next === g) return { g, rt }
   used[d.card] = (used[d.card] ?? 0) + 1

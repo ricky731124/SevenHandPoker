@@ -13,7 +13,7 @@
 
 import type { Suit } from './cards'
 
-export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh' | 'explode'
+export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh' | 'explode' | 'deathEye'
 
 export interface SpecialCardDef {
   id: SpecialCardId
@@ -117,6 +117,15 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#d9480f',
+  },
+  deathEye: {
+    id: 'deathEye',
+    name: '死神之眼',
+    short: '透視對手目前已放在決鬥區的所有牌',
+    desc: '翻開對手目前已放在決鬥區的所有牌（之後放的不算）。對手會被告知。',
+    affectsFoe: true,
+    needsTarget: false,
+    accent: '#b8860b',
   },
 }
 

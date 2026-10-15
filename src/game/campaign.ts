@@ -257,6 +257,24 @@ export const CAMPAIGN: CampaignStage[] = [
     subStages: subStages('s8', 8, 'explode', 'woodpecker'),
     nodePositions: NODE_POS,
   },
+  {
+    id: 's9',
+    index: 9,
+    name: '合法的流氓',
+    bossAvatar: 'eagle', // 斜鷹梗(eagle.png)
+    bossName: '斜鷹梗',
+    signatureCard: 'deathEye', // 死神之眼
+    // 居高臨下的獵手:重囤牌、愛拼牌、看破高——先看光你場上的牌,打得過才出手,打不過就忍(會停損)。
+    profile: {
+      pickMain: { attack: 20, hoard: 80, balance: 0 },
+      bluff: 20,
+      draw: 70,
+      jokerTiming: 10,
+      insight: 60,
+    },
+    subStages: subStages('s9', 9, 'deathEye', 'eagle'),
+    nodePositions: NODE_POS,
+  },
 ]
 
 // ---- lookups -------------------------------------------------------------

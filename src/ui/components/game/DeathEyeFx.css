@@ -1,0 +1,39 @@
+/* 死神之眼動畫層:鋪滿 .game,不吃點擊 */
+.eye-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 61;
+}
+.eye-fx__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(30, 8, 0, 0.4) 0%, rgba(8, 0, 0, 0.75) 100%);
+}
+.eye-fx__eye {
+  position: absolute;
+  filter: drop-shadow(0 0 18px rgba(255, 196, 0, 0.85));
+}
+.eye-fx__label {
+  position: absolute;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: #3a2400;
+  border: 2px solid #f5c542;
+  color: #ffe08a;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.eye-fx__beam {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px #f5c542, 0 0 18px 6px rgba(245, 197, 66, 0.75);
+}
+.eye-fx__cover {
+  position: absolute;
+  transform-origin: center;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}

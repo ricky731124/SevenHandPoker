@@ -63,6 +63,11 @@ export interface GameState {
    * engine only tracks the one-shot budget and applies the concrete effects.
    */
   specialUsed: Record<PlayerId, boolean>
+  /**
+   * 死神之眼:被翻開的格子。exposed[p] = p 的牌堆被對手看光的格子 index(對決前都保持翻開,
+   * 雙方都看得到)。選填:舊快照/回放/測試造的 state 沒有這欄 = 沒有被翻開的牌堆。
+   */
+  exposed?: Record<PlayerId, number[]>
 }
 
 export const otherPlayer = (p: PlayerId): PlayerId => (p === 'p1' ? 'p2' : 'p1')
@@ -443,6 +448,41 @@ export function applyExplode(state: GameState, player: PlayerId, rng: () => numb
 export function removedCard(before: Card[], after: Card[]): Card | undefined {
   const left = new Set(after.map((c) => c.id))
   return before.find((c) => !left.has(c.id))
+}
+
+/** `player` 放在決鬥區、被對手用死神之眼翻開的格子(對決前都保持翻開)。 */
+export function exposedSlots(state: GameState, player: PlayerId): number[] {
+  return state.exposed?.[player] ?? []
+}
+
+/** 死神之眼能翻的格子:對手已放、還沒對決、還沒被翻過的牌堆。 */
+export function deathEyeSlots(state: GameState, player: PlayerId): number[] {
+  const foe = otherPlayer(player)
+  const seen = exposedSlots(state, foe)
+  const out: number[] = []
+  state.slots.forEach((s, i) => {
+    if (s[foe].length > 0 && s.owner === null && !seen.includes(i)) out.push(i)
+  })
+  return out
+}
+
+export function canDeathEye(state: GameState, player: PlayerId): boolean {
+  return deathEyeSlots(state, player).length > 0
+}
+
+/**
+ * 死神之眼 (deathEye, 使用者 2026-10-15 定案): flip every pile the foe has on the
+ * board that hasn't dueled yet. Those piles stay face-up — to BOTH players — until
+ * their showdown; piles the foe places afterwards stay face-down as usual. Pure
+ * information, no card moves and no randomness (replay needs no rng).
+ */
+export function applyDeathEye(state: GameState, player: PlayerId): GameState {
+  const slots = deathEyeSlots(state, player)
+  if (!slots.length) return state
+  const foe = otherPlayer(player)
+  const exposed = { p1: exposedSlots(state, 'p1'), p2: exposedSlots(state, 'p2') }
+  exposed[foe] = [...exposed[foe], ...slots]
+  return { ...state, exposed, specialUsed: { ...state.specialUsed, [player]: true } }
 }
 
 /** 被花色卡改過的牌 → 變回原花色(不留 undefined 欄位,RTDB set() 才不會出錯)。 */

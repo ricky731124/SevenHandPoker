@@ -3,7 +3,7 @@
  * 身分固定、大腦每局隨機 roll（見 casualBots.ts）。戰績寫在 bots/{botId}（見
  * src/net/bots.ts）。見 docs/SPECTATE-REPLAY-SPEC.md §3。
  *
- * avatar/loadout/achievements 皆為「門面假資料」，沿用既有 id（頭像 9 種、特殊卡 9 種、
+ * avatar/loadout/achievements 皆為「門面假資料」，沿用既有 id（頭像 10 種、特殊卡 10 種、
  * 成就族多種，tier 1=銅 2=銀）。頭像數少於人機數，故會重複使用——無妨（假玩家）。
  */
 
@@ -25,7 +25,7 @@ export const BOTS: BotPersona[] = [
   { id: 'bot_01', name: '山石宮分',       avatarId: 'cat',   loadout: ['peek', 'swap'],            achievements: [{ id: 'wins', tier: 2 }, { id: 'games', tier: 2 }] },
   { id: 'bot_02', name: '我要驗牌',       avatarId: 'bird',  loadout: ['spy', 'peek', 'clubs'],    achievements: [{ id: 'streak', tier: 1 }] },
   { id: 'bot_03', name: '海Chris爛',      avatarId: 'cat2',  loadout: ['diamonds', 'hearts', 'explode'], achievements: [{ id: 'games', tier: 1 }, { id: 'flush', tier: 2 }] },
-  { id: 'bot_04', name: '無法顯示名稱',   avatarId: 'bear',  loadout: ['swap', 'spades'],          achievements: [{ id: 'wins', tier: 1 }] },
+  { id: 'bot_04', name: '無法顯示名稱',   avatarId: 'bear',  loadout: ['swap', 'spades', 'deathEye'], achievements: [{ id: 'wins', tier: 1 }] },
   { id: 'bot_05', name: '金色狂蜂',       avatarId: 'dog',   loadout: ['peek', 'spy', 'swap'],     achievements: [{ id: 'streak', tier: 2 }, { id: 'wins', tier: 2 }] },
   { id: 'bot_06', name: '沒事call文哲',   avatarId: 'cat3',  loadout: ['clubs', 'diamonds'],       achievements: [{ id: 'games', tier: 2 }] },
   { id: 'bot_07', name: '常威打旺福',     avatarId: 'bird2', loadout: ['spades', 'swap', 'peek'],  achievements: [{ id: 'wins', tier: 1 }, { id: 'quads', tier: 1 }] },
@@ -34,11 +34,11 @@ export const BOTS: BotPersona[] = [
   { id: 'bot_10', name: '新資料夾(2)',    avatarId: 'bird',  loadout: ['swap', 'clubs', 'spades'], achievements: [{ id: 'wins', tier: 2 }] },
   { id: 'bot_11', name: '鍵盤柯南',       avatarId: 'bear',  loadout: ['spy', 'explode'],          achievements: [{ id: 'fullHouse', tier: 1 }, { id: 'games', tier: 2 }] },
   { id: 'bot_12', name: '玉皇Daddy',      avatarId: 'dog',   loadout: ['diamonds', 'hearts', 'swap'], achievements: [{ id: 'wins', tier: 2 }, { id: 'streak', tier: 2 }] },
-  { id: 'bot_13', name: '乂煞氣a屁孩卍',  avatarId: 'cat2',  loadout: ['spades', 'peek'],          achievements: [{ id: 'games', tier: 1 }] },
+  { id: 'bot_13', name: '乂煞氣a屁孩卍',  avatarId: 'cat2',  loadout: ['spades', 'peek', 'deathEye'], achievements: [{ id: 'games', tier: 1 }] },
   { id: 'bot_14', name: '陶敬凱',         avatarId: 'bird2', loadout: ['swap', 'spy', 'clubs'],    achievements: [{ id: 'wins', tier: 1 }, { id: 'flush', tier: 1 }] },
   { id: 'bot_15', name: '穹道穗宮原',     avatarId: 'cat',   loadout: ['refresh', 'peek', 'diamonds'], achievements: [{ id: 'streak', tier: 1 }] },
   { id: 'bot_16', name: '今天辛棄疾',     avatarId: 'bear',  loadout: ['explode', 'peek', 'spades'], achievements: [{ id: 'wins', tier: 2 }, { id: 'streak', tier: 1 }] },
-  { id: 'bot_17', name: '宮森裘',         avatarId: 'cat2',  loadout: ['spy', 'diamonds'],         achievements: [{ id: 'games', tier: 2 }] },
+  { id: 'bot_17', name: '宮森裘',         avatarId: 'cat2',  loadout: ['deathEye', 'spy', 'diamonds'], achievements: [{ id: 'games', tier: 2 }] },
   { id: 'bot_18', name: '不得不開除大衛', avatarId: 'dog',   loadout: ['swap', 'hearts', 'peek'],  achievements: [{ id: 'wins', tier: 1 }, { id: 'flush', tier: 1 }] },
   { id: 'bot_19', name: 'Chill西郎',      avatarId: 'bird',  loadout: ['clubs', 'refresh'],        achievements: [{ id: 'games', tier: 1 }, { id: 'streak', tier: 2 }] },
   { id: 'bot_20', name: '春燕要來了嗎',   avatarId: 'cat3',  loadout: ['peek', 'swap', 'spades'],  achievements: [{ id: 'fullHouse', tier: 1 }, { id: 'wins', tier: 2 }] },

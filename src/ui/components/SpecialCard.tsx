@@ -42,6 +42,7 @@ export function SpecialCardArt({ id, color, uid }: { id: string; color: string; 
       {id === 'spy' && <SpyArt color={color} />}
       {id === 'refresh' && <RefreshArt color={color} />}
       {id === 'explode' && <ExplodeArt color={color} />}
+      {id === 'deathEye' && <DeathEyeArt color={color} uid={uid} />}
       {SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS]?.suit && (
         <SuitBloomArt suit={SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS].suit!} color={color} />
       )}
@@ -168,6 +169,39 @@ function ExplodeArt({ color }: { color: string }) {
       {/* fuse + spark */}
       <path d="M61 42 Q66 34 72 36" fill="none" stroke="#7a5230" strokeWidth="2.5" strokeLinecap="round" />
       <path d="M72 36 l2 -5 1.5 5 5 1.5 -5 1.5 -1.5 5 -2 -5 -5 -1.5 z" fill="#ff7b00" stroke="#fff3c4" strokeWidth="0.8" />
+    </g>
+  )
+}
+
+/** 死神之眼 — 黑色兜帽裡一隻金色豎瞳的眼睛,金光往下掃,底下決鬥區的牌一張張被翻開。 */
+function DeathEyeArt({ color, uid }: { color: string; uid: string }) {
+  const iris = `deye-iris-${uid}`
+  return (
+    <g>
+      <defs>
+        <radialGradient id={iris} cx="50%" cy="45%" r="55%">
+          <stop offset="0%" stopColor="#fff3b0" />
+          <stop offset="50%" stopColor="#f5c542" />
+          <stop offset="100%" stopColor="#b5560b" />
+        </radialGradient>
+      </defs>
+      {/* 金光往下掃到牌上 */}
+      <path d="M40 46 L16 84 L84 84 L60 46 Z" fill="#f5c542" fillOpacity="0.28" />
+      {/* 兜帽 */}
+      <path d="M50 10 Q78 14 80 46 Q70 54 50 54 Q30 54 20 46 Q22 14 50 10 Z" fill="#241a12" stroke={color} strokeWidth="2.5" />
+      {/* 眼睛:杏仁眼 + 金色虹膜 + 豎瞳 */}
+      <path d="M28 36 Q50 20 72 36 Q50 52 28 36 Z" fill="#120a04" stroke="#f5c542" strokeWidth="2" />
+      <circle cx="50" cy="36" r="10" fill={`url(#${iris})`} />
+      <ellipse cx="50" cy="36" rx="2.4" ry="8.5" fill="#120600" />
+      <circle cx="46.5" cy="32" r="2" fill="#fff" opacity="0.9" />
+      {/* 決鬥區的三張牌:兩張已翻開、一張正在翻 */}
+      <g stroke={color} strokeWidth="1.8">
+        <rect x="16" y="74" width="20" height="28" rx="3" fill="#fffdf5" />
+        <rect x="40" y="74" width="20" height="28" rx="3" fill="#fffdf5" />
+        <rect x="68" y="74" width="12" height="28" rx="3" fill={color} />
+      </g>
+      <text x="26" y="94" textAnchor="middle" fontSize="13" fontWeight="900" fill="#1c1c1c">♠</text>
+      <text x="50" y="94" textAnchor="middle" fontSize="13" fontWeight="900" fill="#c0392b">♥</text>
     </g>
   )
 }

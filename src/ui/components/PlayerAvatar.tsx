@@ -17,8 +17,9 @@ const AVATAR_IMG: Record<string, string> = {
   bird2: 'avatars/bird2.webp', // 貓頭鷹 (第6關 boss + 獎勵)
   shiba: 'avatars/shiba.webp', // 柴柴 (第7關 boss + 獎勵)
   woodpecker: 'avatars/woodpecker.webp', // 啄木鳥 (第8關 boss + 獎勵)
+  eagle: 'avatars/eagle.webp', // 斜鷹梗 (第9關 boss + 獎勵)
 }
-const AVATAR_EMOJI: Record<string, string> = { cat: '🐱', bird: '🐦', cat2: '🐱', bear: '🐻', dog: '🐩', cat3: '😾', bird2: '🦉', shiba: '🐕', woodpecker: '🐦' }
+const AVATAR_EMOJI: Record<string, string> = { cat: '🐱', bird: '🐦', cat2: '🐱', bear: '🐻', dog: '🐩', cat3: '😾', bird2: '🦉', shiba: '🐕', woodpecker: '🐦', eagle: '🦅' }
 
 /** Selectable avatars (game content). `free` = available to everyone. */
 export const AVATARS: { id: string; name: string; free: boolean }[] = [
@@ -31,6 +32,7 @@ export const AVATARS: { id: string; name: string; free: boolean }[] = [
   { id: 'bird2', name: '貓頭鷹', free: false },
   { id: 'shiba', name: '柴柴', free: false },
   { id: 'woodpecker', name: '啄木鳥', free: false },
+  { id: 'eagle', name: '斜鷹梗', free: false },
 ]
 export const ALL_AVATAR_IDS = AVATARS.map((a) => a.id)
 

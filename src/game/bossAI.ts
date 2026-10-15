@@ -24,8 +24,10 @@ import {
   canExplode,
   canRefresh,
   countCoins,
+  deathEyeSlots,
   explodeTargets,
   emptySlotsFor,
+  exposedSlots,
   isTargetable,
   ownsSlot,
   suitTargets,
@@ -73,6 +75,9 @@ export interface BossRuntime {
   spyHand?: Card[] | null
   /** 這隻 boss 自己的招牌卡(主線才有;快速配對人機沒有)。強迫更新靠它分辨「柴柴本尊」要不要優先用。 */
   signature?: SpecialCardId
+  /** 死神之眼停損用(見 eyeAdjust):最近一次評估是 boss 自己的第幾手(placementsDone)、
+   *  那手之前已連續「忍住不出大牌」幾手、那手有沒有忍。bossPick 會就地更新(同一手重算不重複累加)。 */
+  eyeHold?: { hand: number; streak: number; held: boolean }
 }
 
 type Rng = () => number
@@ -350,6 +355,67 @@ function lowLeverage(state: GameState, me: PlayerId): boolean {
   return !near && slotsLeft > 2
 }
 
+/** 對手被死神之眼翻開、還沒對決的牌堆(boss 用卡後合法看到的資訊;雙方都看得到)。 */
+export function knownFoePiles(state: GameState, me: PlayerId): Card[][] {
+  const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+  return exposedSlots(state, foe)
+    .map((i) => state.slots[i])
+    .filter((s) => s && s.owner === null && s[foe].length > 0)
+    .map((s) => s[foe])
+}
+
+/** 死神之眼的停損上限:最多連續忍 2 手。 */
+const EYE_MAX_HOLDS = 2
+
+/**
+ * 死神之眼看牌後的出牌(使用者 2026-10-16 定案)。boss 出的牌由對手決定放哪一格,所以假設
+ * 「對手一定把它放到自己贏得了的那格」→ 只看翻開的牌堆裡最強的那堆:
+ *  - 打得過 → 改出「剛好打得過」的最便宜牌,不浪費大牌。
+ *  - 打不過 → 不硬出大牌(三條以上),改出小牌/墊牌,把大牌留著。
+ *  - 停損(不要被資訊綁住):最多連續忍 2 手;boss 自己第 4 手起、或對手只差一格就贏 → 照平常打。
+ * 執行力沒發揮(!sharp)= 這手「忘了」看過的資訊,照平常打。翻開之後對手新放的牌堆照舊蓋著,
+ * 那些 boss 沒資訊,不在這裡處理。
+ */
+function eyeAdjust(pile: Card[], cands: Card[][], hand: Card[], state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): Card[] {
+  const known = knownFoePiles(state, me)
+  if (!known.length) return pile
+  const h = state.placementsDone[me]
+  const prev = rt.eyeHold
+  const streak = !prev ? 0 : prev.hand === h ? prev.streak : prev.hand === h - 1 && prev.held ? prev.streak + 1 : 0
+  let held = false
+  let out = pile
+  if (sharp(rt.execution, rng)) {
+    const top = known.reduce((b, p) => (compareHands(p, b) > 0 ? p : b), known[0])
+    const beat = cands.filter((c) => compareHands(c, top) > 0)
+    const plain = beat.filter((c) => !usesJoker(c)) // 不用鬼牌打得過就別浪費鬼牌
+    const winners = plain.length ? plain : beat
+    if (winners.length) {
+      out = winners.reduce((lo, c) => (pileStrength(c) < pileStrength(lo) ? c : lo), winners[0])
+    } else {
+      const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+      const mayHold = streak < EYE_MAX_HOLDS && h < 3 && !foeAtMatchPoint(state, foe)
+      if (mayHold && tierScore(pile) >= 6) {
+        out = smallPile(cands, hand)
+        held = true
+      }
+    }
+  }
+  rt.eyeHold = { hand: h, streak, held }
+  return out
+}
+
+/** 忍的時候出的小牌:最低的沒成對散牌(不拆大牌);沒有就出最弱的候選。 */
+function smallPile(cands: Card[][], hand: Card[]): Card[] {
+  const keep = monsterCards(cands)
+  const rankCount = new Map<number, number>()
+  for (const c of hand) if (!isSpecial(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
+  const junk = hand
+    .filter((c) => !isSpecial(c) && !keep.has(c.id) && (rankCount.get(c.rank) ?? 0) === 1)
+    .sort((a, b) => a.rank - b.rank)
+  if (junk.length) return [junk[0]]
+  return weakest(cands)
+}
+
 export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random): string[] {
   const hand = state.hands[me]
   const cands = candidatePiles(hand)
@@ -396,6 +462,9 @@ export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: R
       if (bestNoJoker && jump < 4 && lowLeverage(state, me) && fires(rt.profile.jokerTiming, rng)) pile = bestNoJoker
     }
   }
+
+  // 死神之眼:看過對手翻開的牌堆 → 打得過就出剛好打得過的,打不過就忍(有停損)。
+  pile = eyeAdjust(pile, cands, hand, state, me, rt, rng)
 
   // 詐唬: 只用空白牌把可見張數墊大(3 種樣式,見 padBluff)。
   if (fires(rt.profile.bluff, rng)) {
@@ -605,6 +674,25 @@ export function explodeTriggers(state: GameState, me: PlayerId): number {
   return [fewCards, foeClose, behind].filter(Boolean).length
 }
 
+/** 死神之眼「只有 1 堆且是 5 張」時用卡的機率(使用者定 40%)。 */
+const EYE_MAYBE = 0.4
+/** 其他 boss / 快速配對人機用死神之眼:本尊機率再乘這個(目標整場使用率 2~3 成,模擬調過)。 */
+const EYE_OTHER = 0.08
+
+/**
+ * 死神之眼的時機(只讀公開資訊:對手場上蓋牌的堆數、張數):
+ *  sure  = 對手 ≥2 堆蓋牌,或 boss 自己第 4 手起(已出 3 手)且有 ≥1 堆
+ *  maybe = 只有 1 堆、而且是 5 張
+ *  none  = 沒有蓋牌,或只有 1 堆不到 5 張
+ */
+export function deathEyeTrigger(state: GameState, me: PlayerId): 'sure' | 'maybe' | 'none' {
+  const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+  const slots = deathEyeSlots(state, me)
+  if (!slots.length) return 'none'
+  if (slots.length >= 2 || state.placementsDone[me] >= 3) return 'sure'
+  return state.slots[slots[0]][foe].length >= 5 ? 'maybe' : 'none'
+}
+
 export function bossChooseSpecial(
   state: GameState,
   me: PlayerId,
@@ -620,6 +708,24 @@ export function bossChooseSpecial(
 
   type Cand = { card: SpecialCardId; targetId?: string; score: number }
   const cands: Cand[] = []
+
+  // 死神之眼(使用者 2026-10-16 定案):看光對手已放在決鬥區、還沒對決的牌堆。每一手判斷:
+  //  - 對手 ≥2 堆蓋牌 → 一定用;只有 1 堆且是 5 張 → 40%;boss 自己第 4 手起有 1 堆就用;0 堆 → 等下一手。
+  //  - 斜鷹梗 9-2(只帶這張):照上面。
+  //  - 斜鷹梗 9-3(卡池):照上面;這手沒用到死神之眼 → 12% 改用其他卡(往下走一般選卡),88% 這手不用卡。
+  //  - 其他 boss / 快速配對人機:同樣條件,但只小機率用。
+  // 放在最前面:9-3 本尊等死神之眼時,不能被卡池裡的爆破/強迫更新搶先用掉。
+  if (loadout.includes('deathEye')) {
+    const t = deathEyeTrigger(state, me)
+    const own = opts.signature === 'deathEye'
+    const roll = t === 'sure' ? 1 : t === 'maybe' ? EYE_MAYBE : 0
+    if (own) {
+      if (roll > 0 && rng() < roll) return { card: 'deathEye' }
+      if (loadout.length === 1) return null
+      if (rng() >= 0.12) return null
+      loadout = loadout.filter((c) => c !== 'deathEye') // 12%:往下走一般選卡,只挑其他卡
+    } else if (roll > 0 && rng() < roll * EYE_OTHER) return { card: 'deathEye' }
+  }
 
   // 爆破(使用者 2026-10-13 定案):隨機炸對手一張 → 對手手牌越少越可能炸到關鍵牌,所以中後期用。
   //  - 啄木鳥 8-2(只帶這張):有觸發條件就用;到自己第 5 手還沒用 → 強制用(讓玩家一定看得到)。

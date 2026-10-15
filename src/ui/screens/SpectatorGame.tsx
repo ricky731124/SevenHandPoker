@@ -4,7 +4,7 @@ import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import { joinSpectate, type LiveMeta } from '../../net/spectate'
 import type { SpecView } from '../../net/sync'
-import { removedCard, type GameState } from '../../game/state'
+import { deathEyeSlots, removedCard, type GameState } from '../../game/state'
 import { getSpecialCard } from '../../game/specialCards'
 import { useToastStore } from '../../state/toastStore'
 import { GameBoard } from './Game'
@@ -107,7 +107,13 @@ export default function SpectatorGame() {
       const m = liveRef.current
       const byName = fx.by === 'p1' ? m?.p1?.name || '玩家1' : m?.p2?.name || '玩家2'
       const cardName = getSpecialCard(fx.card)?.name ?? '特殊牌'
-      useToastStore.getState().show(`${byName} 使用了「${cardName}」`)
+      useToastStore.getState().show(
+        fx.card === 'deathEye' ? `${byName} 用了${cardName}，透視了目前決鬥區所有的牌` : `${byName} 使用了「${cardName}」`,
+      )
+      // 死神之眼 → 觀戰本來就全翻開,只播透視動畫(觀戰快照不帶 exposed → 對手還沒對決的牌堆就是被翻開的那幾格)
+      if (fx.card === 'deathEye' && eng) {
+        useGameStore.setState({ deathEyeFx: { target: fx.by === 'p1' ? 'p2' : 'p1', slots: deathEyeSlots(eng, fx.by), n: fx.n } })
+      }
       // 強迫更新 → 觀戰也播被打那一方的重抽動畫
       if (fx.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.by === 'p1' ? 'p2' : 'p1', n: fx.n } })
       // 爆破 → 觀戰播被炸那一方的爆炸動畫;炸到哪張用前後兩個快照的手牌比對出來

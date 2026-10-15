@@ -1,12 +1,14 @@
 import {
   applyDraw,
   applyPick,
+  applyDeathEye,
   applyExplode,
   applyPlace,
   applyRefresh,
   applySuit,
   applySwap,
   createGame,
+  deathEyeSlots,
   markSpecialUsed,
   removedCard,
   resolveShowdown,
@@ -31,6 +33,7 @@ import { getSpecialCard, type SpecialCardId } from './specialCards'
  *      · 花色類(踏雪尋梅/正中紅心…)是決定性的,只需 `targetId`(把哪張改花色),不需 `rng`。
  *      · 強迫更新(refresh)把對手手牌洗回牌堆重抽 → 只記 `rng`(一個值 = 重洗的種子),回放照吐即重現。
  *      · 爆破(explode)隨機炸掉對手一張 → 只記 `rng`(一個值 = 炸哪張)。
+ *      · 死神之眼(deathEye)只翻開對手當下在決鬥區的牌堆,決定性 → 什麼都不用多記。
  *      · 偷窺/讓我看看(peek/spy)不改任何牌面,只記「有這一步、用了什麼」→ 回放照樣顯示玩家用過。
  */
 export type Move =
@@ -85,6 +88,8 @@ export interface ReplayFrame {
   refreshTarget?: PlayerId
   /** 爆破那一幀:炸了誰的哪張 → 播放器前進到這幀時播爆炸動畫。 */
   explode?: { target: PlayerId; card?: Card }
+  /** 死神之眼那一幀:翻開了誰(target)的哪幾格 → 播放器前進到這幀時播透視動畫。 */
+  deathEye?: { target: PlayerId; slots: number[] }
   /** 回放在這幀之後套不下去(版本太舊)→ 這幀是提示幀,播放器要跳 toast 提示更新。 */
   outdated?: boolean
 }
@@ -177,6 +182,13 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
           const gone = removedCard(prev, g.hands[foe])
           add(g, name(m.by), `使用「${def?.name ?? '爆破'}」:炸掉 ${name(foe)} 的 ${gone ? cardFace(gone) : '一張牌'}`, 'special')
           frames[frames.length - 1].explode = { target: foe, card: gone }
+        } else if (m.card === 'deathEye') {
+          // 死神之眼:決定性(翻開對手當下在決鬥區的牌堆)→ 不用 rng。回放本來就全翻開,只放動畫+字幕。
+          const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
+          const slots = deathEyeSlots(g, m.by)
+          g = applyDeathEye(g, m.by)
+          add(g, name(m.by), `用了「${def?.name ?? '死神之眼'}」，透視了目前決鬥區所有的牌`, 'special')
+          frames[frames.length - 1].deathEye = { target: foe, slots }
         } else {
           // peek / spy:不改牌面,只記用過。
           g = markSpecialUsed(g, m.by)
