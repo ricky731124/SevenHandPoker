@@ -5,12 +5,11 @@
 //   node scripts/stage-art.mjs <N> <avatarId> <stickerId> commit    → 寫進正式位置
 //
 // 產出(commit):
-//   public/{avatarId}.png         boss 母檔,1150×912(跟其他 boss 同尺寸;網頁不直接載)
-//   public/avatars/{avatarId}.webp 網頁用頭像 512px(build-img 同規格)
-//   public/maps/stage{N}.png      地圖母檔 1328×800
-//   public/maps/stage{N}.webp     網頁用地圖
-//   public/stickers/{stickerId}.png 貼圖 512×512(顯示最大 168px,3 倍螢幕也夠)
-// 原圖留在 _art_src/stage{N}/(不進 git)當備份,要重調就從那裡重跑。
+//   art/avatars/{avatarId}.png      boss 頭像母檔,1150×912(跟其他 boss 同尺寸;備份用,不部署、程式不引用)
+//   public/avatars/{avatarId}.webp  網頁用頭像 512px(build-img 同規格)
+//   public/maps/stage{N}.webp       網頁用地圖 1328×800(不留 PNG 母檔)
+//   public/stickers/{stickerId}.webp 貼圖 512×512(顯示最大 ~190px,3 倍螢幕也夠;不留 PNG)
+// 原圖在 _art_src/stage{N}/(不進 git),要重調就從那裡重跑;上線確認 OK 後就可以刪。
 //
 // 選項:--heal-map x,y,w,h[,dy]  地圖若有浮水印,用下方紋理羽化補掉該矩形(dy 預設 = h+8)
 //       --map-crop x,y,w        先從原圖裁出這塊再縮放(高度自動 = w×800/1328,維持地圖比例)。
@@ -38,12 +37,16 @@ const mapCrop = flagVal('--map-crop')
 
 const SRC = path.resolve('_art_src', `stage${N}`)
 const PUB = path.resolve('public')
+const ART = path.resolve('art')
 const commit = MODE === 'commit'
 const OUT = commit ? null : path.join(SRC, '_preview')
 if (OUT) fs.mkdirSync(OUT, { recursive: true })
 const dst = (rel) => (commit ? path.join(PUB, rel) : path.join(OUT, rel.replace(/[\\/]/g, '_')))
+const artDst = (rel) => (commit ? path.join(ART, rel) : path.join(OUT, rel.replace(/[\\/]/g, '_')))
 const kb = (f) => (fs.statSync(f).size / 1024).toFixed(0) + ' KB'
 const tmp = path.join(SRC, '_tmp.png')
+const tmp2 = path.join(SRC, '_tmp2.png')
+if (commit) fs.mkdirSync(path.join(ART, 'avatars'), { recursive: true })
 
 /** ffmpeg 縮放:cover=填滿裁切(boss/地圖),fit=等比塞進方框(貼圖)。 */
 function scaleTo(srcPng, out, w, h, how) {
@@ -69,7 +72,7 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
   const keyed = keyFlood(im) + '%'
   bleed(im) // 透明像素補上鄰近顏色,縮圖時邊緣才不會滲綠
   writePng(tmp, im)
-  const master = dst(`${AVATAR}.png`)
+  const master = artDst(`avatars/${AVATAR}.png`)
   scaleTo(tmp, master, 1150, 912, 'cover')
   const av = dst(`avatars/${AVATAR}.webp`)
   webp(master, av, { maxSide: 512, quality: 82, alpha: true })
@@ -92,11 +95,10 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
     im = { data, width: w, height: h }
   }
   writePng(tmp, im)
-  const master = dst(`maps/stage${N}.png`)
-  scaleTo(tmp, master, 1328, 800, 'cover')
+  scaleTo(tmp, tmp2, 1328, 800, 'cover')
   const w = dst(`maps/stage${N}.webp`)
-  webp(master, w, { quality: 80 })
-  console.log(`map   ${im.width}x${im.height} 浮水印掃描(最密白點) ${JSON.stringify(scanWM(im))}${heal ? ' 已補 ' + heal : ''} → ${kb(master)} / webp ${kb(w)}`)
+  webp(tmp2, w, { quality: 80 })
+  console.log(`map   ${im.width}x${im.height} 浮水印掃描(最密白點) ${JSON.stringify(scanWM(im))}${heal ? ' 已補 ' + heal : ''} → webp ${kb(w)}`)
 }
 
 // ---- sticker:去浮水印 → 去綠背+白邊 → 512×512 --------------------------------
@@ -106,10 +108,12 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
   const pct = keyFlood(im, { white: true })
   bleed(im)
   writePng(tmp, im)
-  const out = dst(`stickers/${STICKER}.png`)
-  scaleTo(tmp, out, 512, 512, 'fit')
-  console.log(`sticker ${im.width}x${im.height} 浮水印${marks.length}處 去背${pct}% → ${kb(out)}`)
+  scaleTo(tmp, tmp2, 512, 512, 'fit')
+  const out = dst(`stickers/${STICKER}.webp`)
+  webp(tmp2, out, { quality: 85, alpha: true })
+  console.log(`sticker ${im.width}x${im.height} 浮水印${marks.length}處 去背${pct}% → webp ${kb(out)}`)
 }
 
 fs.rmSync(tmp, { force: true })
-console.log(commit ? '已寫入 public/' : `預覽在 ${OUT}`)
+fs.rmSync(tmp2, { force: true })
+console.log(commit ? '已寫入 public/(頭像母檔在 art/avatars/)' : `預覽在 ${OUT}`)

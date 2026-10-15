@@ -44,7 +44,7 @@ export interface SubStage {
 export interface CampaignStage {
   /** e.g. 's1' */
   id: string
-  /** 1-based 大關序,對應地圖背景 maps/stage{index}.png */
+  /** 1-based 大關序,對應地圖背景 maps/stage{index}.webp */
   index: number
   name: string
   /** boss 立繪 = 該關要解鎖的頭像 id */

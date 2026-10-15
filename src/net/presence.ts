@@ -1,4 +1,4 @@
-import { ref, onValue, onDisconnect, set, remove, push, serverTimestamp, type DatabaseReference } from 'firebase/database'
+import { ref, onValue, onDisconnect, set, remove, push, get, serverTimestamp, type DatabaseReference } from 'firebase/database'
 import { getDb } from './firebase'
 import { BOTS_ONLINE } from '../game/bots'
 
@@ -46,6 +46,39 @@ export async function clearPresence(uid: string): Promise<void> {
   } catch {
     /* best-effort — a failed remove just falls back to window expiry */
   }
+}
+
+/** 超過這麼久沒活動的連線紀錄 = 殘留(onDisconnect 沒觸發:手機直接被殺、斷線時登入憑證剛好過期…)→ 可清。 */
+const STALE_CONN_MS = 24 * 60 * 60 * 1000 // 1 天
+const PRUNE_EVERY_MS = 60 * 60 * 1000 // 同一分頁最多 1 小時清一次
+let _lastPruneAt = 0
+
+/**
+ * 清 presence 殘留(2026-10-14 使用者定案):刪掉「最後活動超過 1 天」或舊格式(true)的連線紀錄。
+ * 規則允許任何登入者刪這種過期紀錄(線上中的刪不到,見 database.rules.json)。
+ * 由大廳 host 順手呼叫(useLobby 的 poll),同一分頁 1 小時最多一次;best-effort。
+ * 在線人數本來就只算 10 分鐘內有活動的,清掉殘留不影響數字,只是讓大家訂閱時少下載一點。
+ */
+export async function prunePresence(): Promise<number> {
+  const now = Date.now()
+  if (now - _lastPruneAt < PRUNE_EVERY_MS) return 0
+  _lastPruneAt = now
+  let n = 0
+  try {
+    const db = getDb()
+    const all = ((await get(ref(db, 'presence'))).val() ?? {}) as Record<string, Record<string, { lastActive?: number } | true>>
+    for (const [uid, conns] of Object.entries(all)) {
+      for (const [conn, c] of Object.entries(conns ?? {})) {
+        const stale = c === true || (typeof c?.lastActive === 'number' && now - c.lastActive > STALE_CONN_MS + 60_000) // 多留 1 分鐘,免得本機時鐘偏差被規則擋
+        if (!stale) continue
+        try { await remove(ref(db, `presence/${uid}/${conn}`)); n++ } catch { /* 規則還沒發布/時鐘偏差 → 略過 */ }
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+  if (import.meta.env.DEV && n) console.log(`%c[presence] 🧹 清掉 ${n} 筆超過 1 天的殘留連線`, 'color:#c60')
+  return n
 }
 
 /** Start reporting this uid as online (heartbeat); returns a cleanup. */
@@ -150,8 +183,8 @@ export function subscribeOnlineCount(cb: (n: number) => void, onError?: () => vo
     cb(live + BOTS_ONLINE)
   }
 
-  // 計數天生免疫殘留:recount 只認「lastActive 在 10 分鐘內」的 uid,stale 節點不會被算到,
-  // 所以在線人數不需要靠 sweep 清 DB(之前那段 sweep 對數字零幫助,已移除)。
+  // 計數天生免疫殘留:recount 只認「lastActive 在 10 分鐘內」的 uid,stale 節點不會被算到。
+  // 殘留會讓每個訂閱者多下載 → 由大廳 host 順手清超過 1 天的(prunePresence)。
   const unsubPresence = onValue(
     ref(db, 'presence'),
     (snap) => {

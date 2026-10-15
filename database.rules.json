@@ -33,7 +33,7 @@
       ".read": true,
       "$uid": {
         "$conn": {
-          ".write": "auth != null && auth.uid === $uid"
+          ".write": "auth != null && (auth.uid === $uid || (!newData.exists() && (data.val() === true || (data.child('lastActive').isNumber() && data.child('lastActive').val() < now - 86400000))))"
         }
       }
     },

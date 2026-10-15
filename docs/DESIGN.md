@@ -9,18 +9,18 @@
 
 ## 1. 美術方向
 - 風格:**Q 版 + MSN 紅絲絨致敬**。主角 **貓 = host = p1**、配角 **鳥 = guest = p2**(固定,不再隨機)。
-- 主選單:`public/title.png` 英雄圖鋪滿整個畫面,按鈕疊在上面。
+- 主選單:`public/title.webp` 英雄圖鋪滿整個畫面,按鈕疊在上面。
 - 遊戲桌面:紅絲絨(`TableBackground.tsx`,SVG 漸層 + 織紋 + 暗角 + 桌緣)。
 
 ### 可覆蓋的美術資產 (都放 `public/`)
 | 檔案 | 用途 | 備註 |
 |---|---|---|
-| `title.png` | 主選單英雄圖(含標題) | 橫幅,`object-fit: cover` |
-| `cat.png` | p1 頭像 + 擲硬幣正面 + 藍/綠牌背上的貓 | 已去背(見下) |
-| `bird.png` | p2 頭像 + 擲硬幣反面 | 已去背 |
+| `title.webp` | 主選單英雄圖(含標題) | 橫幅,`object-fit: cover` |
+| `avatars/cat.webp` | p1 頭像 + 擲硬幣正面 + 藍/綠牌背上的貓 | 已去背 |
+| `avatars/bird.webp` | p2 頭像 + 擲硬幣反面 | 已去背 |
 | `wood.png` | 所有木紋按鈕的貼圖 | 由 `main.tsx` 設成 CSS 變數 `--wood-tex` |
-- **去背工具**:`scripts/dechroma.mjs`(綠幕→透明 + 去溢色)。原圖備份在 `public/originals/`。若日後換綠幕圖,跑 `node scripts/dechroma.mjs cat.png bird.png`。
-- **牌背**:藍 / 綠兩款(`CardBack.tsx`),把 `cat.png` 合成在上面;於設定切換。
+- **圖檔規矩(2026-10)**:網頁一律只載低 KB 的 webp。頭像高畫質母檔備份在 `art/avatars/{id}.png`(不部署、程式不引用),改了跑 `node scripts/build-img.mjs` 重產;地圖、貼圖、標題不留 PNG。新關卡圖用 `scripts/stage-art.mjs`(去背/去浮水印/轉 webp,見 `/new-stage` skill)。
+- **牌背**:藍 / 綠兩款(`CardBack.tsx`),把貓頭像合成在上面;於設定切換。
 
 ---
 

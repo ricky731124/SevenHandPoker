@@ -27,6 +27,7 @@ import UpgradePrompt from './ui/components/UpgradePrompt'
 import InstallGuide from './ui/components/InstallGuide'
 import InAppBrowserGate from './ui/components/InAppBrowserGate'
 import OrientationTip from './ui/components/OrientationTip'
+import { useStageMapPreload } from './ui/hooks/useStageMapPreload'
 
 const screens = {
   menu: Menu,
@@ -66,6 +67,7 @@ export default function App() {
   const replayData = useAppStore((s) => s.replayData)
   const Current = screens[screen]
   const uid = usePlatformStore((s) => s.uid)
+  useStageMapPreload() // 關卡地圖：先載接下來要打的那關，其他已解鎖的進主線才慢慢載
 
   // Report this client as online while it holds a uid (anonymous included), so
   // the owner-only 線上人數 counter reflects everyone. Cleaned up on uid change.

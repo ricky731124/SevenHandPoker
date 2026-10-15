@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlatformStore } from '../../state/platformStore'
+import { useAppStore } from '../../state/appStore'
 import { subStageOrder } from '../../game/campaign'
 import { arrivalGreeting, syncChatHistory, type ReactInput, type LobbyGlobals, type BotUtterance } from '../../game/lobbyChat'
 import { fetchLatestHighlight } from '../../net/replays'
 import { createChatDirector, type ChatDirector } from '../../game/lobbyDirector'
 import { fetchCard } from '../../platform/cards'
 import { subscribeLiveIndex } from '../../net/liveIndex'
-import { subscribeOnlineCount } from '../../net/presence'
+import { subscribeOnlineCount, prunePresence } from '../../net/presence'
 import {
   ensureLobbyAuth, startActive, stopActive, subscribeActive,
   tryBecomeHost, releaseHost, amHost, verifyStillHost, pruneActive, LOBBY_MUTE_USERS, hostGrabWasCold, hostGrabInfo,
@@ -31,6 +32,7 @@ const START_DELAY_MS = 3000 // 進主畫面先讓畫面/圖片載完,3 秒後才
 
 // ─── 分頁單例（模組層,跨 mount/StrictMode/HMR 只有一份）──────────────────────────
 let mHost = false
+let mLeftAt: number | null = null // 這台上次離開大廳(進戰鬥畫面/切背景/離開主畫面)的時間;回來後用完就清
 let mLastSeenHuman: string | null = null
 let mActiveUids: string[] = []
 let mMyUid: string | null = null
@@ -127,6 +129,13 @@ export function useLobby(): UseLobby {
   const [host, setHost] = useState(false)
 
   const muted = !!username && LOBBY_MUTE_USERS.some((u) => u.toLowerCase() === username.toLowerCase())
+  // 戰鬥類畫面(觀戰/回放/配對中)是疊在主畫面上的 → 主畫面還掛著,但人已經不在大廳(2026-10-14 使用者定案):
+  //   比照「真的進牌局」= 離開大廳:不算在場人數、交出 host(別人接手;沒人就停擺)、聊天/表演賽都不跑。
+  //   例外:正在看「表演賽」→ 只留表演賽引擎(驅動那場/驅動者離開時接手),免得只剩他一人時看的那場卡住。
+  const lobbyMode = useAppStore((s): 'on' | 'exOnly' | 'off' => {
+    if (!s.matchType && !s.spectateCode && !s.replayData) return 'on'
+    return s.spectateCode?.startsWith('spec_ex_') ? 'exOnly' : 'off'
+  })
 
   mHost = host
   mMyUid = uid
@@ -153,26 +162,42 @@ export function useLobby(): UseLobby {
   }, [])
 
   useEffect(() => {
-    if (!uid || muted) return
+    if (!uid || muted || lobbyMode === 'off') return
     let pollTimer: ReturnType<typeof setInterval> | null = null
+    let session = 0 // 每次 goInactive +1:輪詢等 tryBecomeHost 的期間人已離開 → 回來的結果不准再改狀態
+
+    // 看表演賽中:不在大廳(不算人數、不當 host、不講話),只讓表演賽引擎繼續跑
+    if (lobbyMode === 'exOnly') {
+      const exOn = () => { exhibitionStart(); exhibitionSetContext({ active: true, isHost: false, uid }) }
+      const exOff = () => { exhibitionSetContext({ active: false, isHost: false, uid }); exhibitionStop() }
+      if (document.visibilityState === 'visible') exOn()
+      const onVis = () => (document.visibilityState === 'visible' ? exOn() : exOff())
+      document.addEventListener('visibilitychange', onVis)
+      return () => { document.removeEventListener('visibilitychange', onVis); exOff() }
+    }
 
     const goActive = () => {
       startActive()
       exhibitionStart()
       if (pollTimer) return
       const poll = async () => {
+        const my = session
         if (!amHost()) await tryBecomeHost()
+        if (my !== session) return // 已離開大廳(goInactive)→ 不再把自己設回 host / 表演賽 active
         const h = amHost()
+        if (!h) mLeftAt = null // 回到大廳但主持人是別人 → 這次離開就算結束了(之後接手是一般換手)
         setHost(h)
         mHost = h
         director.setHost(h)
         exhibitionSetContext({ active: true, isHost: h, uid })
-        if (h) { void pruneActive(); void checkNewcomers() }
+        if (h) { void pruneActive(); void prunePresence(); void checkNewcomers() } // prunePresence 自己節流(1 小時一次)
       }
       void poll()
       pollTimer = setInterval(() => void poll(), HOST_POLL_MS)
     }
     const goInactive = () => {
+      session++
+      if (mHost || pollTimer) mLeftAt = serverNow() // 只記「在大廳時」離開(重複呼叫不覆蓋)
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
       releaseHost()
       stopActive()
@@ -200,7 +225,7 @@ export function useLobby(): UseLobby {
       document.removeEventListener('visibilitychange', onVis)
       goInactive()
     }
-  }, [uid, muted])
+  }, [uid, muted, lobbyMode])
 
   // 成為 host：冷啟動 → 開表演賽(原邏輯) + 聊天冷啟動；換手 → 聊天續聊(不開表演賽)。
   //   「成為 host」與「大廳人數到位」誰先到不一定 → 先記住(pendingBecameRef)，人數 ≥1 時才處理，不會漏掉。
@@ -214,7 +239,9 @@ export function useLobby(): UseLobby {
     pendingBecameRef.current = null
     if (cold) exhibitionRequestOpen('冷啟動 [' + hostGrabInfo() + ']')
     else if (import.meta.env.DEV) console.log('%c[lobby] 成為 host(非冷啟動 → 不開表演賽,聊天續聊)[' + hostGrabInfo() + ']', 'color:#69c')
-    director.onBecameHost(cold)
+    const awayMs = mLeftAt == null ? Infinity : serverNow() - mLeftAt
+    mLeftAt = null
+    director.onBecameHost(cold, awayMs) // 離開不到 45 秒就回來 → 導演不補講(照原進度)
   }, [host, activeCount])
 
   // 任一真人發言/貼圖 → host 讀他的玩家資訊卡組 facts → 導演排入針對性回覆(節流在導演內)。

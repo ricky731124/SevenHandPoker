@@ -2,7 +2,7 @@
  * Sticker set (對戰貼圖) — GAME CONTENT. Sent between players by short code (id)
  * so the online payload stays tiny (使用者:貼圖傳代號). Two kinds:
  *   - free emoji stickers (everyone owns them → the 貼圖 button is never empty)
- *   - paid image stickers (public/stickers/{id}.png, green-screened + de-watermarked),
+ *   - paid image stickers (public/stickers/{id}.webp, green-screened + de-watermarked),
  *     unlocked by buying with 鑽石 (stored in profile.unlocked.emojis).
  * Order = the display/tray order (使用者定:笑臉→哭臉→驚訝→生氣→謝謝→讚→愛心→再見→付費).
  */
@@ -10,7 +10,7 @@ export interface StickerDef {
   id: string
   name: string
   free: boolean
-  /** emoji glyph → rendered as text; absent → image sticker at stickers/{id}.png */
+  /** emoji glyph → rendered as text; absent → image sticker at stickers/{id}.webp */
   emoji?: string
   /** 售價(鑽石);未指定 → 用預設 STICKER_PRICE。免費貼圖忽略此欄。 */
   price?: number
@@ -52,7 +52,7 @@ export function getSticker(id: string): StickerDef | undefined {
 }
 
 export function stickerSrc(id: string): string {
-  return `${import.meta.env.BASE_URL}stickers/${id}.png`
+  return `${import.meta.env.BASE_URL}stickers/${id}.webp` // 512px WebP(~20~50KB;原 PNG 1024px 每張 ~1.5MB 已刪)
 }
 
 /** Owned = free, or purchased (profile.unlocked.emojis). */

@@ -85,14 +85,22 @@ export function initViewportVars(): void {
   if (typeof window === 'undefined') return
   const de = document.documentElement
   const vv = window.visualViewport
+  // 值有變才寫:visualViewport 的 scroll/resize 滑動時一秒觸發很多次,每寫一次 <html> 的變數
+  // 瀏覽器都可能重算整頁樣式;值沒變就不碰(2026-10-14 效能瘦身,行為不變)。
+  const written = new Map<string, string>()
+  const setVar = (name: string, value: string) => {
+    if (written.get(name) === value) return
+    written.set(name, value)
+    de.style.setProperty(name, value)
+  }
 
   const apply = (): boolean => {
     // visualViewport.height can read 0 before first layout — fall back to
     // innerHeight (|| not ??, so a 0 falls through), and never write a 0.
     const h = vv?.height || window.innerHeight
     const w = vv?.width || window.innerWidth
-    if (h > 0) de.style.setProperty('--vvh', `${h}px`)
-    if (w > 0) de.style.setProperty('--vvw', `${w}px`)
+    if (h > 0) setVar('--vvh', `${h}px`)
+    if (w > 0) setVar('--vvw', `${w}px`)
     // Where the visible area starts inside the layout viewport. Normally 0; when the
     // on-screen keyboard opens, iOS Safari / Android Chrome PAN the visible area down
     // to the focused input (offsetTop > 0). Popups pin their scrim here so they sit
@@ -100,7 +108,7 @@ export function initViewportVars(): void {
     // otherwise you see the main menu's bottom-left behind the keyboard, not the input.
     // ONLY while typing: once the keyboard is gone the page may stay panned (iOS) and a
     // swipe would then drag the backdrop around → with no field focused it's pinned at 0.
-    de.style.setProperty('--vvt', `${editingEl ? Math.max(0, vv?.offsetTop ?? 0) : 0}px`)
+    setVar('--vvt', `${editingEl ? Math.max(0, vv?.offsetTop ?? 0) : 0}px`)
     // Mobile browser tab (not standalone / desktop): scale every popup down to a
     // "shrunk" version so panel + images + buttons fit the reduced visible area as
     // one uniform unit (see .modal__panel / .cstages__panel — transform:scale).
@@ -110,10 +118,10 @@ export function initViewportVars(): void {
       !!window.matchMedia?.('(display-mode: standalone)').matches ||
       (navigator as unknown as { standalone?: boolean }).standalone === true
     const mobileWeb = coarse && !standalone
-    de.style.setProperty('--mw-scale', mobileWeb ? '0.8' : '1')
+    setVar('--mw-scale', mobileWeb ? '0.8' : '1')
     // Popup iOS safe-area only applies at full size (fullscreen/desktop). On mobile
     // web the popup is already shrunk 0.8, so it clears the notch on its own → 0.
-    de.style.setProperty('--safe-mult', mobileWeb ? '0' : '1')
+    setVar('--safe-mult', mobileWeb ? '0' : '1')
     return h > 0 && w > 0
   }
 

@@ -6,7 +6,7 @@ import type { PlayerId } from '../../game/state'
  * registered player can show their equipped avatar; falls back to the role
  * default (p1=cat / p2=bird) when only a PlayerId is given.
  */
-// 網頁用 512px WebP（~20KB/張）。原圖 public/{id}.png(~1MB) 保留當母檔；改原圖後跑 `node scripts/build-img.mjs` 重產。
+// 網頁用 512px WebP（~20KB/張）。高畫質母檔備份在 art/avatars/{id}.png(不部署、程式不引用)；改母檔後跑 `node scripts/build-img.mjs` 重產。
 const AVATAR_IMG: Record<string, string> = {
   cat: 'avatars/cat.webp', // 橘貓 (default / host)
   bird: 'avatars/bird.webp', // 鳥鳥 (guest default / 哪裡來的鎹鴉? boss + 第1關獎勵)

@@ -130,31 +130,58 @@ export function sortLiveEntries(entries: LiveEntry[], limit = 5): LiveEntry[] {
     .slice(0, limit)
 }
 
+// ---- 共用訂閱(2026-10-14):整個分頁只開一條 liveIndex 監聽 ----------------------------
+// 以前 LiveBoard / 聊天引擎 / 表演賽各訂一次 → 同一份資料解析 3 遍、清潔工的 remove 也送 3 遍。
+// 現在大家共用一條:資料到了解析一次、清潔一次,再依各自的 limit 分發。最後一個退訂才真的關。
+type LiveSub = { cb: (entries: LiveEntry[]) => void; limit: number }
+const _liveSubs = new Set<LiveSub>()
+let _liveUnsub: (() => void) | null = null
+let _liveLast: LiveEntry[] | null = null // 最近一次的完整清單(晚到的訂閱者立刻拿到,不用等下一次變動)
+
 /**
  * Subscribe to the whole `liveIndex` node → sorted top-N entries. Returns an
  * unsubscribe. Opportunistically sweeps stale ended entries on each update.
+ * 整個分頁共用一條監聽(見上)。
  */
 export function subscribeLiveIndex(cb: (entries: LiveEntry[]) => void, limit = 5): () => void {
-  const node = ref(getDb(), 'liveIndex')
-  const unsub = onValue(
-    node,
-    (snap) => {
-      const all = (snap.val() ?? {}) as Record<string, Omit<LiveEntry, 'code'>>
-      const entries = Object.entries(all)
-      const valid = (e: Omit<LiveEntry, 'code'>) => e && e.p1 && e.p2 && (e.status === 'live' || e.status === 'ended')
-      const list: LiveEntry[] = entries
-        // 濾掉殘缺 entry(當機/onDisconnect race 留下、只有 code 沒 p1/p2 的殘骸)→ 不然 UI 讀 p.avatar 會炸。
-        .filter(([, e]) => valid(e))
-        .map(([code, e]) => ({ ...e, code }))
-      // 殘缺 zombie(缺 p1/p2 或缺 status,永遠不會被顯示也不會被 24h sweep)→ 直接清掉,避免長期堆積。
-      const zombies = entries.filter(([, e]) => !valid(e)).map(([code]) => code)
-      void sweepStaleLive(list, zombies) // lazy cleanup, never blocks render
-      cb(sortLiveEntries(list, limit))
-    },
-    () => cb([]),
-  )
-  return unsub
+  const sub: LiveSub = { cb, limit }
+  _liveSubs.add(sub)
+  if (_liveLast) cb(sortLiveEntries(_liveLast, limit))
+  if (!_liveUnsub) {
+    _liveUnsub = onValue(
+      ref(getDb(), 'liveIndex'),
+      (snap) => {
+        const all = (snap.val() ?? {}) as Record<string, Omit<LiveEntry, 'code'>>
+        const entries = Object.entries(all)
+        const valid = (e: Omit<LiveEntry, 'code'>) => e && e.p1 && e.p2 && (e.status === 'live' || e.status === 'ended')
+        const list: LiveEntry[] = entries
+          // 濾掉殘缺 entry(當機/onDisconnect race 留下、只有 code 沒 p1/p2 的殘骸)→ 不然 UI 讀 p.avatar 會炸。
+          .filter(([, e]) => valid(e))
+          .map(([code, e]) => ({ ...e, code }))
+        // 殘缺 zombie(缺 p1/p2 或缺 status,永遠不會被顯示也不會被 24h sweep)→ 直接清掉,避免長期堆積。
+        const zombies = entries.filter(([, e]) => !valid(e)).map(([code]) => code)
+        void sweepStaleLive(list, zombies) // lazy cleanup, never blocks render
+        _liveLast = list
+        for (const s of [..._liveSubs]) s.cb(sortLiveEntries(list, s.limit))
+      },
+      () => {
+        _liveLast = []
+        for (const s of [..._liveSubs]) s.cb([])
+      },
+    )
+  }
+  return () => {
+    _liveSubs.delete(sub)
+    if (!_liveSubs.size && _liveUnsub) {
+      _liveUnsub()
+      _liveUnsub = null
+      _liveLast = null
+    }
+  }
 }
+
+/** 正在刪的 code(刪的過程中又來新快照 → 不重複送 remove)。 */
+const _sweeping = new Set<string>()
 
 /** Lazy sweep (比照 sweepStaleRooms): delete ended entries older than 24h + 殘缺 zombie,
  *  連同其 spectate/ 子樹。給已讀到的 list/zombie codes,不多花讀取。沒 auth 就不做(寫不進、
@@ -169,13 +196,16 @@ async function sweepStaleLive(list: LiveEntry[], zombies: string[] = []): Promis
   const deadLive = list
     .filter((e) => e.status === 'live' && typeof e.startedAt === 'number' && now - e.startedAt > LIVE_TTL_MS)
     .map((e) => e.code)
-  const codes = [...new Set([...deadEnded, ...deadLive, ...zombies])]
+  const codes = [...new Set([...deadEnded, ...deadLive, ...zombies])].filter((c) => !_sweeping.has(c))
   for (const code of codes) {
+    _sweeping.add(code)
     try {
       await remove(liveRef(code))
       await remove(ref(getDb(), `spectate/${code}`))
     } catch {
       /* best-effort */
+    } finally {
+      _sweeping.delete(code)
     }
   }
 }

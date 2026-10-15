@@ -9,6 +9,7 @@ import Diamond from '../components/game/Diamond'
 import SeriesTrack from '../components/game/SeriesTrack'
 import StartConfirm from '../components/game/StartConfirm'
 import { sfx } from '../../audio/sfx'
+import { stageMapUrl } from '../hooks/useStageMapPreload'
 import './CampaignMap.css'
 
 /**
@@ -36,12 +37,14 @@ export default function CampaignMap() {
   }
 
   const clearedIds = Object.keys(clearedAt ?? {})
-  const bg = `${import.meta.env.BASE_URL}maps/stage${stage.index}.webp` // 網頁用 webp(~150KB);PNG 母檔留著,改圖後跑 build-img 重產
+  const bg = stageMapUrl(stage) // 已在背景預載(useStageMapPreload)
   const pts = stage.nodePositions.map((p) => `${p.x},${p.y}`).join(' ')
 
   return (
     <div className="cmap">
-      <div className="cmap__bg" style={{ backgroundImage: `url(${bg})` }} />
+      {/* 用 <img> 不用 CSS 背景：同頁預載過的 <img> 直接沿用、不再問伺服器；CSS 背景會重問一次(先閃底色) */}
+      <div className="cmap__bg" />
+      <img className="cmap__bg-img" src={bg} alt="" draggable={false} />
       <div className="cmap__veil" />
       {/* Hide the map's back button while the start dialog is open, so only the
           dialog's own back button is active (its scrim covers the map). */}

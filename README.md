@@ -34,5 +34,5 @@ Howler + WebAudio（音效）· Firebase Realtime Database（連線，開發中�
 
 ## 可覆蓋的美術資產
 
-- 主畫面標題大圖：放 `public/title.png`（未放則顯示文字備援）。
+- 主畫面標題大圖：`public/title.webp`（未放則顯示文字備援）。
 - 頭像 / 牌背 / 桌布：內建程序化 SVG，之後可換 PNG 或增加主題。

@@ -141,6 +141,9 @@ export const LOBBY_MUTE_USERS: string[] = ['ka', 'kaka']
 // ---- lobbyHost（主持人鎖 + 心跳 + 交接）-------------------------------------
 let _hostTimer: ReturnType<typeof setInterval> | null = null
 let _amHost = false
+// 每次 releaseHost 就 +1。搶 host / 心跳的 transaction 是非同步的:放掉之後才回來的結果一律作廢,
+// 否則會「人已離開大廳,晚到的搶 host 結果又把心跳開起來」→ 永遠握著 host、別人接不到(2026-10-14 實測抓到)。
+let _hostEpoch = 0
 let _lastGrabCold = false // 上一次搶到 host 時,是不是「冷啟動(空大廳)」
 let _lastGrabInfo = '' // 上一次搶 host 的細節(給 DEV log:誰是前一任、缺席多久)
 
@@ -154,6 +157,7 @@ export async function tryBecomeHost(): Promise<boolean> {
   const u = currentUser()
   if (!u) return false
   const hostRef = ref(getDb(), 'lobbyHost')
+  const epoch = _hostEpoch
   try {
     let prevAt: number | undefined // 搶到前,前一任 host 的 at(判冷啟動 vs 交接)
     let prevBy: string | undefined // 前一任 host 是誰(自己被節流後搶回「自己的」→ 不算冷啟動)
@@ -164,6 +168,7 @@ export async function tryBecomeHost(): Promise<boolean> {
       if (fresh && cur!.by !== CONN_ID) return // 別人正握著且新鮮 → 放棄
       return { by: CONN_ID, at: serverTimestamp() }
     })
+    if (epoch !== _hostEpoch) return false // 等結果的期間已經離開大廳(releaseHost)→ 作廢,別開心跳
     const val = res.snapshot.val() as { by?: string } | null
     _amHost = !!res.committed && val?.by === CONN_ID
     // 冷啟動 = 前一任不是我自己 + (根本沒人 或 消失 >30s)= 真的空大廳有新的人接手。
@@ -181,7 +186,7 @@ export async function tryBecomeHost(): Promise<boolean> {
         void runTransaction(hostRef, (cur: { by?: string } | null) => {
           if (cur && cur.by !== CONN_ID) return cur // 已被別人接手 → 不動
           return { by: CONN_ID, at: serverTimestamp() }
-        }).then((r) => { _amHost = (r.snapshot.val() as { by?: string } | null)?.by === CONN_ID })
+        }).then((r) => { if (epoch === _hostEpoch) _amHost = (r.snapshot.val() as { by?: string } | null)?.by === CONN_ID })
       }, HOST_HEARTBEAT_MS)
     }
     return _amHost
@@ -192,6 +197,7 @@ export async function tryBecomeHost(): Promise<boolean> {
 
 /** 放掉 host（離開 active/unmount 時）。 */
 export function releaseHost(): void {
+  _hostEpoch++ // 還在路上的搶 host / 心跳結果全部作廢
   if (_hostTimer) { clearInterval(_hostTimer); _hostTimer = null }
   _amHost = false
   // ⚠️ 不把 DB 的 lobbyHost 清成 null:留著 {by:我, at:舊值} 讓它自然過期(15s)→ 別的活人接手。
@@ -351,12 +357,14 @@ if (import.meta.env.DEV) {
     const uidOfConn = (conn?: string) => (conn ? active[conn]?.uid : undefined)
     const out = {
       我這台_CONN_ID: CONN_ID,
+      我這台自認host: _amHost,
+      我這台host心跳在跑: !!_hostTimer,
       host: host
         ? { 握著的人: nameU(uidOfConn(host.by)), uid: (uidOfConn(host.by) ?? '').slice(0, 8), conn: (host.by ?? '').slice(-6), 幾秒沒更新: age(host.at), 是我嗎: host.by === CONN_ID, 已stale可被搶_15s: typeof host.at === 'number' && now - host.at > HOST_STALE_MS }
         : '(沒人握 host)',
       大廳在席: Object.entries(active).map(([conn, v]) => ({ 名字: nameU(v.uid), uid: (v.uid ?? '').slice(0, 8), conn: conn.slice(-6), 幾秒沒更新: age(v.at) })),
       表演賽: ex
-        ? { 對戰: `${nameB(ex.p1?.botId)} vs ${nameB(ex.p2?.botId)}`, 狀態: ex.status, 第幾步: (ex.moves ?? []).length, 驅動者是我嗎: ex.driverConn === CONN_ID, 驅動幾秒沒更新: age(ex.driverAt), code: ex.code?.slice(-8) }
+        ? { 對戰: `${nameB(ex.p1?.botId)} vs ${nameB(ex.p2?.botId)}`, 狀態: ex.status, 第幾步: Object.keys(ex.moves ?? {}).length, 驅動者是我嗎: ex.driverConn === CONN_ID, 驅動幾秒沒更新: age(ex.driverAt), code: ex.code?.slice(-8) }
         : '(目前沒有表演賽)',
       租借中的人機: Object.entries(lease).map(([bot, v]) => ({ 人機: nameB(bot), 租給conn: (v.by ?? '').slice(-6), 幾秒沒更新: age(v.at) })),
     }

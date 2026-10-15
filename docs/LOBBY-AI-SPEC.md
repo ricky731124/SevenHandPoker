@@ -420,7 +420,7 @@ reactRules:  { when: Condition, say: poolRef|Line[], cta?: Cta }[]  // 有序；
 
 ### 13.11 圖片瘦身（2026-10-06，已上線 `30472a3`）
 - 頭像原為 ~1000px PNG（0.7~1.4MB/張）、title.png 1.8MB，畫面只顯示 40~150px → 新玩家進主畫面要下載 ~9MB、解碼 ~28MB。
-- `scripts/build-img.mjs`（ffmpeg-static）產 `public/avatars/{id}.webp`（長邊 512，~20KB）+ `public/title.webp`（73KB）；**原 PNG 保留當母檔**，改原圖後重跑即可。
+- `scripts/build-img.mjs`（ffmpeg-static）產 `public/avatars/{id}.webp`（長邊 512，~20KB）+ `public/title.webp`（73KB）。（2026-10-14 更新：原 PNG 不再放 `public/`；只有頭像母檔留在 `art/avatars/`，地圖/貼圖/標題 PNG 已刪，貼圖也改 512px webp。）
 - `avatarSrc()`/Menu 標題/CardBack 改用 WebP；頭像 `<img>` 加 `decoding="async"`，清單加 `loading="lazy"`。實測主畫面圖片總量 **263KB**。
 
 ### 13.13 大廳網路/運算瘦身 — 調查結果（10/06，使用者說「先不用動」，之後要做照這份）

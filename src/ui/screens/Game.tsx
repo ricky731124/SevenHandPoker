@@ -738,8 +738,9 @@ export function GameBoard() {
 
       {/* 強迫更新:被打那一方手牌飛回牌堆→洗牌→發回(單機/連線/觀戰共用) */}
       <RefreshFx me={me} cardW={sz.card} />
-      {/* 爆破:炸彈飛到被炸那一方手牌 → 那張牌抖一抖爆掉 */}
-      <ExplodeFx me={me} cardW={sz.card} />
+      {/* 爆破:炸彈飛到被炸那一方手牌 → 那張牌抖一抖爆掉。一般對局不會有爆破 → 不掛;
+          觀戰/回放不一定知道雙方帶什麼卡 → 照掛(沒有輪詢,只在牌局變動時量一次) */}
+      {(g.special || spec || replay) && <ExplodeFx me={me} cardW={sz.card} />}
 
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on

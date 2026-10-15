@@ -59,11 +59,11 @@ function makeWorld(opts: { latency?: number; seed?: number } = {}) {
     return d
   }
   /** 把 host 交給 id（null = 沒人當 host）。舊 host 失去資格；新 host 觸發 onBecameHost。 */
-  const giveHost = (id: string | null, cold = false) => {
-    ev(`host ${hostTab} -> ${id}${cold ? ' (cold)' : ''}`)
+  const giveHost = (id: string | null, cold = false, awayMs?: number) => {
+    ev(`host ${hostTab} -> ${id}${cold ? ' (cold)' : ''}${awayMs != null ? ` away=${awayMs}` : ''}`)
     if (hostTab) tabs.get(hostTab)!.setHost(false)
     hostTab = id
-    if (id) tabs.get(id)!.onBecameHost(cold)
+    if (id) tabs.get(id)!.onBecameHost(cold, awayMs)
   }
   const human = () => { humanTs.push(Date.now()); broadcastTs(Date.now()) }
   const since = (t0: number) => log.filter((m) => m.ts >= t0)
@@ -245,18 +245,23 @@ describe('大廳聊天導演：多分頁劇本模擬', () => {
     w.healthy()
   })
 
-  it('劇本7b 同上但有網路延遲（換手瞬間舊 host 剛好在送）→ 間隔仍然 ≥ GAP_MIN(9 秒)', async () => {
-    const w = makeWorld({ latency: 300 })
-    const A = w.tab('A'); const B = w.tab('B')
-    A.setAudience(2); B.setAudience(2)
-    w.giveHost('A', true)
-    for (let i = 0; i < 60; i++) { // 每 3~13 秒換一次，持續 ~8 分鐘
-      await vi.advanceTimersByTimeAsync(3 * SEC + (i * 7919 % 10) * SEC)
-      w.giveHost(w.hostTab === 'A' ? 'B' : 'A', false)
+  // 固定種子跑 100 次：原本用 Math.random 約 1% 會撞到「睡覺期間失去又拿回 host → 醒來沒重算間隔」(seed 25/28 必中)
+  it('劇本7b 同上但有網路延遲（換手瞬間舊 host 剛好在送）→ 間隔仍然 ≥ GAP_MIN(9 秒)（100 個種子）', async () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      vi.setSystemTime(new Date('2026-10-06T20:00:00'))
+      const w = makeWorld({ latency: 300, seed })
+      const A = w.tab('A'); const B = w.tab('B')
+      A.setAudience(2); B.setAudience(2)
+      w.giveHost('A', true)
+      for (let i = 0; i < 60; i++) { // 每 3~13 秒換一次，持續 ~8 分鐘
+        await vi.advanceTimersByTimeAsync(3 * SEC + (i * 7919 % 10) * SEC)
+        w.giveHost(w.hostTab === 'A' ? 'B' : 'A', false)
+      }
+      await vi.advanceTimersByTimeAsync(SEC)
+      w.healthy(false) // 有延遲時，舊 host 確認完的那一則可能晚 150ms 落地（無害），只驗間隔
+      vi.clearAllTimers()
     }
-    await vi.advanceTimersByTimeAsync(SEC)
-    w.healthy(false) // 有延遲時，舊 host 確認完的那一則可能晚 150ms 落地（無害），只驗間隔
-  })
+  }, 60_000)
 
   it('劇本8 大家都離開大廳 → 沒有聽眾就完全不講', async () => {
     const w = makeWorld()
@@ -270,6 +275,103 @@ describe('大廳聊天導演：多分頁劇本模擬', () => {
     A.onOpened(); A.onHumanMessage('x', human({ text: 'hi' }))
     await vi.advanceTimersByTimeAsync(5 * MIN)
     expect(w.since(t0).length).toBe(0)
+    w.healthy()
+  })
+
+  // 2026-10-14:看一下回放/觀戰/配對(<45 秒)就回來 → 不補講,只把離開前剩下的講完
+  it('劇本10 只有我、聊到一半去看回放 4 秒就回來 → 額度照離開前剩的(不補),講完就停、不再打招呼', async () => {
+    const w = makeWorld({ seed: 7 })
+    const A = w.tab('A')
+    A.setAudience(1)
+    w.giveHost('A', true)
+    await vi.advanceTimersByTimeAsync(30 * SEC) // 聊到一半
+    const left = A.debug().quota
+    expect(left).toBeGreaterThan(0)
+    A.setAudience(0); w.giveHost(null) // 去看回放
+    expect(A.debug().quota).toBe(0)
+    await vi.advanceTimersByTimeAsync(4 * SEC)
+    A.setAudience(1); w.giveHost('A', false, 7 * SEC) // 回來(含 3 秒開場延遲)
+    // 剩多少就講多少,不補 2~4(回來那一刻可能已經開講剩下的第一段 → 少 1)
+    expect(A.debug().quota).toBeLessThanOrEqual(left)
+    expect(A.debug().quota).toBeGreaterThanOrEqual(left - 1)
+    const t0 = Date.now()
+    await vi.advanceTimersByTimeAsync(10 * MIN)
+    expect(w.since(t0).length).toBeGreaterThan(0) // 有把剩下的講完
+    expect(A.debug().quota).toBe(0)
+    expect(w.log.filter(isGreeting).length).toBe(1) // 只有最開頭那句招呼
+    w.healthy()
+  })
+
+  it('劇本10b 只有我、聊完了去看回放 3 秒就回來 → 完全不講', async () => {
+    const w = makeWorld()
+    const A = w.tab('A')
+    A.setAudience(1)
+    w.giveHost('A', true)
+    await vi.advanceTimersByTimeAsync(10 * MIN)
+    A.setAudience(0); w.giveHost(null)
+    await vi.advanceTimersByTimeAsync(3 * SEC)
+    const t0 = Date.now()
+    A.setAudience(1); w.giveHost('A', false, 6 * SEC)
+    await vi.advanceTimersByTimeAsync(5 * MIN)
+    expect(w.since(t0).length).toBe(0)
+    w.healthy()
+  })
+
+  it('劇本10c 連續快速進出 5 次(每次 3 秒) → 一句都不多講', async () => {
+    const w = makeWorld()
+    const A = w.tab('A')
+    A.setAudience(1)
+    w.giveHost('A', true)
+    await vi.advanceTimersByTimeAsync(10 * MIN)
+    const t0 = Date.now()
+    for (let i = 0; i < 5; i++) {
+      A.setAudience(0); w.giveHost(null)
+      await vi.advanceTimersByTimeAsync(3 * SEC)
+      A.setAudience(1); w.giveHost('A', false, 6 * SEC)
+      await vi.advanceTimersByTimeAsync(20 * SEC)
+    }
+    await vi.advanceTimersByTimeAsync(3 * MIN)
+    expect(w.since(t0).length).toBe(0)
+    w.healthy()
+  })
+
+  it('劇本10d 離開超過 45 秒(打完一場)才回來 → 照舊續聊(補 2~4 段)', async () => {
+    const w = makeWorld()
+    const A = w.tab('A')
+    A.setAudience(1)
+    w.giveHost('A', true)
+    await vi.advanceTimersByTimeAsync(10 * MIN)
+    A.setAudience(0); w.giveHost(null)
+    await vi.advanceTimersByTimeAsync(3 * MIN)
+    const t0 = Date.now()
+    A.setAudience(1); w.giveHost('A', false, 3 * MIN + 3 * SEC)
+    const q = A.debug().quota
+    expect(q).toBeGreaterThanOrEqual(1) // 補了 2~4 段(第一段可能已經在講)
+    expect(q).toBeLessThanOrEqual(4)
+    await vi.advanceTimersByTimeAsync(3 * MIN)
+    const back = w.since(t0)
+    expect(back.length).toBeGreaterThanOrEqual(2)
+    expect(back.some(isGreeting)).toBe(false)
+    w.healthy()
+  })
+
+  it('劇本10e A 主持、B 在場；A 去觀戰 4 秒回來搶回自己的 host → 不補講；B 之後才接手是一般換手 → 照舊續聊', async () => {
+    const w = makeWorld()
+    const A = w.tab('A'); const B = w.tab('B')
+    A.setAudience(2); B.setAudience(2)
+    w.giveHost('A', true)
+    await vi.advanceTimersByTimeAsync(10 * MIN) // 聊完
+    A.setAudience(1); B.setAudience(1); w.giveHost(null) // A 去觀戰(B 還在,15s 內不會接手)
+    await vi.advanceTimersByTimeAsync(4 * SEC)
+    const t0 = Date.now()
+    A.setAudience(2); B.setAudience(2); w.giveHost('A', false, 7 * SEC)
+    await vi.advanceTimersByTimeAsync(2 * MIN)
+    expect(w.since(t0).length).toBe(0)
+    // A 真的離開很久 → B 接手(B 沒離開過 → awayMs 未知)→ 一般換手,續聊
+    A.setAudience(0); B.setAudience(1); w.giveHost('B', false)
+    const t1 = Date.now()
+    await vi.advanceTimersByTimeAsync(2 * MIN)
+    expect(w.since(t1).length).toBeGreaterThanOrEqual(2)
     w.healthy()
   })
 

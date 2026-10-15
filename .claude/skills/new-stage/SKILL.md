@@ -50,15 +50,16 @@ description: 主線戰役加一個新關卡(新 boss + 關卡地圖 + 商城貼�
 
 ```bash
 node scripts/stage-art.mjs <N> <avatarId> <stickerId>          # 預覽 → _art_src/stage{N}/_preview/
-node scripts/stage-art.mjs <N> <avatarId> <stickerId> commit   # 寫進 public/
-node scripts/build-img.mjs                                       # 註冊頭像後重產 webp(頭像清單讀 PlayerAvatar)
+node scripts/stage-art.mjs <N> <avatarId> <stickerId> commit   # 寫進 public/(webp) + art/avatars/(頭像母檔)
+node scripts/build-img.mjs                                       # 註冊頭像後重產 webp(頭像清單讀 PlayerAvatar,母檔讀 art/avatars/)
 ```
 
 - avatarId 用英文小寫(如 `shiba`);stickerId = `stickers.ts` 最後一張 +1。
-- 會自動:去綠背(從四邊+跟背景同色的口袋 flood,含外圈淡綠光暈)、偵測右下浮水印塗回綠再去背、貼圖連白色割線邊一起去並清碎點、透明邊補色防縮圖滲綠、boss 1150×912、地圖 1328×800 + webp、貼圖 512×512。
+- 會自動:去綠背(從四邊+跟背景同色的口袋 flood,含外圈淡綠光暈)、偵測右下浮水印塗回綠再去背、貼圖連白色割線邊一起去並清碎點、透明邊補色防縮圖滲綠、boss 1150×912、地圖 1328×800 webp、貼圖 512×512 webp。
+- **圖檔規矩(2026-10 使用者定案)**:網頁一律只載低 KB 的 webp。只有頭像留高畫質母檔(`art/avatars/{id}.png`,不部署、程式不引用,給以後大圖/重產用);地圖、貼圖不留 PNG。`_art_src/stage{N}/` 原圖不進 git,上線確認 OK 後可刪。
 - **一定要目視檢查**:把預覽疊到紫底再看(檢視器會把透明區顯示成綠色,看不出去背成果):
   `ffmpeg -f lavfi -i color=c=0x6a2c8c:s=1150x1024 -i <png> -filter_complex "[0][1]overlay=0:0:shortest=1" -frames:v 1 out.png`(ffmpeg 用 `node -e "console.log(require('ffmpeg-static'))"` 拿路徑)。
-- **地圖主角壓到節點**(節點固定在 24%/60、50%/44、76%/58):加 `--map-crop x,y,w` 先從原圖裁一塊再縮放,把主角移到節點之間。疊黃框看節點(真實節點約 96px@1328 寬):`ffmpeg -i maps_stageN.png -vf "drawbox=x=iw*0.24-48:y=ih*0.60-48:w=96:h=96:color=yellow:t=5,drawbox=x=iw*0.50-48:y=ih*0.44-48:w=96:h=96:color=yellow:t=5,drawbox=x=iw*0.76-48:y=ih*0.58-48:w=96:h=96:color=yellow:t=5" out.png`。第 8 關用 `--map-crop 175,28,1180`。之後重跑 commit 也要帶同樣參數。
+- **地圖主角壓到節點**(節點固定在 24%/60、50%/44、76%/58):加 `--map-crop x,y,w` 先從原圖裁一塊再縮放,把主角移到節點之間。疊黃框看節點(真實節點約 96px@1328 寬):`ffmpeg -i maps_stageN.webp -vf "drawbox=x=iw*0.24-48:y=ih*0.60-48:w=96:h=96:color=yellow:t=5,drawbox=x=iw*0.50-48:y=ih*0.44-48:w=96:h=96:color=yellow:t=5,drawbox=x=iw*0.76-48:y=ih*0.58-48:w=96:h=96:color=yellow:t=5" out.png`。第 8 關用 `--map-crop 175,28,1180`。之後重跑 commit 也要帶同樣參數。
 - 地圖的浮水印不在綠底上,看輸出的 `浮水印掃描` 和右下角裁圖判斷;有的話加 `--heal-map x,y,w,h`。
 - 尺寸、比例跟前面關卡不一樣就以現有圖為準調,使用者不滿意再微調。
 

@@ -10,6 +10,7 @@ import { BOTS, type BotPersona } from './bots'
  *   - 唯一嘴巴 = host；送每則前都 verifyHost，失去 host 立刻收手（不會兩台同時講）。
  *   - 招呼（安安大家好）只在「冷啟動 且 聊天已安靜 ≥ GREET_QUIET_MS」才講；其他時候一律接著聊。
  *   - 換手續聊：接手成 host（非冷啟動）→ 引擎沒在跑就補 RESUME 額度(2~4)接著聊。
+ *     例外：自己離開不到 RETURN_GAP_MS(45s)就回來 → 不補,只把離開前剩下的額度講完。
  *   - 回大廳續聊：host 看到某人離開 ≥ RETURN_GAP_MS 又回來（例：打完一場）→ 同上補 2~4。
  *   - 新到訪 / 真人發言 / 點開聊天室 → 額度回滿 6~9（新到訪、發言另排一句回覆插隊）。
  *   - 聊天已安靜 ≥ QUIET_FAST_MS 時，第一句 1.5~4s 就出來；其餘每則間隔 9~18s。
@@ -43,7 +44,8 @@ export interface ChatDirector {
   setLastMessageTs: (ts: number | null) => void
   setGlobals: (g: LobbyGlobals) => void
   // ── 事件 ──
-  onBecameHost: (cold: boolean) => void
+  /** awayMs:這台上次離開大廳到現在多久(沒離開過/不知道 = Infinity)。 */
+  onBecameHost: (cold: boolean, awayMs?: number) => void
   observeActive: (uids: string[], selfUid: string | null) => void // host 每輪 poll 呼叫，偵測「回大廳」
   onNewcomer: (greet: BotUtterance | null) => void
   onHumanMessage: (uid: string, input: ReactInput) => void
@@ -69,6 +71,7 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
   let running = false
   let gen = 0
   let roster: BotPersona[] = []
+  let parkedQuota = 0 // 大家都離開時剩下的額度先記著:短暫離開(看一下回放/觀戰)回來照原進度講完
   const lastReactByUid: Record<string, number> = {}
   const lastSeenAt = new Map<string, number>() // host 本機記錄：uid 最後一次在大廳的時間
   let lastObserveAt: number | null = null      // 上次 observeActive 的時間
@@ -105,12 +108,20 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
         if (!alive()) break
         // 硬間隔：聊天室最後一則（不論誰講、哪個分頁講）不到 GAP_MIN → 先等到滿，杜絕跨分頁/換手瞬間連發
         // 剛接手：前一任送出的那則可能還沒傳到本分頁(lastTs 還是舊的) → 先等它落地再量間隔
-        const settle = HANDOFF_SETTLE_MS - (deps.now() - hostSince)
-        if (settle > 0) { await deps.sleep(settle); if (!alive()) break }
-        const since = quietFor()
-        if (since < GAP_MIN) { await deps.sleep(GAP_MIN - since + rint(0, 2000)); if (!alive()) break }
-        if (!(await deps.verifyHost())) { host = false; break } // 已被別台接手 → 立刻收手
-        if (!alive()) break                                      // 確認期間人離開/失去 host → 不送
+        // 每次睡醒都從頭重新檢查：睡的期間可能「失去 host → 別台講了一句 → 又拿回 host」，睡前算的間隔已經不準
+        let ok = false
+        while (alive()) {
+          const settle = HANDOFF_SETTLE_MS - (deps.now() - hostSince)
+          if (settle > 0) { await deps.sleep(settle); continue }
+          const since = quietFor()
+          if (since < GAP_MIN) { await deps.sleep(GAP_MIN - since + rint(0, 2000)); continue }
+          if (!(await deps.verifyHost())) { host = false; break } // 已被別台接手 → 立刻收手
+          if (!alive()) break                                      // 確認期間人離開/失去 host → 不送
+          if (deps.now() - hostSince < HANDOFF_SETTLE_MS || quietFor() < GAP_MIN) continue // 確認期間又換手/有人講 → 重來
+          ok = true
+          break
+        }
+        if (!ok) break
         const msg = replies.shift() ?? pending.shift()           // 回覆插隊（連劇場中間也插得進去）
         if (msg) { lastTs = deps.now(); await deps.write(msg) }
       }
@@ -138,14 +149,23 @@ export function createChatDirector(deps: DirectorDeps): ChatDirector {
     setHost: (h) => { if (h && !host) hostSince = deps.now(); host = h },
     setAudience: (n) => {
       audience = n
-      if (n === 0) { roster = []; quota = 0; replies = [] } // 全部離開 → 清本 session
+      if (n === 0) { if (quota > 0) parkedQuota = quota; roster = []; quota = 0; replies = [] } // 全部離開 → 清本 session(額度先記著)
     },
     setLastMessageTs: (ts) => { lastTs = ts },
     setGlobals: (g) => { globals = g },
 
-    onBecameHost: (cold) => {
+    onBecameHost: (cold, awayMs = Infinity) => {
       if (!host) hostSince = deps.now()
       host = true
+      const parked = parkedQuota
+      parkedQuota = 0
+      if (!cold && awayMs < RETURN_GAP_MS) {
+        // 短暫離開(看一下回放/觀戰/配對、切一下分頁)就回來 → 不補講,照原本的進度把剩下的講完(2026-10-14 使用者定案)
+        if (quota === 0 && parked > 0) quota = parked
+        deps.log?.(`短暫離開 ${(awayMs / 1000).toFixed(0)}s 回來 → 不補講${quota ? `(續講剩下 ${quota})` : ''}`)
+        if (!idle()) run()
+        return
+      }
       if (cold) {
         quota = rint(QUOTA_MIN, QUOTA_MAX)
         const greet = quietFor() >= GREET_QUIET_MS

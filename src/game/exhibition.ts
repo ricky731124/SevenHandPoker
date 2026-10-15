@@ -58,6 +58,8 @@ const exRef = () => ref(getDb(), EX_PATH)
 const specRef = (code: string) => ref(getDb(), `spectate/${code}/spec`)
 
 interface ExSide { botId: string; name: string; avatarId: string; boss: BossRuntime }
+/** 大家平常只需要知道的那幾格(誰在驅動、心跳、是不是還活著)。棋譜/大腦只有驅動者要,開跑時讀一次。 */
+interface ExMeta { code: string; status: ExState['status']; driverConn: string; driverAt: number }
 interface ExState {
   code: string
   seed: number
@@ -80,7 +82,7 @@ let mUid: string | null = null
 let mOpenReqAt = 0 // 「開場請求」時間戳(由 useLobby 在新到訪/剛接手 host 時設);8s 內沒 live 才開,不排隊
 let mOpenReqReason = '' // 這次請求的原因(冷啟動/新到訪…),給 log 用
 let mReqLoggedAt = 0 // 已對「這個請求(以 mOpenReqAt 為 id)」印過略過原因 → 不每個 tick 洗版
-let mState: ExState | null = null
+let mState: ExMeta | null = null
 let mLive: LiveEntry[] = []
 let mUnsubEx: (() => void) | null = null
 let mUnsubLive: (() => void) | null = null
@@ -95,11 +97,64 @@ let mOpening = false
 const serverNow = () => Date.now() + mOffset
 const movesOf = (s: ExState): Move[] => (Array.isArray(s.moves) ? s.moves : Object.values((s.moves ?? {}) as Record<string, Move>))
 
+// ---- 共用的「表演賽摘要」訂閱(2026-10-14)------------------------------------------
+// 以前大廳每個人都訂整個 lobbyExhibition 節點 → 驅動者每走一步,整份棋譜(+兩隻大腦)就推給大廳每個人。
+// 其實大家只需要 code/status/driverConn/driverAt(判斷誰在跑、要不要接手、LiveBoard 濾死卡);
+// 棋譜只有驅動者開跑/接手時讀一次。所以改成只訂這 4 格子節點,整個分頁共用一份。
+type MetaSub = (m: ExMeta | null) => void
+const _metaSubs = new Set<MetaSub>()
+let _metaUnsubs: (() => void)[] = []
+let _metaVals: Partial<ExMeta> = {}
+let _metaReady = false
+// 4 格分開到 → 建立/刪除節點的瞬間可能只到一半;缺任何一格就當「沒有」,絕不拿 driverAt=0 去判 stale(會誤收場)。
+const metaOf = (): ExMeta | null => {
+  const v = _metaVals
+  return v.code && v.status && v.driverConn && typeof v.driverAt === 'number'
+    ? { code: v.code, status: v.status, driverConn: v.driverConn, driverAt: v.driverAt }
+    : null
+}
+
+function subscribeExMeta(cb: MetaSub): () => void {
+  _metaSubs.add(cb)
+  if (_metaReady) cb(metaOf())
+  if (!_metaUnsubs.length) {
+    const fields = ['code', 'status', 'driverConn', 'driverAt'] as const
+    const seen = new Set<string>()
+    const emit = () => { if (_metaReady) for (const s of [..._metaSubs]) s(metaOf()) }
+    _metaUnsubs = fields.map((f) =>
+      onValue(
+        ref(getDb(), `${EX_PATH}/${f}`),
+        (snap) => {
+          ;(_metaVals as Record<string, unknown>)[f] = snap.val() ?? undefined
+          seen.add(f)
+          if (!_metaReady && seen.size === fields.length) _metaReady = true // 4 格都到齊才開始發(不發半套)
+          emit()
+        },
+        () => { _metaVals = {}; _metaReady = true; emit() }, // 規則未發布 → 當作沒有表演賽
+      ),
+    )
+  }
+  return () => {
+    _metaSubs.delete(cb)
+    if (!_metaSubs.size) {
+      _metaUnsubs.forEach((u) => u())
+      _metaUnsubs = []
+      _metaVals = {}
+      _metaReady = false
+    }
+  }
+}
+
+/** 讀一次完整的表演賽狀態(含棋譜/大腦),只有驅動者開跑/接手、或收場時才用。 */
+async function fetchExState(): Promise<ExState | null> {
+  try { return ((await get(exRef())).val() as ExState | null) ?? null } catch { return null }
+}
+
 // ---- 對外 API(由 useLobby 呼叫)-------------------------------------------
 export function exhibitionStart(): void {
   if (mTick) return
   mUnsubOffset = onValue(ref(getDb(), '.info/serverTimeOffset'), (s) => { mOffset = (s.val() as number) ?? 0 })
-  mUnsubEx = onValue(exRef(), (snap) => { mState = (snap.val() as ExState | null) ?? null }, () => { mState = null }) // 規則未發布 → permission_denied → 當作沒有表演賽
+  mUnsubEx = subscribeExMeta((m) => { mState = m }) // 只訂摘要(4 格),不收整份棋譜
   mUnsubLive = subscribeLiveIndex((entries) => { mLive = entries }, 50)
   mTick = setInterval(() => void tick(), TICK_MS)
   void tick()
@@ -118,7 +173,7 @@ export async function pruneDeadExhibition(): Promise<void> {
     if (!cur) return
     const dead = cur.status === 'ended' || (typeof cur.driverAt === 'number' && serverNow() - cur.driverAt > ABANDON_MS)
     if (!dead) return
-    if (import.meta.env.DEV) console.log('%c[exhibition] 🧹 進場清孤兒場(驅動者早死/殘留)', 'color:#c60', (cur.code ?? '').slice(-8))
+    if (import.meta.env.DEV) console.log('%c[exhibition] 🧹 進場清孤兒場(驅動者早死/殘留)', 'color:#c60', (cur.code ?? '').slice(-8), `status=${cur.status} 驅動${((serverNow() - cur.driverAt) / 1000).toFixed(0)}秒沒更新 offset=${mOffset}`)
     await remove(exRef()).catch(() => {})
     if (cur.code) {
       await removeLiveEntry(cur.code).catch(() => {})
@@ -154,15 +209,10 @@ export function exhibitionSetContext(ctx: { active: boolean; isHost: boolean; ui
  * 也不會讓人看到死卡。表演賽全域只有一個節點,所以「不等於這個 code 的 spec_ex 卡」就是死卡。
  */
 export function subscribeExhibitionLiveCode(cb: (liveCode: string | null) => void): () => void {
-  return onValue(
-    exRef(),
-    (snap) => {
-      const s = snap.val() as ExState | null
-      const fresh = !!s && s.status === 'live' && typeof s.driverAt === 'number' && serverNow() - s.driverAt < ABANDON_MS
-      cb(fresh ? s!.code : null)
-    },
-    () => cb(null),
-  )
+  return subscribeExMeta((s) => {
+    const fresh = !!s && s.status === 'live' && typeof s.driverAt === 'number' && serverNow() - s.driverAt < ABANDON_MS
+    cb(fresh ? s!.code : null)
+  })
 }
 
 export function exhibitionRequestOpen(reason = ''): void {
@@ -351,22 +401,30 @@ function rebuild(s: ExState): GameState {
   return g
 }
 
-async function commitStep(code: string, engine: GameState, moves: Move[]): Promise<void> {
+/** 推一步:觀戰畫面 + 只上傳「新增的那幾步」棋譜(moves/{i},不再每步重傳整份陣列)。回傳已上傳到第幾步。 */
+async function commitStep(code: string, engine: GameState, moves: Move[], saved: number): Promise<number> {
   try { await dbSet(specRef(code), serializeForSpectator(engine)) } catch { /* best-effort */ }
   // ⚠️ 不在這裡寫 status:'ended' —— 那會讓驅動者自己的 alive() 立刻變 false、
   //   跳過 finishExhibition(翻 ended + 存回放 + 收節點)。status 只由 finish/close 改。
-  try { await update(exRef(), { moves: clean(moves), driverAt: serverTimestamp() }) } catch { /* best-effort */ }
+  const patch: Record<string, unknown> = { driverAt: serverTimestamp() }
+  for (let i = saved; i < moves.length; i++) patch[`moves/${i}`] = clean(moves[i])
+  try { await update(exRef(), patch); return moves.length } catch { return saved /* best-effort:下次一起補傳 */ }
 }
 
 async function driveLoop(gen: number): Promise<void> {
-  const s0 = mState
-  if (!s0) { mDriving = false; return }
+  // 開跑/接手:讀一次完整狀態(種子/大腦/走到現在的棋譜)。平常大家只訂摘要,不收這份。
+  const s0 = await fetchExState()
+  if (!s0 || s0.status === 'ended' || s0.driverConn !== CONN_ID || gen !== mDriveGen) {
+    if (gen === mDriveGen) stopDriving() // 讀到的已不是我在驅動 → 收掉心跳(下個 tick 再判斷)
+    return
+  }
   const code = s0.code
   // 接手續播:原 driver 掉線後它的租借被 onDisconnect 放掉 → 依 id 重占,免得交接空窗被別桌撈走。
   if (mUid) void leaseBotsById(mUid, [s0.p1.botId, s0.p2.botId])
   const brains: Record<PlayerId, BossRuntime> = { p1: s0.p1.boss, p2: s0.p2.boss }
   let engine = rebuild(s0)
   const moves: Move[] = [...movesOf(s0)]
+  let saved = moves.length // 已在 DB 的步數(之後只補傳新的)
   const alive = () =>
     mDriving && gen === mDriveGen && mActive && !!currentUser() &&
     mState?.driverConn === CONN_ID && mState?.status !== 'ended'
@@ -382,7 +440,7 @@ async function driveLoop(gen: number): Promise<void> {
       const ids = bossPick(engine, picker, brains[picker])
       engine = applyPick(engine, picker, ids)
       moves.push({ t: 'pick', by: picker, ids })
-      await commitStep(code, engine, moves)
+      saved = await commitStep(code, engine, moves, saved)
     } else if (engine.phase === 'place') {
       await sleep(rand(PLACE_MIN, PLACE_MAX))
       if (!alive()) return
@@ -391,16 +449,16 @@ async function driveLoop(gen: number): Promise<void> {
       const slot = bossPlace(engine, placer, brains[placer])
       engine = applyPlace(engine, placer, slot)
       moves.push({ t: 'place', by: placer, slot })
-      await commitStep(code, engine, moves)
+      saved = await commitStep(code, engine, moves, saved)
       if (engine.phase === 'showdown') {
         await sleep(SHOWDOWN_MS)
         if (!alive()) return
         engine = resolveShowdown(engine)
-        await commitStep(code, engine, moves)
+        saved = await commitStep(code, engine, moves, saved)
       }
       if (engine.phase === 'draw') {
         engine = applyDraw(engine)
-        await commitStep(code, engine, moves)
+        saved = await commitStep(code, engine, moves, saved)
         await sleep(DRAW_MS)
       }
     } else {
@@ -409,15 +467,13 @@ async function driveLoop(gen: number): Promise<void> {
   }
 
   if (alive() && engine.phase === 'ended' && engine.winner) {
-    await finishExhibition(code, engine, moves)
+    await finishExhibition(code, engine, moves, s0)
   }
   mDriving = false
   if (mHeartbeat) { clearInterval(mHeartbeat); mHeartbeat = null }
 }
 
-async function finishExhibition(code: string, engine: GameState, moves: Move[]): Promise<void> {
-  const s = mState
-  if (!s) return
+async function finishExhibition(code: string, engine: GameState, moves: Move[], s: ExState): Promise<void> {
   try { await dbSet(specRef(code), serializeForSpectator(engine)) } catch { /* best-effort */ }
   await update(exRef(), { status: 'ended' }).catch(() => {})
   await flipLiveEnded(code, engine.winner!)
@@ -441,9 +497,9 @@ async function finishExhibition(code: string, engine: GameState, moves: Move[]):
 
 /** 逾時(>5分)/孤兒回收 → 關 live、清節點、放租借,不存回放。 */
 async function closeExhibition(): Promise<void> {
-  const s = mState
   stopDriving()
-  if (s) void releaseBotsById([s.p1.botId, s.p2.botId])
+  const s = await fetchExState() // 摘要沒有人機 id → 讀一次完整的(收場很少發生)
+  if (s?.p1?.botId && s?.p2?.botId) void releaseBotsById([s.p1.botId, s.p2.botId])
   await remove(exRef()).catch(() => {})
   if (s?.code) {
     await removeLiveEntry(s.code).catch(() => {})

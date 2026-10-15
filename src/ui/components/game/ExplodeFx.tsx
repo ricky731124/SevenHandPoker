@@ -34,14 +34,15 @@ interface Snapshot {
  *  炸彈從「出手那一方的頭像」扔到「被炸那張牌原本的位置」→ 那張牌原地浮起、抖兩下 → 爆開消失 + 「爆破！」。
  *
  * 難點:效果套用的當下那張牌就從手牌拿掉了,畫面重畫後找不到它的位置。所以:
- *  - 訂 store:explodeFx 一變就同步量一次手牌(這時畫面還沒重畫,牌還在)。
- *  - 另外每次牌面變動後也量一次存起來(連線時新手牌可能比爆破通知先到,用上一次的位置)。
+ *  - 訂 store:牌局(engine)或 explodeFx 一變,就「趁畫面還沒重畫」同步量一次手牌 = 變動前最後的位置。
+ *    連線 guest 被炸時,新手牌常比爆破通知先到 → 新手牌到的那一刻量到的就是「那張牌還在」的位置。
+ *    (2026-10-14 前是每 0.4 秒一直量;改成只在牌局變動那一刻量,沒有輪詢。)
  *  - 找位置:先用牌 id(我方手牌、觀戰全開),找不到再用第幾張(對手牌背),都沒有就用手牌列中央。
  * 這裡只是疊一層演出,真手牌早就少了那張。觸發:store 的 explodeFx(單機/host/guest/觀戰/回放)。
+ * 只在特殊牌對局、觀戰、回放掛載(GameBoard 決定;一般對局不會有爆破)。
  */
 export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }) {
   const fx = useGameStore((s) => s.explodeFx)
-  const engine = useGameStore((s) => s.engine)
   const anchor = useRef<HTMLDivElement>(null)
   const seenN = useRef(fx?.n ?? 0)
   const snap = useRef<Snapshot>({ byId: new Map(), byIdx: { hand: [], ohand: [] } })
@@ -54,9 +55,21 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
     if (!root) return
     const rr = root.getBoundingClientRect()
     const k = root.offsetWidth ? rr.width / root.offsetWidth : 1
+    // 用「排版上的停放位置」(offsetParent 的框 + offsetLeft/Top),不吃 transform:
+    // 發牌飛入、選牌浮起的動畫跑到一半量,拿到的也是牌最後停的位置(不用等動畫跑完再量)。
     const box = (el: Element): Box => {
-      const r = el.getBoundingClientRect()
-      return { x: (r.left - rr.left) / k, y: (r.top - rr.top) / k, w: r.width / k, h: r.height / k }
+      const h = el as HTMLElement
+      const p = h.offsetParent
+      if (!p) {
+        const r = el.getBoundingClientRect()
+        return { x: (r.left - rr.left) / k, y: (r.top - rr.top) / k, w: r.width / k, h: r.height / k }
+      }
+      const pr = p.getBoundingClientRect()
+      const ph = p as HTMLElement
+      const pk = ph.offsetWidth ? pr.width / ph.offsetWidth : k
+      const ox = (ph.clientLeft + h.offsetLeft) * pk // offsetLeft 從 padding 邊算,框是從 border 邊 → 補上邊框寬
+      const oy = (ph.clientTop + h.offsetTop) * pk
+      return { x: (pr.left - rr.left + ox) / k, y: (pr.top - rr.top + oy) / k, w: (h.offsetWidth * pk) / k, h: (h.offsetHeight * pk) / k }
     }
     root.querySelectorAll('[data-card-id]').forEach((el) => {
       const id = el.getAttribute('data-card-id')
@@ -72,24 +85,19 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
     snap.current.byIdx = next
   }
 
-  // explodeFx 一變 → 趁畫面還沒重畫(牌還在)先量
+  // 牌局或 explodeFx 一變 → 趁畫面還沒重畫(牌還在、前一步的動畫也早跑完了)先量。
+  // zustand 的 subscribe 是 setState 當下同步呼叫,React 重畫在之後 → 這裡看到的是變動前的畫面。
   useEffect(
     () =>
       useGameStore.subscribe((s, prev) => {
-        if (s.explodeFx && s.explodeFx !== prev.explodeFx) measure()
+        if (s.engine !== prev.engine || (s.explodeFx && s.explodeFx !== prev.explodeFx)) measure()
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
-  // 牌面變了 → 重畫後馬上量一次;平常每 0.4 秒也量一次(發牌飛入、排序等動畫跑完後位置才準)。
-  // 連線 guest 被炸時,新手牌常比爆破通知先到 → 那張牌已不在畫面上,只能靠這份「最後看到的位置」。
+  // 掛載時先量一次當基準(中途進觀戰/回放第一個變動就是爆破時也有位置可用)
   useEffect(() => {
     measure()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine])
-  useEffect(() => {
-    const t = setInterval(measure, 400)
-    return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

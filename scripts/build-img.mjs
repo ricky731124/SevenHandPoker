@@ -1,20 +1,20 @@
-// 產生網頁用的小圖（WebP）。原始 PNG 完全不動，只另外輸出：
-//   public/avatars/{id}.webp  — 頭像，長邊縮到 512px（3 倍螢幕顯示 150px 也夠清楚）
-//   public/maps/stage{N}.webp — 關卡地圖，保持原尺寸、只換格式壓縮（PNG ~2MB → ~150KB）
-//   public/title.webp         — 主畫面標題，保持原尺寸、只換格式壓縮
-// 用法：node scripts/build-img.mjs   （改了原圖 PNG 後重跑一次即可）
+// 從頭像母檔重產網頁用的小圖（WebP）：
+//   art/avatars/{id}.png  — 頭像高畫質母檔(去背整理好的,不部署、程式不引用,只是備份/重產用)
+//   → public/avatars/{id}.webp — 長邊縮到 512px（3 倍螢幕顯示 150px 也夠清楚）
+// 用法：node scripts/build-img.mjs   （改了母檔後重跑一次即可）
 // 頭像清單直接讀 PlayerAvatar.tsx 的 AVATAR_IMG，新增頭像不用再改這裡。
+// 地圖、貼圖、標題圖不留母檔(2026-10 使用者定案):新關卡的地圖/貼圖由 stage-art.mjs 直接產 webp。
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ffmpeg from 'ffmpeg-static'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const pub = join(root, 'public')
+const art = join(root, 'art', 'avatars')
 const avatarSrc = readFileSync(join(root, 'src/ui/components/PlayerAvatar.tsx'), 'utf8')
 const AVATARS = [...avatarSrc.matchAll(/^\s*(\w+): 'avatars\/\1\.webp'/gm)].map((m) => m[1])
-const MAPS = readdirSync(join(pub, 'maps')).filter((f) => /^stage\d+\.png$/.test(f))
 const kb = (f) => (statSync(f).size / 1024).toFixed(0).padStart(5) + ' KB'
 
 function webp(src, dst, { maxSide, quality, alpha = true }) {
@@ -27,6 +27,4 @@ function webp(src, dst, { maxSide, quality, alpha = true }) {
 }
 
 mkdirSync(join(pub, 'avatars'), { recursive: true })
-for (const id of AVATARS) webp(join(pub, `${id}.png`), join(pub, 'avatars', `${id}.webp`), { maxSide: 512, quality: 82 })
-for (const f of MAPS) webp(join(pub, 'maps', f), join(pub, 'maps', f.replace('.png', '.webp')), { quality: 80, alpha: false })
-webp(join(pub, 'title.png'), join(pub, 'title.webp'), { quality: 85 })
+for (const id of AVATARS) webp(join(art, `${id}.png`), join(pub, 'avatars', `${id}.webp`), { maxSide: 512, quality: 82 })
