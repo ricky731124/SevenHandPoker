@@ -63,7 +63,8 @@ export default function ChapterMap() {
   }, [])
   const worldW = Math.max(box.w, Math.round(box.h * CHAPTER_MAP_ASPECT))
   const worldH = Math.round(worldW / CHAPTER_MAP_ASPECT)
-  const nodePx = Math.round(Math.min(140, Math.max(54, worldH * 0.15)))
+  // 節點(頭像)大小跟著圖高等比:手機約 84px、電腦 900 高約 200px(2026-10-16 手機實測後整體放大 50%)
+  const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
 
   // ---- 捲到焦點(進場 / 切章 / 視窗改大小時) ----
   const scrollToFocus = useCallback(() => {
@@ -150,16 +151,19 @@ export default function ChapterMap() {
     setFocus(focusForChapter(ch.index, cleared, tutorialSeen))
   }
 
-  // 棋子:站在現在那關上方;還沒看教學 → 站在教學木牌右邊的帳篷前(木牌在圖上方,站頭上會撞到章名;
-  // 站左下又太靠近第 1 關,看起來像在第 1 關)
+  // 棋子:站在現在那關上方;還沒看教學 → 貼在教學木牌正左邊(畫在木牌裡,見下)
+  const pawnTutorial = frontier.chapter === chapter.index && frontier.target === 'tutorial'
   const pawnAt =
-    frontier.chapter !== chapter.index
+    frontier.chapter !== chapter.index || pawnTutorial
       ? null
-      : frontier.target === 'tutorial'
-        ? chapter.tutorial
-          ? { x: chapter.tutorial.x + 6.5, y: chapter.tutorial.y + 8 }
-          : null
-        : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
+      : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
+  const pawn = (
+    <div className="chmap__pawn-bob">
+      <div className="chmap__pawn-pin">
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.68)} />
+      </div>
+    </div>
+  )
 
   return (
     <div className="chmap">
@@ -167,7 +171,8 @@ export default function ChapterMap() {
         <div
           key={chapter.index}
           className="chmap__world"
-          style={{ width: worldW, height: worldH, top: Math.min(0, (box.h - worldH) / 2) }}
+          data-ch={chapter.index}
+          style={{ width: worldW, height: worldH, top: Math.min(0, (box.h - worldH) / 2), ['--node' as string]: `${nodePx}px` }}
         >
           <img className="chmap__thumb" src={CHAPTER_THUMBS[chapter.index]} alt="" draggable={false} />
           <img
@@ -178,17 +183,26 @@ export default function ChapterMap() {
             draggable={false}
             onLoad={() => setLoadedSrc(src)}
           />
+          {/* 底圖淡化(圖太花,節點會看不清楚):蓋一層半透明,第三章夜景蓋暗色 */}
+          <div className="chmap__fade" aria-hidden />
 
           {chapter.tutorial && (
-            <button
-              type="button"
-              className={`chmap__tutorial${!tutorialSeen ? ' is-current' : ''}`}
-              style={{ left: `${chapter.tutorial.x}%`, top: `${chapter.tutorial.y}%`, fontSize: Math.round(nodePx * 0.27) }}
-              onPointerEnter={(e) => { if (e.pointerType === 'mouse') sfx.hover() }}
-              onClick={() => { sfx.click(); go('tutorial') }}
-            >
-              新手教學
-            </button>
+            <div className="chmap__tutorial" style={{ left: `${chapter.tutorial.x}%`, top: `${chapter.tutorial.y}%` }}>
+              {/* 跟「敬請期待」同款木牌,整塊蓋在圖上那塊空白板子上 */}
+              <button
+                type="button"
+                className={`chboard chboard--btn${!tutorialSeen ? ' is-current' : ''}`}
+                onPointerEnter={(e) => { if (e.pointerType === 'mouse') sfx.hover() }}
+                onClick={() => { sfx.click(); go('tutorial') }}
+              >
+                <b>新手教學</b>
+              </button>
+              {pawnTutorial && (
+                <div className="chmap__pawn is-side" aria-hidden>
+                  {pawn}
+                </div>
+              )}
+            </div>
           )}
 
           {chapter.nodes.map((pos, i) => {
@@ -210,16 +224,8 @@ export default function ChapterMap() {
           })}
 
           {pawnAt && (
-            <div
-              className={`chmap__pawn${frontier.target === 'tutorial' ? ' is-free' : ''}`}
-              style={{ left: `${pawnAt.x}%`, top: `${pawnAt.y}%`, ['--node' as string]: `${nodePx}px` }}
-              aria-hidden
-            >
-              <div className="chmap__pawn-bob">
-                <div className="chmap__pawn-pin">
-                  <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.5)} />
-                </div>
-              </div>
+            <div className="chmap__pawn" style={{ left: `${pawnAt.x}%`, top: `${pawnAt.y}%` }} aria-hidden>
+              {pawn}
             </div>
           )}
         </div>
@@ -327,9 +333,14 @@ function StageNode({
 function ComingSoon({ style, size }: { style: React.CSSProperties; size: number }) {
   return (
     <div className="chsoon" style={{ ...style, ['--node' as string]: `${size}px` }}>
-      <div className="chsoon__board">
+      <div className="chboard">
         <b>敬請期待</b>
-        <small>抖內加速開發（誤）</small>
+        {/* 分兩行:木牌才不會比平台間距寬、跟隔壁疊在一起 */}
+        <small>
+          抖內加速
+          <br />
+          開發（誤）
+        </small>
       </div>
     </div>
   )

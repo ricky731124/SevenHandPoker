@@ -1,16 +1,20 @@
-/* 主線章節大地圖(見 ChapterMap.tsx)。木頭按鈕/羊皮紙/圓體沿用全站 tokens。 */
+/* 主線章節大地圖(見 ChapterMap.tsx)。木頭按鈕/羊皮紙/圓體沿用全站 tokens。
+   地圖上的東西(節點/木牌/棋子)都用 --node(跟圖高等比)算大小,手機電腦一起等比。 */
 .chmap {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  /* 實際可見高度(iOS 網址列),同 .cstages / 彈窗 */
+  /* 實際可見高度(iOS 網址列),同彈窗 */
   height: var(--vvh, 100dvh);
   overflow: hidden;
   background: #1d2a22;
   font-family: var(--font-display);
   user-select: none;
   -webkit-user-select: none;
+  /* 左側章節按鈕寬(捲軸要閃開它) */
+  --tabs-w: clamp(114px, 22vh, 160px);
+  --edge: max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left));
 }
 
 /* ---- 捲動區:原生捲軸藏起來(底下自己畫木色的) ---- */
@@ -34,16 +38,31 @@
   cursor: grabbing !important;
 }
 
+/* 每章的節點外框色:要跟底圖色系是對比色(綠→紅、橘金→深藍、紫夜→金) */
 .chmap__world {
   position: relative;
   animation: chmap-in 0.35s ease-out;
+  --ring: #c0283f;
+  --ring-text: #fff;
+  /* 底圖淡化:降飽和 + 蓋一層半透明(第三章夜景蓋暗色,蓋白會灰濛濛) */
+  --fade-sat: 0.72;
+  --fade: rgba(255, 249, 238, 0.22);
+}
+.chmap__world[data-ch='2'] {
+  --ring: #1f4f96;
+}
+.chmap__world[data-ch='3'] {
+  --ring: #e3a923;
+  --ring-text: #3e2600;
+  --fade: rgba(16, 8, 36, 0.26);
 }
 @keyframes chmap-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 .chmap__thumb,
-.chmap__img {
+.chmap__img,
+.chmap__fade {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -53,15 +72,19 @@
 }
 /* 極小預覽圖放大+模糊:切章當下馬上有畫面,不會一片空白 */
 .chmap__thumb {
-  filter: blur(10px);
+  filter: blur(10px) saturate(var(--fade-sat));
   transform: scale(1.03);
 }
 .chmap__img {
   opacity: 0;
+  filter: saturate(var(--fade-sat));
   transition: opacity 0.35s ease;
 }
 .chmap__img.is-loaded {
   opacity: 1;
+}
+.chmap__fade {
+  background: var(--fade);
 }
 
 /* 邊緣壓暗一點,讓上方標題/左側按鈕/下方捲軸看得清楚 */
@@ -70,18 +93,18 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 16%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 18%, transparent 86%, rgba(0, 0, 0, 0.3));
+    linear-gradient(90deg, rgba(0, 0, 0, 0.3), transparent 18%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.26), transparent 18%, transparent 86%, rgba(0, 0, 0, 0.28));
 }
 
 /* ---- 上方:返回 + 章名 ---- */
 .chmap__back {
   position: absolute;
   top: clamp(8px, 2.4vh, 18px);
-  left: max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left));
+  left: var(--edge);
   z-index: 6;
-  width: clamp(40px, 7vh, 50px);
-  height: clamp(40px, 7vh, 50px);
+  width: clamp(40px, 7vh, 52px);
+  height: clamp(40px, 7vh, 52px);
 }
 .chmap__title {
   position: absolute;
@@ -89,13 +112,13 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  padding: 4px 22px;
+  padding: 3px 26px;
   border-radius: 999px;
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
   box-shadow: 0 2px 0 var(--wood-edge), 0 4px 8px rgba(0, 0, 0, 0.35);
   color: var(--wood-text);
-  font-size: clamp(17px, 4.4vh, 30px);
+  font-size: clamp(22px, 5.7vh, 39px);
   font-weight: 900;
   letter-spacing: 1px;
   white-space: nowrap;
@@ -106,20 +129,20 @@
 .chmap__tabs {
   position: absolute;
   z-index: 6;
-  left: max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left));
+  left: var(--edge);
   top: 50%;
-  transform: translateY(-42%);
+  transform: translateY(-40%);
   display: flex;
   flex-direction: column;
-  gap: clamp(6px, 1.8vh, 12px);
-  width: clamp(88px, 17vh, 124px);
+  gap: clamp(7px, 2.3vh, 16px);
+  width: var(--tabs-w);
 }
 .chmap__tab {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: clamp(4px, 1.1vh, 8px) 4px;
+  padding: clamp(5px, 1.4vh, 10px) 5px;
   border-radius: var(--r-md);
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
@@ -148,7 +171,7 @@
   opacity: 0.9;
 }
 .chmap__tab-no {
-  font-size: clamp(11px, 2.4vh, 15px);
+  font-size: clamp(14px, 3.1vh, 20px);
   font-weight: 800;
 }
 .chmap__tab-lock {
@@ -156,14 +179,14 @@
   font-size: 0.9em;
 }
 .chmap__tab-name {
-  font-size: clamp(13px, 3vh, 19px);
+  font-size: clamp(17px, 3.9vh, 25px);
   font-weight: 900;
   white-space: nowrap;
 }
 .chmap__tab-sub {
-  font-size: clamp(9px, 1.9vh, 12px);
+  font-size: clamp(12px, 2.5vh, 16px);
   font-weight: 700;
-  opacity: 0.8;
+  opacity: 0.85;
   white-space: nowrap;
 }
 
@@ -172,7 +195,7 @@
   position: absolute;
   z-index: 5;
   bottom: max(clamp(6px, 1.8vh, 14px), env(safe-area-inset-bottom));
-  left: calc(max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left)) + clamp(88px, 17vh, 124px) + 14px);
+  left: calc(var(--edge) + var(--tabs-w) + 14px);
   right: max(18px, env(safe-area-inset-right));
   height: clamp(10px, 2vh, 14px);
   border-radius: 999px;
@@ -206,11 +229,12 @@
 .chnode {
   position: absolute;
   z-index: 2;
-  transform: translate(-50%, -64%);
+  /* 頭像圓心對在平台中心(進度點落在平台前緣);不再往上提,頭頂才留得出棋子的空間 */
+  transform: translate(-50%, calc(var(--node) * -0.5));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: calc(var(--node) * 0.04);
 }
 .chnode__btn {
   position: relative;
@@ -234,9 +258,9 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: calc(var(--node) * 0.06) solid var(--wood-edge);
-  background: radial-gradient(circle at 40% 32%, #fff6dc, #e9c98a);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  border: calc(var(--node) * 0.065) solid var(--ring);
+  background: radial-gradient(circle at 40% 32%, #fffaf0, #f0dfbd);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 /* 頭像本身就有金框;節點的圈已經是框,把內層金框拿掉 */
@@ -247,20 +271,20 @@
 }
 .chnode__no {
   position: absolute;
-  top: -6%;
-  left: -8%;
-  min-width: calc(var(--node) * 0.36);
-  height: calc(var(--node) * 0.36);
+  top: -10%;
+  left: -12%;
+  min-width: calc(var(--node) * 0.43);
+  height: calc(var(--node) * 0.43);
   padding: 0 4px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  border: 2px solid var(--wood-edge);
-  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
-  color: var(--wood-text);
-  font-size: calc(var(--node) * 0.22);
+  border: 2px solid #fff;
+  background: var(--ring);
+  color: var(--ring-text);
+  font-size: calc(var(--node) * 0.27);
   font-weight: 900;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
 .chnode__card {
   position: absolute;
@@ -274,31 +298,30 @@
   background: #fff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
+/* 左下角(右下是招牌卡),不壓到下面的進度點 */
 .chnode__lock {
   position: absolute;
-  left: 50%;
-  bottom: -4%;
-  transform: translateX(-50%);
-  font-size: calc(var(--node) * 0.26);
+  left: -8%;
+  bottom: -6%;
+  font-size: calc(var(--node) * 0.28);
+  line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 /* 三顆小關進度點 */
 .chnode__dots {
   display: flex;
-  gap: 4px;
-  padding: 3px 7px;
+  gap: calc(var(--node) * 0.05);
+  padding: calc(var(--node) * 0.035) calc(var(--node) * 0.08);
   border-radius: 999px;
-  background: rgba(30, 16, 6, 0.6);
+  background: rgba(30, 16, 6, 0.65);
 }
 .chnode__dots i {
   width: calc(var(--node) * 0.11);
   height: calc(var(--node) * 0.11);
-  min-width: 7px;
-  min-height: 7px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 .chnode__dots i.is-on {
   background: radial-gradient(circle at 40% 35%, var(--gold-1), var(--gold-3));
@@ -306,139 +329,176 @@
   box-shadow: 0 0 5px rgba(246, 201, 69, 0.8);
 }
 .chnode__clear {
-  padding: 1px 9px;
+  padding: 1px calc(var(--node) * 0.1);
   border-radius: 999px;
   border: 2px solid var(--gold-4);
   background: linear-gradient(180deg, var(--gold-1), var(--gold-3));
   color: #5a3a06;
-  font-size: clamp(11px, calc(var(--node) * 0.17), 16px);
+  font-size: calc(var(--node) * 0.17);
   font-weight: 900;
   white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
-/* 狀態 */
+/* 狀態:外框保持該章的顏色(底圖對比色),通關外圈加金光 */
 .chnode.is-done .chnode__ring {
-  border-color: var(--gold-3);
-  background: radial-gradient(circle at 40% 32%, #fff8d8, #f3cf6a);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(246, 201, 69, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 calc(var(--node) * 0.05) rgba(246, 201, 69, 0.9), 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 .chnode.is-current .chnode__ring {
-  border-color: var(--gold-2);
   animation: chnode-pulse 1.5s ease-in-out infinite;
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
 .chnode.is-locked .chnode__ring img {
   filter: grayscale(0.35) brightness(0.92);
 }
-.chnode.is-locked .chnode__ring {
-  border-color: #7a5a3a;
-  background: radial-gradient(circle at 40% 32%, #f1e6cf, #c9b48c);
-}
 @keyframes chnode-pulse {
-  0%, 100% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 220, 120, 0.85); }
-  50% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 calc(var(--node) * 0.12) rgba(255, 220, 120, 0); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 255, 255, 0.9); }
+  50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 calc(var(--node) * 0.14) rgba(255, 255, 255, 0); }
 }
 
-/* 還沒做的關卡:小木牌 */
+/* ---- 木牌(敬請期待 / 新手教學 共用) ---- */
+.chboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--node) * 0.08) calc(var(--node) * 0.15);
+  border-radius: calc(var(--node) * 0.1);
+  border: max(2px, calc(var(--node) * 0.03)) solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-3));
+  color: var(--wood-text);
+  box-shadow: 0 3px 0 var(--wood-edge), 0 5px 8px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-display);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.chboard b {
+  font-size: calc(var(--node) * 0.21);
+  font-weight: 900;
+}
+.chboard small {
+  font-size: max(12px, calc(var(--node) * 0.135));
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* 還沒做的關卡 */
 .chsoon {
   position: absolute;
   z-index: 2;
   transform: translate(-50%, -58%);
   pointer-events: none;
 }
-.chsoon__board {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: calc(var(--node) * 0.08) calc(var(--node) * 0.14);
-  border-radius: 8px;
-  border: 2px solid var(--wood-edge);
-  background: linear-gradient(180deg, var(--wood-1), var(--wood-3));
-  color: var(--wood-text);
-  box-shadow: 0 3px 0 var(--wood-edge), 0 5px 8px rgba(0, 0, 0, 0.4);
-  white-space: nowrap;
+.chsoon .chboard {
   transform: rotate(-3deg);
 }
-.chsoon__board b {
-  font-size: calc(var(--node) * 0.2);
-  font-weight: 900;
-}
-.chsoon__board small {
-  font-size: calc(var(--node) * 0.12);
-  font-weight: 700;
-  opacity: 0.8;
+.chsoon .chboard small {
+  text-align: center;
 }
 
-/* 新手教學:字直接寫在圖上那塊空白木牌上 */
+/* 新手教學:木牌整塊蓋在圖上那塊空白板子上(要比畫的板子大才蓋得住) */
 .chmap__tutorial {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   transform: translate(-50%, -50%);
-  padding: 0.25em 0.5em;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(255, 240, 210, 0.15);
-  color: #4a2608;
-  font-family: var(--font-display);
-  font-weight: 900;
-  letter-spacing: 1px;
-  white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(255, 240, 210, 0.7);
+}
+.chboard--btn {
+  min-height: calc(var(--node) * 0.66);
+  padding-left: calc(var(--node) * 0.2);
+  padding-right: calc(var(--node) * 0.2);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
-.chmap__tutorial:hover {
-  transform: translate(-50%, -50%) scale(1.06);
+/* 新手教學的字要比「敬請期待」大(手機看得清楚,比原本放大約 50%) */
+.chboard--btn b {
+  font-size: calc(var(--node) * 0.27);
 }
-.chmap__tutorial.is-current {
-  animation: chtut-glow 1.5s ease-in-out infinite;
+.chboard--btn:hover {
+  transform: scale(1.05);
+}
+.chboard--btn:active {
+  transform: scale(0.96);
+}
+/* 還沒玩過教學:金色粗框一閃一閃 + 輕輕放大縮小 */
+.chboard--btn.is-current {
+  border-color: var(--gold-2);
+  animation: chtut-glow 1.4s ease-in-out infinite;
 }
 @keyframes chtut-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 220, 120, 0.9); }
-  50% { box-shadow: 0 0 0 10px rgba(255, 220, 120, 0); }
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.03) var(--gold-2), 0 0 calc(var(--node) * 0.12) 0 rgba(255, 220, 110, 0.95);
+  }
+  50% {
+    transform: scale(1.07);
+    box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.06) var(--gold-1), 0 0 calc(var(--node) * 0.3) calc(var(--node) * 0.05) rgba(255, 220, 110, 0.6);
+  }
 }
 
-/* ---- 玩家棋子:自己的頭像插在現在那關上方,上下晃 ---- */
+/* ---- 玩家棋子:自己的頭像(白框亮藍邊,三章都一樣、跟節點不同色),上下晃 ---- */
 .chmap__pawn {
   position: absolute;
   z-index: 3;
   pointer-events: none;
-  transform: translate(-50%, calc(-100% - var(--node) * 0.58));
-}
-/* 沒有節點可站(教學木牌旁):腳尖直接踩在那個點上 */
-.chmap__pawn.is-free {
-  transform: translate(-50%, -100%);
+  /* 尖端插進節點上緣一點(節點圓心 = 錨點,上緣 = -0.5 node) */
+  transform: translate(-50%, calc(-100% - var(--node) * 0.44));
 }
 .chmap__pawn-bob {
   animation: chpawn-bob 1.6s ease-in-out infinite;
 }
 .chmap__pawn-pin {
   position: relative;
-  padding: 3px;
+  padding: calc(var(--node) * 0.035);
   border-radius: 50%;
-  background: linear-gradient(180deg, var(--gold-1), var(--gold-3));
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45);
+  background: #fff;
+  border: calc(var(--node) * 0.04) solid #2f9bff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 5px 10px rgba(0, 0, 0, 0.5);
+}
+.chmap__pawn-pin .pavatar {
+  border: 0;
+  box-shadow: none;
 }
 .chmap__pawn-pin::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -9px;
+  top: 100%;
   transform: translateX(-50%);
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 11px solid var(--gold-3);
+  border-left: calc(var(--node) * 0.1) solid transparent;
+  border-right: calc(var(--node) * 0.1) solid transparent;
+  border-top: calc(var(--node) * 0.13) solid #2f9bff;
+}
+/* 新手教學旁:棋子站在木牌正左邊,尖端朝右指向木牌 */
+.chmap__pawn.is-side {
+  top: 50%;
+  right: calc(100% + var(--node) * 0.2);
+  transform: translateY(-50%);
+}
+.chmap__pawn.is-side .chmap__pawn-pin::after {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: calc(var(--node) * 0.1) solid transparent;
+  border-bottom: calc(var(--node) * 0.1) solid transparent;
+  border-left: calc(var(--node) * 0.13) solid #2f9bff;
+  border-right: 0;
+}
+.chmap__pawn.is-side .chmap__pawn-bob {
+  animation-name: chpawn-nudge;
 }
 @keyframes chpawn-bob {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
+  50% { transform: translateY(calc(var(--node) * -0.08)); }
+}
+@keyframes chpawn-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(calc(var(--node) * 0.08)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .chmap__pawn-bob,
   .chnode.is-current .chnode__ring,
-  .chmap__tutorial.is-current {
+  .chboard--btn.is-current {
     animation: none;
   }
 }

@@ -45,7 +45,7 @@ export default function ChapterStageCard({
   const lockedHint = stage.index === 1 && !tutorialSeen ? '先完成新手教學' : `打完第 ${prev?.index ?? stage.index - 1} 關解鎖`
 
   return (
-    <Modal open onClose={onClose} onBack={onClose} title={`第 ${stage.index} 關 · ${stage.name}`} width={600} panelClass="cscard-panel">
+    <Modal open onClose={onClose} onBack={onClose} title={`第 ${stage.index} 關 · ${stage.name}`} width={640} panelClass="cscard-panel">
       <div className={`cscard${unlocked ? '' : ' is-locked'}`}>
         <div className="cscard__boss">
           <div className="cscard__avatar">
@@ -77,17 +77,21 @@ export default function ChapterStageCard({
               const r = sub.reward
               const rc = r.card ? getSpecialCard(r.card) : undefined
               const ra = r.avatar ? AVATARS.find((a) => a.id === r.avatar) : undefined
+              // 五欄固定寬(整張表共用欄寬):關號|房型·賽制|獎品名(靠右)|鑽石|狀態(留 5 格,內容置中)
+              // → 鑽石永遠對在同一直線,不會因為打勾/進度圈被推來推去
               return (
                 <li key={sub.id} className={done ? 'is-done' : ''}>
                   <span className="cscard__sub-label">{sub.label}</span>
                   <span className="cscard__sub-rule">
                     {sub.special ? '特殊牌房' : '一般房'} · {sub.winsNeeded >= 3 ? '五戰三勝' : '三戰兩勝'}
                   </span>
-                  <span className="cscard__sub-reward">
-                    {rc && <span style={chip}>「{rc.name}」</span>}
-                    {ra && <span style={chip}>頭像「{ra.name}」</span>}
+                  <span className="cscard__sub-prize">
+                    {rc && <>「{rc.name}」</>}
+                    {ra && <>頭像「{ra.name}」</>}
+                  </span>
+                  <span className="cscard__sub-gem">
                     <span style={chip}>
-                      <Diamond size={14} />
+                      <Diamond size={15} />
                       {r.diamonds}
                     </span>
                   </span>

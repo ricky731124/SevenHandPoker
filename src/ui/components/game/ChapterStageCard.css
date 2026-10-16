@@ -24,16 +24,19 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 .cscard__boss-name {
-  font-size: 18px;
+  font-size: 23px;
   font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .cscard__style {
-  padding: 1px 10px;
+  padding: 2px 12px;
   border-radius: 999px;
   border: 2px solid #b98a3a;
-  background: rgba(255, 255, 255, 0.5);
-  font-size: 13px;
-  font-weight: 800;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 17px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .cscard__info {
@@ -80,46 +83,52 @@
   color: var(--parch-text);
 }
 
+/* 三小關:整張表共用五欄(li 用 display:contents,欄寬三列對齊)。
+   關號 | 房型·賽制 | 獎品名(靠右) | 鑽石 | 狀態(固定留五戰三勝 5 格的寬,打勾/進度圈置中) */
 .cscard__subs {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cscard__subs li {
   display: grid;
-  grid-template-columns: 34px 1fr auto minmax(26px, auto);
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.35);
+  grid-template-columns: auto 1fr auto auto calc(5 * 14px + 4 * 4px + 10px);
+  row-gap: 4px;
   font-size: 13px;
   font-weight: 700;
 }
-.cscard__subs li.is-done {
+.cscard__subs li {
+  display: contents;
+}
+.cscard__subs li > span {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 5px;
+  background: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+.cscard__subs li > span:first-child {
+  padding-left: 9px;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+}
+.cscard__subs li > span:last-child {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.cscard__subs li.is-done > span {
   background: rgba(246, 201, 69, 0.28);
 }
 .cscard__sub-label {
   font-weight: 900;
 }
-.cscard__sub-rule {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.cscard__sub-prize {
+  justify-content: flex-end;
+  color: #1f4e79;
+  font-weight: 800;
 }
-.cscard__sub-reward {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  white-space: nowrap;
+.cscard__sub-gem {
   color: #1f4e79;
   font-weight: 800;
 }
 .cscard__sub-state {
-  display: flex;
   justify-content: center;
 }
 .cscard__ok {
@@ -141,9 +150,11 @@
   .cscard__boss {
     min-width: 86px;
   }
-  .cscard__subs li {
-    padding: 3px 6px;
-    font-size: 12px;
+  .cscard__subs {
+    font-size: 12.5px;
+  }
+  .cscard__subs li > span {
+    min-height: 26px;
   }
   .cscard__sig {
     padding: 4px 8px;
