@@ -47,6 +47,8 @@ interface CampaignStore {
   pendingUpgrade: boolean
 
   openMap: (stageId: string) => void
+  /** 從主選單/聊天/教學進主線:章節大地圖,捲到玩家現在該打的地方(不沿用上次看的那關)。 */
+  openChapters: () => void
   /** Open the 戰前/接續 dialog for a sub-stage (on the map). */
   openStart: (subId: string) => void
   cancelStart: () => void
@@ -74,6 +76,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   openMap: (stageId) => {
     set({ viewStageId: stageId })
     useAppStore.getState().go('campaign')
+  },
+
+  openChapters: () => {
+    set({ viewStageId: null })
+    useAppStore.getState().go('campaignStages')
   },
 
   openStart: (subId) => set({ pendingStart: subId }),

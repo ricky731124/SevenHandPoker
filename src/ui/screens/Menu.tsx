@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
+import { useCampaignStore } from '../../state/campaignStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import JoinConfirm from '../components/JoinConfirm'
@@ -99,7 +100,7 @@ export default function Menu() {
 
       {/* Start dialog: 4 modes */}
       <Modal open={dialog === 'start'} onClose={() => setDialog(null)} onBack={() => setDialog(null)} title="開始遊戲" largeTitle panelClass="menu-start menu-dialog">
-        <Button full icon={<Paw />} onClick={() => { setDialog(null); go('campaignStages') }}>
+        <Button full icon={<Paw />} onClick={() => { setDialog(null); useCampaignStore.getState().openChapters() }}>
           主線任務
         </Button>
         <Button full icon={<IconGlobe />} onClick={() => setDialog('free')}>

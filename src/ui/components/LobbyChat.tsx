@@ -4,6 +4,7 @@ import { avatarSrc } from './PlayerAvatar'
 import PlayerInfoCard, { type CardFallback } from './PlayerInfoCard'
 import { useLobby } from '../hooks/useLobby'
 import { useAppStore } from '../../state/appStore'
+import { useCampaignStore } from '../../state/campaignStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { STICKERS, getSticker } from '../../game/stickers'
 import { sfx } from '../../audio/sfx'
@@ -39,7 +40,7 @@ function runCta(c: Cta) {
   switch (c.action) {
     case 'register': app.requestRegister(); return
     case 'google': app.requestGoogle(); return
-    case 'campaign': app.go('campaignStages'); return
+    case 'campaign': useCampaignStore.getState().openChapters(); return
     case 'tutorial': app.go('tutorial'); return
     case 'personalize': app.openPersonalize(); return       // 個人化(預設頁籤)
     case 'loadout': app.openPersonalize('cards'); return    // 直接落在「牌組/預設特殊牌」頁

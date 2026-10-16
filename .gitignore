@@ -8,3 +8,6 @@ dist-ssr
 src/net/firebaseConfig.local.ts
 _sfx_src
 _art_src
+
+# 章節大地圖母檔(AI 原圖 3MB+/張),只在本機跑 scripts/chapter-art.mjs 用;網頁只部署 public/chapters/*.webp
+art/chapters/

@@ -16,7 +16,7 @@ import Leaderboard from './ui/screens/Leaderboard'
 import Game from './ui/screens/Game'
 import Tutorial from './ui/screens/Tutorial'
 import CampaignMap from './ui/screens/CampaignMap'
-import CampaignStages from './ui/screens/CampaignStages'
+import ChapterMap from './ui/screens/ChapterMap'
 import Matchmaking from './ui/screens/Matchmaking'
 import SpectatorGame from './ui/screens/SpectatorGame'
 import ReplayViewer from './ui/screens/ReplayViewer'
@@ -38,7 +38,7 @@ const screens = {
   game: Game,
   tutorial: Tutorial,
   campaign: CampaignMap,
-  campaignStages: CampaignStages,
+  campaignStages: ChapterMap, // 主線章節大地圖(取代舊的關卡清單)
 } as const
 
 /** Resolve once auth has settled AND (if there's an account) its profile has loaded,

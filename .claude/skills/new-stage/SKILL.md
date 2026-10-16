@@ -69,6 +69,7 @@ node scripts/build-img.mjs                                       # 註冊頭像�
 - `src/ui/components/PlayerAvatar.tsx`:`AVATAR_IMG`、`AVATAR_EMOJI`、`AVATARS`(name = 角色名)。
 - `src/game/stickers.ts`:加貼圖 `{ id, name, free: false, price }`。
 - 大廳 boss 名單、build-img 頭像清單、x-3 卡池、獎勵都自動,不用改。
+- **章節大地圖也自動**(`src/game/chapters.ts`):第 N 關掛在第 ceil(N/7) 章的第 ((N-1)%7)+1 個平台,「敬請期待」木牌自己換成 boss 節點。只有**開新的一章**(第 15、22…關)才要做事:使用者先產那章的 3:1 長圖放 `art/chapters/ch{N}.png` → `node scripts/chapter-art.mjs`(轉 webp ≤250KB + 模糊預覽圖)→ `CHAPTERS` 加一筆(章名 + 7 個平台座標,疊紅點對圖量)。
 
 ## 5. 新特殊卡(用現有卡就跳過)
 
@@ -104,7 +105,7 @@ C 類的經驗(第 8 關爆破):
 
 - `npx tsc -b`、`npx vitest run` 全綠。新卡寫單元測試:效果、不能用的情況、回放重現、boss 時機每條規則、**幾百場 boss 對 boss 的牌守恆壓力測**(52 張普通牌不重不漏、專屬牌不進牌堆、每場打得完)。參考 `src/game/refresh.test.ts`。
 - 瀏覽器(`preview_start shp-dev`,DEV 有 `window.__campaign/__game/__app/__net/__platform`):
-  - 關卡列表、地圖(webp 載入、節點位置)。
+  - 章節大地圖上新關卡的節點(頭像、招牌卡徽章、資訊卡內容)、小關地圖(webp 載入、節點位置)。
   - `__campaign.getState().startSeries('sN-2', { reset: true })` → `confirmLoadout` → `finishCoinToss` → 把 engine 的 turn 設成 boss、造出觸發條件 → 看 boss 出卡、提示、牌面。
   - 線上兩個方向:host 分頁 `__net.getState().create('special', 99)` + `__app.getState().launchGame({ mode: 'host', special: true, timeLimit: 99 })`;第二個分頁開 `http://[::1]:5183`,`join(code)` + `launchGame({ mode: 'guest', ... })`。guest 出牌要用 `selected` + `confirmPick()`,不是 `submitPick`。
   - 用 host 的 `moveLog` 跑 `buildFrames`,最後一幀的雙方手牌、牌堆要跟實際一致。

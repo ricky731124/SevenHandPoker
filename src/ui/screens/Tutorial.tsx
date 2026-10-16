@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
+import { useCampaignStore } from '../../state/campaignStore'
 import { useTutorialStore } from '../../state/tutorialStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { getSpecialCard } from '../../game/specialCards'
@@ -53,7 +54,7 @@ export default function Tutorial() {
         e.preventDefault()
         if (g.gate === 'say') g.next()
         else if (g.gate === 'showdown') g.dismissShowdown()
-        else go('campaignStages')
+        else useCampaignStore.getState().openChapters()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -135,7 +136,7 @@ export default function Tutorial() {
         ['--stage-h' as string]: `${sz.stageH}px`,
       }}
     >
-      <button type="button" className="tut-exit" onClick={() => { sfx.click(); go('campaignStages') }}>
+      <button type="button" className="tut-exit" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters() }}>
         離開
         <br />
         教學
@@ -228,7 +229,7 @@ export default function Tutorial() {
             </button>
           )}
           {t.gate === 'win' && (
-            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); go('campaignStages') }}>
+            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters() }}>
               完成教學
             </button>
           )}
