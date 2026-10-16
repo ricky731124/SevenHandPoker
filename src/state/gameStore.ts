@@ -153,6 +153,9 @@ export const EXPLODE_NOTICE_MS = 5000
 export const EXPLODE_FX_MS = 3400
 /** 死神之眼動畫總長(ms):眼睛張開閃光 → 蓋牌依序翻開。AI 用完也等播完才出牌。 */
 export const DEATH_EYE_FX_MS = 3200
+/** 死神之眼提示停留時間(使用者 2026-10-16:總長 6 秒,比爆破多 1 秒——前段被動畫擋住,多留一點時間讀)。
+ *  用卡方、被看方都用這個。 */
+export const DEATH_EYE_NOTICE_MS = 6000
 /** 死神之眼的提示文字(使用者定)。 */
 export const DEATH_EYE_VICTIM_MSG = '對手用了死神之眼，你目前決鬥區的牌被看光了'
 
@@ -1569,7 +1572,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (online?.role === 'guest') {
         online.send({ type: 'special', card: id })
         set({ deathEyeFx: { target: foe, slots, n } }) // 本機先播;翻開的牌等 host 同步過來
-        get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`)
+        get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`, DEATH_EYE_NOTICE_MS)
         return
       }
       const next = applyDeathEye(engine, me)
@@ -1578,7 +1581,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       _bcast?.onEngine(next)
       pushCasualExtras()
       persistLocalMatch(get())
-      get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`)
+      get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`, DEATH_EYE_NOTICE_MS)
       if (online?.role === 'host') online.sendFx(DEATH_EYE_VICTIM_MSG, { card: id, target: foe, slots })
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
@@ -1707,7 +1710,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : decision.card === 'deathEye'
               ? DEATH_EYE_VICTIM_MSG
               : '對方似乎使用了特殊牌',
-      decision.card === 'explode' || decision.card === 'deathEye' ? EXPLODE_NOTICE_MS : undefined,
+      decision.card === 'explode' ? EXPLODE_NOTICE_MS : decision.card === 'deathEye' ? DEATH_EYE_NOTICE_MS : undefined,
     )
     return true
   },

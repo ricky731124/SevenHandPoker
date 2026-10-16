@@ -20,7 +20,7 @@ import {
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
 import { usePlatformStore } from '../state/platformStore'
-import { useGameStore, specExtrasOf, DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
+import { useGameStore, specExtrasOf, DEATH_EYE_NOTICE_MS, DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
 import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
@@ -336,7 +336,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         const n = Date.now()
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'deathEye', n }, deathEyeFx: { target: 'p1', slots, n } })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'deathEye' })
-        useGameStore.getState().flashStatus(DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS)
+        useGameStore.getState().flashStatus(DEATH_EYE_VICTIM_MSG, DEATH_EYE_NOTICE_MS)
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
         const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
@@ -485,8 +485,8 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       return
     }
     const fx = snap.val() as { msg?: string; card?: SpecialCardId; target?: 'p1' | 'p2'; victim?: Card; index?: number; slots?: number[]; id?: number } | null
-    const longNotice = fx?.card === 'explode' || fx?.card === 'deathEye'
-    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, longNotice ? EXPLODE_NOTICE_MS : undefined)
+    const noticeMs = fx?.card === 'explode' ? EXPLODE_NOTICE_MS : fx?.card === 'deathEye' ? DEATH_EYE_NOTICE_MS : undefined
+    if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, noticeMs)
     const n = fx?.id ?? Date.now()
     // host 對我(guest)用了死神之眼 → 播透視動畫(我那幾堆翻開;翻開狀態由 guest-view 同步過來)
     if (fx?.card === 'deathEye') useGameStore.setState({ deathEyeFx: { target: fx.target ?? 'p2', slots: fx.slots ?? [], n } })
