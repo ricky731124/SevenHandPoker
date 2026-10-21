@@ -21,6 +21,7 @@ import {
 import { isStageUnlocked } from '../../game/campaign'
 import PlayerAvatar from '../components/PlayerAvatar'
 import BackButton from '../components/BackButton'
+import { Paw } from '../components/Button'
 import { SpecialCardArt } from '../components/SpecialCard'
 import ChapterStageCard from '../components/game/ChapterStageCard'
 import { CHAPTER_THUMBS } from './chapterThumbs'
@@ -42,7 +43,8 @@ export default function ChapterMap() {
   const cleared = useMemo(() => (clearedKey ? clearedKey.split(',') : []), [clearedKey])
 
   // 進場要看哪章、捲到哪(只算一次;之後切章另外算)
-  const [focus, setFocus] = useState(() => initialFocus(viewStageId, cleared, tutorialSeen) as { chapter: number; target: string })
+  const fromTutorial = useCampaignStore((s) => s.mapFocus === 'tutorial')
+  const [focus, setFocus] = useState(() => initialFocus(viewStageId, cleared, tutorialSeen, fromTutorial) as { chapter: number; target: string })
   const chapter = getChapter(focus.chapter) ?? CHAPTERS[0]
   const [cardStage, setCardStage] = useState<CampaignStage | null>(null)
 
@@ -63,7 +65,8 @@ export default function ChapterMap() {
   }, [])
   const worldW = Math.max(box.w, Math.round(box.h * CHAPTER_MAP_ASPECT))
   const worldH = Math.round(worldW / CHAPTER_MAP_ASPECT)
-  // 節點(頭像)大小跟著圖高等比:手機約 84px、電腦 900 高約 200px(2026-10-16 手機實測後整體放大 50%)
+  // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 84px、電腦 900 高約 200px。
+  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像 0.8u、棋子 0.5u、木牌…),改一樣不會牽動別樣。
   const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
 
   // ---- 捲到焦點(進場 / 切章 / 視窗改大小時) ----
@@ -157,10 +160,11 @@ export default function ChapterMap() {
     frontier.chapter !== chapter.index || pawnTutorial
       ? null
       : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
+  // 棋子用遊戲裡頭像本來的金框(全站頭像都是這個框,放地圖上最搭)
   const pawn = (
     <div className="chmap__pawn-bob">
       <div className="chmap__pawn-pin">
-        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.68)} />
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.5)} />
       </div>
     </div>
   )
@@ -188,15 +192,22 @@ export default function ChapterMap() {
 
           {chapter.tutorial && (
             <div className="chmap__tutorial" style={{ left: `${chapter.tutorial.x}%`, top: `${chapter.tutorial.y}%` }}>
-              {/* 跟「敬請期待」同款木牌,整塊蓋在圖上那塊空白板子上 */}
-              <button
-                type="button"
-                className={`chboard chboard--btn${!tutorialSeen ? ' is-current' : ''}`}
-                onPointerEnter={(e) => { if (e.pointerType === 'mouse') sfx.hover() }}
-                onClick={() => { sfx.click(); go('tutorial') }}
-              >
-                <b>新手教學</b>
-              </button>
+              {/* 木牌(木紋+釘子+貓爪)斜 10 度,蓋在圖上那塊空白板子上,站在圖上原本那兩根腳上(不另畫桿子) */}
+              <div className="chmap__tut-tilt">
+                <button
+                  type="button"
+                  className={`chboard chboard--btn${!tutorialSeen ? ' is-current' : ''}`}
+                  onPointerEnter={(e) => { if (e.pointerType === 'mouse') sfx.hover() }}
+                  onClick={() => { sfx.click(); go('tutorial') }}
+                >
+                  <span className="chboard__row">
+                    <span className="chboard__icon">
+                      <Paw />
+                    </span>
+                    <b>新手教學</b>
+                  </span>
+                </button>
+              </div>
               {pawnTutorial && (
                 <div className="chmap__pawn is-side" aria-hidden>
                   {pawn}
@@ -208,7 +219,7 @@ export default function ChapterMap() {
           {chapter.nodes.map((pos, i) => {
             const stage = stages[i]
             const style = { left: `${pos.x}%`, top: `${pos.y}%` }
-            if (!stage) return <ComingSoon key={i} style={style} size={nodePx} />
+            if (!stage) return <ComingSoon key={i} style={style} tilt={SOON_TILT[i % SOON_TILT.length]} />
             return (
               <StageNode
                 key={stage.id}
@@ -307,7 +318,8 @@ function StageNode({
         aria-label={`第 ${stage.index} 關 ${stage.name}`}
       >
         <span className="chnode__ring">
-          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(size * 0.86)} />
+          {/* 頭像圈 = 0.8u(2026-10-21 -20%);特殊卡/小點/通關照 u 算,大小不變 */}
+          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(size * 0.8 * 0.86)} />
         </span>
         <span className="chnode__no">{stage.index}</span>
         {card && (
@@ -330,19 +342,40 @@ function StageNode({
   )
 }
 
-function ComingSoon({ style, size }: { style: React.CSSProperties; size: number }) {
+/** 「敬請期待」木牌的傾斜角度:依位置左右交錯,看起來比較自然。 */
+const SOON_TILT = [-6, 5, -4, 6, -5, 4, -6]
+
+/** 還沒做的關卡:插在平台上的木牌(木紋+釘子+小鐵鎚,施工中的感覺;點了沒反應所以不放貓爪)。 */
+function ComingSoon({ style, tilt }: { style: React.CSSProperties; tilt: number }) {
   return (
-    <div className="chsoon" style={{ ...style, ['--node' as string]: `${size}px` }}>
-      <div className="chboard">
-        <b>敬請期待</b>
-        {/* 分兩行:木牌才不會比平台間距寬、跟隔壁疊在一起 */}
-        <small>
-          抖內加速
-          <br />
-          開發（誤）
-        </small>
+    <div className="chsoon" style={style}>
+      <div className="chsoon__tilt" style={{ transform: `rotate(${tilt}deg)` }}>
+        <div className="chboard">
+          <span className="chboard__row">
+            <span className="chboard__icon">
+              <Hammer />
+            </span>
+            <b>敬請期待</b>
+          </span>
+          {/* 分兩行:木牌才不會比平台間距寬、跟隔壁疊在一起 */}
+          <small>
+            抖內加速
+            <br />
+            開發（誤）
+          </small>
+        </div>
+        <i className="chsoon__post" />
       </div>
     </div>
+  )
+}
+
+function Hammer() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden>
+      <rect x="10.4" y="8.5" width="3.2" height="13.5" rx="1.4" fill="#8a5424" stroke="#4d2e13" strokeWidth="1.1" transform="rotate(-35 12 12)" />
+      <path d="M4.5 6.2 L12.3 1.8 L15.4 7.3 L7.6 11.7 Z" fill="#7d8790" stroke="#3a4148" strokeWidth="1.2" strokeLinejoin="round" transform="rotate(-35 12 12) translate(2 1)" />
+    </svg>
   )
 }
 

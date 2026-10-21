@@ -71,6 +71,8 @@ describe('進場/切章要看哪裡', () => {
   })
   it('從小關地圖返回 → 剛剛那關(不是進度最前面)', () =>
     expect(initialFocus('s3', upTo('s8-1'), true)).toEqual({ chapter: 1, target: 's3' }))
+  it('從新手教學回來 → 第一章教學木牌(就算進度在第二章)', () =>
+    expect(initialFocus(null, upTo('s8-1'), true, true)).toEqual({ chapter: 1, target: 'tutorial' }))
   it('切到現在所在的章 → 現在那關;切到別章 → 最左邊', () => {
     expect(focusForChapter(2, upTo('s8-1'), true)).toEqual({ chapter: 2, target: 's8' })
     expect(focusForChapter(1, upTo('s8-1'), true)).toEqual({ chapter: 1, target: 'start' })

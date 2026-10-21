@@ -54,7 +54,7 @@ export default function Tutorial() {
         e.preventDefault()
         if (g.gate === 'say') g.next()
         else if (g.gate === 'showdown') g.dismissShowdown()
-        else useCampaignStore.getState().openChapters()
+        else useCampaignStore.getState().openChapters({ tutorial: true })
       }
     }
     window.addEventListener('keydown', onKey)
@@ -136,7 +136,7 @@ export default function Tutorial() {
         ['--stage-h' as string]: `${sz.stageH}px`,
       }}
     >
-      <button type="button" className="tut-exit" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters() }}>
+      <button type="button" className="tut-exit" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters({ tutorial: true }) }}>
         離開
         <br />
         教學
@@ -229,7 +229,7 @@ export default function Tutorial() {
             </button>
           )}
           {t.gate === 'win' && (
-            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters() }}>
+            <button type="button" className="tut-coach__btn" onClick={() => { sfx.click(); useCampaignStore.getState().openChapters({ tutorial: true }) }}>
               完成教學
             </button>
           )}

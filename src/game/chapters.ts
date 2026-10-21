@@ -108,10 +108,12 @@ export function frontierFocus(clearedIds: string[], tutorialSeen: boolean): MapF
   return { chapter: chapterIndexOfStage(st.index), target: st.id }
 }
 
-/** 進主線時要看哪裡:從小關地圖返回 → 那一關;否則 → 玩家現在該打的地方。 */
-export function initialFocus(viewStageId: string | null, clearedIds: string[], tutorialSeen: boolean): MapFocus {
+/** 進主線時要看哪裡:從小關地圖返回 → 那一關;從新手教學回來 → 第一章的教學木牌(不管進度到第幾章);
+ *  否則 → 玩家現在該打的地方。 */
+export function initialFocus(viewStageId: string | null, clearedIds: string[], tutorialSeen: boolean, fromTutorial = false): MapFocus {
   const st = viewStageId ? getStage(viewStageId) : undefined
   if (st) return { chapter: chapterIndexOfStage(st.index), target: st.id }
+  if (fromTutorial) return { chapter: 1, target: 'tutorial' }
   return frontierFocus(clearedIds, tutorialSeen)
 }
 

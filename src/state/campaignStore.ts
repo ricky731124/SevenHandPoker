@@ -47,8 +47,11 @@ interface CampaignStore {
   pendingUpgrade: boolean
 
   openMap: (stageId: string) => void
-  /** 從主選單/聊天/教學進主線:章節大地圖,捲到玩家現在該打的地方(不沿用上次看的那關)。 */
-  openChapters: () => void
+  /** 進章節大地圖時要先看哪:'tutorial' = 從新手教學回來(回第一章教學木牌)。 */
+  mapFocus: 'tutorial' | null
+  /** 從主選單/聊天/教學進主線:章節大地圖,捲到玩家現在該打的地方(不沿用上次看的那關);
+   *  從新手教學回來帶 { tutorial: true } → 回第一章的教學木牌。 */
+  openChapters: (opts?: { tutorial?: boolean }) => void
   /** Open the 戰前/接續 dialog for a sub-stage (on the map). */
   openStart: (subId: string) => void
   cancelStart: () => void
@@ -70,16 +73,17 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   outcome: null,
   reward: null,
   viewStageId: null,
+  mapFocus: null,
   pendingStart: null,
   pendingUpgrade: false,
 
   openMap: (stageId) => {
-    set({ viewStageId: stageId })
+    set({ viewStageId: stageId, mapFocus: null })
     useAppStore.getState().go('campaign')
   },
 
-  openChapters: () => {
-    set({ viewStageId: null })
+  openChapters: (opts) => {
+    set({ viewStageId: null, mapFocus: opts?.tutorial ? 'tutorial' : null })
     useAppStore.getState().go('campaignStages')
   },
 

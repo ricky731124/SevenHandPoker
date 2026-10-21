@@ -1,5 +1,6 @@
 /* 主線章節大地圖(見 ChapterMap.tsx)。木頭按鈕/羊皮紙/圓體沿用全站 tokens。
-   地圖上的東西(節點/木牌/棋子)都用 --node(跟圖高等比)算大小,手機電腦一起等比。 */
+   地圖上的東西都用基準單位 --node(= u,跟圖高等比)乘「各自的倍率」算大小,手機電腦一起等比;
+   頭像圈 0.8u、棋子 0.5u、木牌…各自獨立,改一樣不會牽動別樣。 */
 .chmap {
   position: absolute;
   top: 0;
@@ -13,7 +14,7 @@
   user-select: none;
   -webkit-user-select: none;
   /* 左側章節按鈕寬(捲軸要閃開它) */
-  --tabs-w: clamp(114px, 22vh, 160px);
+  --tabs-w: clamp(103px, 19.8vh, 144px);
   --edge: max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left));
 }
 
@@ -38,22 +39,15 @@
   cursor: grabbing !important;
 }
 
-/* 每章的節點外框色:要跟底圖色系是對比色(綠→紅、橘金→深藍、紫夜→金) */
 .chmap__world {
   position: relative;
   animation: chmap-in 0.35s ease-out;
-  --ring: #c0283f;
-  --ring-text: #fff;
-  /* 底圖淡化:降飽和 + 蓋一層半透明(第三章夜景蓋暗色,蓋白會灰濛濛) */
+  /* 底圖淡化:降飽和 + 蓋一層半透明(第三章夜景蓋暗色,蓋白會灰濛濛)。
+     有淡化後節點外框用回木框/通關金框就分得出來(2026-10-21 撤掉每章對比色外框) */
   --fade-sat: 0.72;
   --fade: rgba(255, 249, 238, 0.22);
 }
-.chmap__world[data-ch='2'] {
-  --ring: #1f4f96;
-}
 .chmap__world[data-ch='3'] {
-  --ring: #e3a923;
-  --ring-text: #3e2600;
   --fade: rgba(16, 8, 36, 0.26);
 }
 @keyframes chmap-in {
@@ -134,7 +128,7 @@
   transform: translateY(-40%);
   display: flex;
   flex-direction: column;
-  gap: clamp(7px, 2.3vh, 16px);
+  gap: clamp(6px, 2.07vh, 14.4px);
   width: var(--tabs-w);
 }
 .chmap__tab {
@@ -142,7 +136,7 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: clamp(5px, 1.4vh, 10px) 5px;
+  padding: clamp(4.5px, 1.26vh, 9px) 4.5px;
   border-radius: var(--r-md);
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
@@ -171,7 +165,7 @@
   opacity: 0.9;
 }
 .chmap__tab-no {
-  font-size: clamp(14px, 3.1vh, 20px);
+  font-size: clamp(12.6px, 2.8vh, 18px);
   font-weight: 800;
 }
 .chmap__tab-lock {
@@ -179,12 +173,12 @@
   font-size: 0.9em;
 }
 .chmap__tab-name {
-  font-size: clamp(17px, 3.9vh, 25px);
+  font-size: clamp(15.3px, 3.5vh, 22.5px);
   font-weight: 900;
   white-space: nowrap;
 }
 .chmap__tab-sub {
-  font-size: clamp(12px, 2.5vh, 16px);
+  font-size: clamp(11px, 2.25vh, 14.4px);
   font-weight: 700;
   opacity: 0.85;
   white-space: nowrap;
@@ -229,8 +223,8 @@
 .chnode {
   position: absolute;
   z-index: 2;
-  /* 頭像圓心對在平台中心(進度點落在平台前緣);不再往上提,頭頂才留得出棋子的空間 */
-  transform: translate(-50%, calc(var(--node) * -0.5));
+  /* 頭像圓心對在平台中心(進度點落在平台前緣);頭像圈 = 0.8u,半徑 0.4u */
+  transform: translate(-50%, calc(var(--node) * -0.4));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -238,8 +232,8 @@
 }
 .chnode__btn {
   position: relative;
-  width: var(--node);
-  height: var(--node);
+  width: calc(var(--node) * 0.8);
+  height: calc(var(--node) * 0.8);
   padding: 0;
   border: 0;
   background: none;
@@ -252,15 +246,16 @@
 .chnode__btn:active {
   transform: scale(0.96);
 }
+/* 外框用回原本的木框(背景已淡化,分得出來);通關換金框 */
 .chnode__ring {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: calc(var(--node) * 0.065) solid var(--ring);
-  background: radial-gradient(circle at 40% 32%, #fffaf0, #f0dfbd);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45);
+  border: calc(var(--node) * 0.05) solid var(--wood-edge);
+  background: radial-gradient(circle at 40% 32%, #fff6dc, #e9c98a);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 /* 頭像本身就有金框;節點的圈已經是框,把內層金框拿掉 */
@@ -269,27 +264,28 @@
   box-shadow: none;
   background: none;
 }
+/* 關卡編號(2026-10-21 -30%) */
 .chnode__no {
   position: absolute;
-  top: -10%;
-  left: -12%;
-  min-width: calc(var(--node) * 0.43);
-  height: calc(var(--node) * 0.43);
-  padding: 0 4px;
+  top: -8%;
+  left: -10%;
+  min-width: calc(var(--node) * 0.3);
+  height: calc(var(--node) * 0.3);
+  padding: 0 3px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  border: 2px solid #fff;
-  background: var(--ring);
-  color: var(--ring-text);
-  font-size: calc(var(--node) * 0.27);
+  border: 2px solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  font-size: calc(var(--node) * 0.19);
   font-weight: 900;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 .chnode__card {
   position: absolute;
-  right: -10%;
-  bottom: -6%;
+  right: -16%;
+  bottom: -10%;
   width: calc(var(--node) * 0.32);
   height: calc(var(--node) * 0.38);
   border-radius: 4px;
@@ -301,9 +297,9 @@
 /* 左下角(右下是招牌卡),不壓到下面的進度點 */
 .chnode__lock {
   position: absolute;
-  left: -8%;
-  bottom: -6%;
-  font-size: calc(var(--node) * 0.28);
+  left: -12%;
+  bottom: -8%;
+  font-size: calc(var(--node) * 0.26);
   line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
@@ -340,11 +336,14 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
-/* 狀態:外框保持該章的顏色(底圖對比色),通關外圈加金光 */
+/* 狀態 */
 .chnode.is-done .chnode__ring {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 calc(var(--node) * 0.05) rgba(246, 201, 69, 0.9), 0 4px 12px rgba(0, 0, 0, 0.45);
+  border-color: var(--gold-3);
+  background: radial-gradient(circle at 40% 32%, #fff8d8, #f3cf6a);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(246, 201, 69, 0.6);
 }
 .chnode.is-current .chnode__ring {
+  border-color: var(--gold-3);
   animation: chnode-pulse 1.5s ease-in-out infinite;
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
@@ -352,66 +351,135 @@
   filter: grayscale(0.35) brightness(0.92);
 }
 @keyframes chnode-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 255, 255, 0.9); }
-  50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 calc(var(--node) * 0.14) rgba(255, 255, 255, 0); }
+  0%, 100% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 220, 120, 0.85); }
+  50% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 calc(var(--node) * 0.1) rgba(255, 220, 120, 0); }
 }
 
-/* ---- 木牌(敬請期待 / 新手教學 共用) ---- */
+/* ---- 木牌(敬請期待 / 新手教學 共用):木紋 + 四角釘子 + 前面小 icon ---- */
 .chboard {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--node) * 0.08) calc(var(--node) * 0.15);
-  border-radius: calc(var(--node) * 0.1);
+  padding: calc(var(--node) * 0.08) calc(var(--node) * 0.14);
+  border-radius: calc(var(--node) * 0.08);
   border: max(2px, calc(var(--node) * 0.03)) solid var(--wood-edge);
-  background: linear-gradient(180deg, var(--wood-1), var(--wood-3));
+  background:
+    /* 木紋:細橫紋 + 幾條深一點的年輪 */
+    repeating-linear-gradient(177deg, transparent 0 calc(var(--node) * 0.07), rgba(110, 60, 20, 0.12) calc(var(--node) * 0.07) calc(var(--node) * 0.08)),
+    repeating-linear-gradient(183deg, transparent 0 calc(var(--node) * 0.19), rgba(110, 60, 20, 0.1) calc(var(--node) * 0.19) calc(var(--node) * 0.205)),
+    linear-gradient(180deg, var(--wood-1), var(--wood-3));
   color: var(--wood-text);
-  box-shadow: 0 3px 0 var(--wood-edge), 0 5px 8px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -3px 0 rgba(90, 45, 10, 0.18),
+    0 3px 0 var(--wood-edge),
+    0 5px 8px rgba(0, 0, 0, 0.4);
   font-family: var(--font-display);
   line-height: 1.2;
   white-space: nowrap;
 }
+/* 四角釘子 */
+.chboard::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--node) * 0.03);
+  pointer-events: none;
+  --nail: radial-gradient(circle at 40% 35%, #e9cfa0 0 18%, #6b4220 30% 55%, transparent 62%);
+  background:
+    var(--nail) left top / calc(var(--node) * 0.07) calc(var(--node) * 0.07) no-repeat,
+    var(--nail) right top / calc(var(--node) * 0.07) calc(var(--node) * 0.07) no-repeat,
+    var(--nail) left bottom / calc(var(--node) * 0.07) calc(var(--node) * 0.07) no-repeat,
+    var(--nail) right bottom / calc(var(--node) * 0.07) calc(var(--node) * 0.07) no-repeat;
+}
+.chboard__row {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--node) * 0.04);
+}
+.chboard__icon {
+  display: inline-flex;
+  width: calc(var(--node) * 0.2);
+  height: calc(var(--node) * 0.2);
+  flex: 0 0 auto;
+}
+.chboard__icon svg {
+  width: 100%;
+  height: 100%;
+}
 .chboard b {
-  font-size: calc(var(--node) * 0.21);
+  font-size: calc(var(--node) * 0.19);
   font-weight: 900;
 }
 .chboard small {
-  font-size: max(12px, calc(var(--node) * 0.135));
+  font-size: max(11px, calc(var(--node) * 0.122));
   font-weight: 700;
   opacity: 0.85;
-}
-
-/* 還沒做的關卡 */
-.chsoon {
-  position: absolute;
-  z-index: 2;
-  transform: translate(-50%, -58%);
-  pointer-events: none;
-}
-.chsoon .chboard {
-  transform: rotate(-3deg);
-}
-.chsoon .chboard small {
   text-align: center;
 }
 
-/* 新手教學:木牌整塊蓋在圖上那塊空白板子上(要比畫的板子大才蓋得住) */
+/* 還沒做的關卡:插在平台上(木牌底下一根桿子,桿底 = 平台中心),角度左右交錯 */
+.chsoon {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+.chsoon__tilt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 100%;
+}
+.chsoon__tilt .chboard {
+  z-index: 1;
+  /* 左右內距收窄:多了鐵鎚 icon,木牌不能比平台間距(手機約 120px)寬,不然跟隔壁疊 */
+  padding-left: calc(var(--node) * 0.085);
+  padding-right: calc(var(--node) * 0.085);
+}
+.chsoon .chboard__row {
+  gap: calc(var(--node) * 0.02);
+}
+.chsoon__post {
+  display: block;
+  width: calc(var(--node) * 0.08);
+  height: calc(var(--node) * 0.3);
+  margin-top: calc(var(--node) * -0.04);
+  border-radius: 0 0 3px 3px;
+  border: max(1.5px, calc(var(--node) * 0.018)) solid var(--wood-edge);
+  border-top: 0;
+  background: linear-gradient(90deg, var(--wood-3), var(--wood-2) 45%, var(--wood-3));
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.35);
+}
+.chsoon .chboard__icon {
+  color: var(--wood-text);
+}
+
+/* 新手教學:木牌斜 10 度蓋在圖上那塊空白板子上,站在圖上原本那兩根腳上(不另畫桿子) */
 .chmap__tutorial {
   position: absolute;
   z-index: 3;
   transform: translate(-50%, -50%);
 }
+.chmap__tut-tilt {
+  transform: rotate(-10deg);
+}
 .chboard--btn {
-  min-height: calc(var(--node) * 0.66);
-  padding-left: calc(var(--node) * 0.2);
-  padding-right: calc(var(--node) * 0.2);
+  min-height: calc(var(--node) * 0.6);
+  padding-left: calc(var(--node) * 0.16);
+  padding-right: calc(var(--node) * 0.18);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
-/* 新手教學的字要比「敬請期待」大(手機看得清楚,比原本放大約 50%) */
+/* 字 = 原本 0.27u 等比 -10% 再因為多了貓爪 -10% */
 .chboard--btn b {
-  font-size: calc(var(--node) * 0.27);
+  font-size: calc(var(--node) * 0.22);
+}
+.chboard--btn .chboard__icon {
+  width: calc(var(--node) * 0.24);
+  height: calc(var(--node) * 0.24);
+  color: #8a4b16;
 }
 .chboard--btn:hover {
   transform: scale(1.05);
@@ -427,60 +495,58 @@
 @keyframes chtut-glow {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.03) var(--gold-2), 0 0 calc(var(--node) * 0.12) 0 rgba(255, 220, 110, 0.95);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.03) var(--gold-2), 0 0 calc(var(--node) * 0.12) 0 rgba(255, 220, 110, 0.95);
   }
   50% {
     transform: scale(1.07);
-    box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.06) var(--gold-1), 0 0 calc(var(--node) * 0.3) calc(var(--node) * 0.05) rgba(255, 220, 110, 0.6);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.06) var(--gold-1), 0 0 calc(var(--node) * 0.3) calc(var(--node) * 0.05) rgba(255, 220, 110, 0.6);
   }
 }
 
-/* ---- 玩家棋子:自己的頭像(白框亮藍邊,三章都一樣、跟節點不同色),上下晃 ---- */
+/* ---- 玩家棋子:自己的頭像用遊戲裡本來的金色頭像框 + 金色尖腳,上下晃 ---- */
 .chmap__pawn {
   position: absolute;
   z-index: 3;
   pointer-events: none;
-  /* 尖端插進節點上緣一點(節點圓心 = 錨點,上緣 = -0.5 node) */
-  transform: translate(-50%, calc(-100% - var(--node) * 0.44));
+  /* 尖端插進節點上緣一點(節點圓心 = 錨點,頭像圈上緣 = -0.4u) */
+  transform: translate(-50%, calc(-100% - var(--node) * 0.36));
 }
 .chmap__pawn-bob {
   animation: chpawn-bob 1.6s ease-in-out infinite;
 }
 .chmap__pawn-pin {
   position: relative;
-  padding: calc(var(--node) * 0.035);
   border-radius: 50%;
-  background: #fff;
-  border: calc(var(--node) * 0.04) solid #2f9bff;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 5px 10px rgba(0, 0, 0, 0.5);
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
 }
 .chmap__pawn-pin .pavatar {
-  border: 0;
-  box-shadow: none;
+  border: calc(var(--node) * 0.035) solid var(--gold-3);
+  background: radial-gradient(circle at 40% 32%, #fff8e4, #f0d9a6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 0 1.5px var(--gold-4);
 }
 .chmap__pawn-pin::after {
   content: '';
   position: absolute;
   left: 50%;
-  top: 100%;
+  top: calc(100% - 1px);
   transform: translateX(-50%);
-  border-left: calc(var(--node) * 0.1) solid transparent;
-  border-right: calc(var(--node) * 0.1) solid transparent;
-  border-top: calc(var(--node) * 0.13) solid #2f9bff;
+  border-left: calc(var(--node) * 0.075) solid transparent;
+  border-right: calc(var(--node) * 0.075) solid transparent;
+  border-top: calc(var(--node) * 0.1) solid var(--gold-3);
 }
 /* 新手教學旁:棋子站在木牌正左邊,尖端朝右指向木牌 */
 .chmap__pawn.is-side {
   top: 50%;
-  right: calc(100% + var(--node) * 0.2);
+  right: calc(100% + var(--node) * 0.16);
   transform: translateY(-50%);
 }
 .chmap__pawn.is-side .chmap__pawn-pin::after {
-  left: 100%;
+  left: calc(100% - 1px);
   top: 50%;
   transform: translateY(-50%);
-  border-top: calc(var(--node) * 0.1) solid transparent;
-  border-bottom: calc(var(--node) * 0.1) solid transparent;
-  border-left: calc(var(--node) * 0.13) solid #2f9bff;
+  border-top: calc(var(--node) * 0.075) solid transparent;
+  border-bottom: calc(var(--node) * 0.075) solid transparent;
+  border-left: calc(var(--node) * 0.1) solid var(--gold-3);
   border-right: 0;
 }
 .chmap__pawn.is-side .chmap__pawn-bob {
@@ -488,11 +554,11 @@
 }
 @keyframes chpawn-bob {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(calc(var(--node) * -0.08)); }
+  50% { transform: translateY(calc(var(--node) * -0.07)); }
 }
 @keyframes chpawn-nudge {
   0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(calc(var(--node) * 0.08)); }
+  50% { transform: translateX(calc(var(--node) * 0.07)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
