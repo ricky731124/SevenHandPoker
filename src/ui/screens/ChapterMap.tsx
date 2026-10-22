@@ -66,7 +66,7 @@ export default function ChapterMap() {
   const worldW = Math.max(box.w, Math.round(box.h * CHAPTER_MAP_ASPECT))
   const worldH = Math.round(worldW / CHAPTER_MAP_ASPECT)
   // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 84px、電腦 900 高約 200px。
-  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像 0.8u、棋子 0.5u、木牌…),改一樣不會牽動別樣。
+  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像 0.92u、棋子 0.545u、木牌…),改一樣不會牽動別樣。
   const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
 
   // ---- 捲到焦點(進場 / 切章 / 視窗改大小時) ----
@@ -160,11 +160,11 @@ export default function ChapterMap() {
     frontier.chapter !== chapter.index || pawnTutorial
       ? null
       : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
-  // 棋子用遊戲裡頭像本來的金框(全站頭像都是這個框,放地圖上最搭)
+  // 棋子:手機約 48px,酒紅框(牌桌絨布紅;金色會跟通關金框撞)
   const pawn = (
     <div className="chmap__pawn-bob">
       <div className="chmap__pawn-pin">
-        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.5)} />
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.545)} />
       </div>
     </div>
   )
@@ -318,8 +318,8 @@ function StageNode({
         aria-label={`第 ${stage.index} 關 ${stage.name}`}
       >
         <span className="chnode__ring">
-          {/* 頭像圈 = 0.8u(2026-10-21 -20%);特殊卡/小點/通關照 u 算,大小不變 */}
-          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(size * 0.8 * 0.86)} />
+          {/* 頭像圈 = 0.92u:量過三章平台,沙地最寬 0.891u,統一放大到左右都蓋得住(大家同一大小) */}
+          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(size * 0.92 * 0.86)} />
         </span>
         <span className="chnode__no">{stage.index}</span>
         {card && (
@@ -357,11 +357,11 @@ function ComingSoon({ style, tilt }: { style: React.CSSProperties; tilt: number 
             </span>
             <b>敬請期待</b>
           </span>
-          {/* 分兩行:木牌才不會比平台間距寬、跟隔壁疊在一起 */}
+          {/* 分兩行(木牌才不會比平台間距寬、跟隔壁疊),兩行靠左對齊、半形括號才不會空太開 */}
           <small>
             抖內加速
             <br />
-            開發（誤）
+            開發(誤)
           </small>
         </div>
         <i className="chsoon__post" />

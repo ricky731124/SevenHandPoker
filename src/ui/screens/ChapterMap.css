@@ -223,8 +223,8 @@
 .chnode {
   position: absolute;
   z-index: 2;
-  /* 頭像圓心對在平台中心(進度點落在平台前緣);頭像圈 = 0.8u,半徑 0.4u */
-  transform: translate(-50%, calc(var(--node) * -0.4));
+  /* 頭像圓心對在平台中心(進度點落在平台前緣);頭像圈 = 0.92u,半徑 0.46u */
+  transform: translate(-50%, calc(var(--node) * -0.46));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -232,8 +232,8 @@
 }
 .chnode__btn {
   position: relative;
-  width: calc(var(--node) * 0.8);
-  height: calc(var(--node) * 0.8);
+  width: calc(var(--node) * 0.92);
+  height: calc(var(--node) * 0.92);
   padding: 0;
   border: 0;
   background: none;
@@ -246,16 +246,21 @@
 .chnode__btn:active {
   transform: scale(0.96);
 }
-/* 外框用回原本的木框(背景已淡化,分得出來);通關換金框 */
+/* 外框 = 金屬圈(漸層畫在 border-box,帶反光):沒解鎖銅、目前這關銀(外圈金色閃)、已通關金 */
 .chnode__ring {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: calc(var(--node) * 0.05) solid var(--wood-edge);
-  background: radial-gradient(circle at 40% 32%, #fff6dc, #e9c98a);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  --m1: #f2c08a;
+  --m2: #b5703a;
+  --m3: #6e3b17;
+  border: calc(var(--node) * 0.055) solid transparent;
+  background:
+    radial-gradient(circle at 40% 32%, #fff6dc, #e9c98a) padding-box,
+    linear-gradient(145deg, var(--m1) 0%, var(--m2) 40%, var(--m3) 58%, var(--m2) 78%, var(--m1) 100%) border-box;
+  box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 /* 頭像本身就有金框;節點的圈已經是框,把內層金框拿掉 */
@@ -264,13 +269,13 @@
   box-shadow: none;
   background: none;
 }
-/* 關卡編號(2026-10-21 -30%) */
+/* 關卡編號(原本 0.43u 的 -20%) */
 .chnode__no {
   position: absolute;
   top: -8%;
   left: -10%;
-  min-width: calc(var(--node) * 0.3);
-  height: calc(var(--node) * 0.3);
+  min-width: calc(var(--node) * 0.344);
+  height: calc(var(--node) * 0.344);
   padding: 0 3px;
   display: grid;
   place-items: center;
@@ -278,16 +283,17 @@
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
   color: var(--wood-text);
-  font-size: calc(var(--node) * 0.19);
+  font-size: calc(var(--node) * 0.216);
   font-weight: 900;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
+/* 特殊卡/小點/通關:2026-10-22 +8% */
 .chnode__card {
   position: absolute;
-  right: -16%;
-  bottom: -10%;
-  width: calc(var(--node) * 0.32);
-  height: calc(var(--node) * 0.38);
+  right: -14%;
+  bottom: -8%;
+  width: calc(var(--node) * 0.346);
+  height: calc(var(--node) * 0.41);
   border-radius: 4px;
   overflow: hidden;
   border: 2px solid;
@@ -307,14 +313,14 @@
 /* 三顆小關進度點 */
 .chnode__dots {
   display: flex;
-  gap: calc(var(--node) * 0.05);
-  padding: calc(var(--node) * 0.035) calc(var(--node) * 0.08);
+  gap: calc(var(--node) * 0.054);
+  padding: calc(var(--node) * 0.038) calc(var(--node) * 0.086);
   border-radius: 999px;
   background: rgba(30, 16, 6, 0.65);
 }
 .chnode__dots i {
-  width: calc(var(--node) * 0.11);
-  height: calc(var(--node) * 0.11);
+  width: calc(var(--node) * 0.119);
+  height: calc(var(--node) * 0.119);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -325,34 +331,50 @@
   box-shadow: 0 0 5px rgba(246, 201, 69, 0.8);
 }
 .chnode__clear {
-  padding: 1px calc(var(--node) * 0.1);
+  padding: 1px calc(var(--node) * 0.108);
   border-radius: 999px;
   border: 2px solid var(--gold-4);
   background: linear-gradient(180deg, var(--gold-1), var(--gold-3));
   color: #5a3a06;
-  font-size: calc(var(--node) * 0.17);
+  font-size: calc(var(--node) * 0.184);
   font-weight: 900;
   white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
-/* 狀態 */
+/* 狀態(2026-10-22 使用者定):沒解鎖 = 銅(預設);有解鎖還沒全破 = 銀,目前這關外圈金色閃(讓你知道打到哪);已通關 = 金 */
+.chnode.is-open .chnode__ring,
+.chnode.is-current .chnode__ring {
+  --m1: #ffffff;
+  --m2: #c3cad2;
+  --m3: #727c87;
+}
 .chnode.is-done .chnode__ring {
-  border-color: var(--gold-3);
-  background: radial-gradient(circle at 40% 32%, #fff8d8, #f3cf6a);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(246, 201, 69, 0.6);
+  --m1: #fff3b0;
+  --m2: #e8b432;
+  --m3: #9c6a12;
+  background:
+    radial-gradient(circle at 40% 32%, #fff8d8, #f3cf6a) padding-box,
+    linear-gradient(145deg, var(--m1) 0%, var(--m2) 40%, var(--m3) 58%, var(--m2) 78%, var(--m1) 100%) border-box;
+  box-shadow: 0 0 0 1px rgba(80, 50, 5, 0.6), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(246, 201, 69, 0.55);
 }
 .chnode.is-current .chnode__ring {
-  border-color: var(--gold-3);
-  animation: chnode-pulse 1.5s ease-in-out infinite;
+  animation: chnode-pulse 1.3s ease-in-out infinite;
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
 .chnode.is-locked .chnode__ring img {
   filter: grayscale(0.35) brightness(0.92);
 }
+/* 金色閃:實心金圈 + 往外擴散的金光(比之前明顯) */
 @keyframes chnode-pulse {
-  0%, 100% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 220, 120, 0.85); }
-  50% { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 calc(var(--node) * 0.1) rgba(255, 220, 120, 0); }
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45),
+      0 0 0 calc(var(--node) * 0.035) rgba(255, 214, 80, 0.95), 0 0 calc(var(--node) * 0.08) calc(var(--node) * 0.04) rgba(255, 220, 110, 0.85);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45),
+      0 0 0 calc(var(--node) * 0.06) rgba(255, 236, 150, 1), 0 0 calc(var(--node) * 0.26) calc(var(--node) * 0.1) rgba(255, 220, 110, 0.35);
+  }
 }
 
 /* ---- 木牌(敬請期待 / 新手教學 共用):木紋 + 四角釘子 + 前面小 icon ---- */
@@ -441,6 +463,11 @@
 .chsoon .chboard__row {
   gap: calc(var(--node) * 0.02);
 }
+/* 小字兩行靠左對齊(「開」對在「抖」正下方),整塊在木牌裡置中 */
+.chsoon .chboard small {
+  display: inline-block;
+  text-align: left;
+}
 .chsoon__post {
   display: block;
   width: calc(var(--node) * 0.08);
@@ -456,29 +483,28 @@
   color: var(--wood-text);
 }
 
-/* 新手教學:木牌斜 10 度蓋在圖上那塊空白板子上,站在圖上原本那兩根腳上(不另畫桿子) */
+/* 新手教學:木牌斜 5 度蓋在圖上那塊空白板子上,站在圖上原本那兩根腳上(不另畫桿子) */
 .chmap__tutorial {
   position: absolute;
   z-index: 3;
   transform: translate(-50%, -50%);
 }
 .chmap__tut-tilt {
-  transform: rotate(-10deg);
+  transform: rotate(-5deg);
 }
+/* 2026-10-22 整塊連字等比 -5% */
 .chboard--btn {
-  min-height: calc(var(--node) * 0.6);
-  padding-left: calc(var(--node) * 0.16);
-  padding-right: calc(var(--node) * 0.18);
+  min-height: calc(var(--node) * 0.57);
+  padding: calc(var(--node) * 0.076) calc(var(--node) * 0.171) calc(var(--node) * 0.076) calc(var(--node) * 0.152);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
-/* 字 = 原本 0.27u 等比 -10% 再因為多了貓爪 -10% */
 .chboard--btn b {
-  font-size: calc(var(--node) * 0.22);
+  font-size: calc(var(--node) * 0.209);
 }
 .chboard--btn .chboard__icon {
-  width: calc(var(--node) * 0.24);
-  height: calc(var(--node) * 0.24);
+  width: calc(var(--node) * 0.228);
+  height: calc(var(--node) * 0.228);
   color: #8a4b16;
 }
 .chboard--btn:hover {
@@ -487,29 +513,31 @@
 .chboard--btn:active {
   transform: scale(0.96);
 }
-/* 還沒玩過教學:金色粗框一閃一閃 + 輕輕放大縮小 */
+/* 還沒玩過教學:亮金色粗框一閃一閃 + 輕輕放大縮小 */
 .chboard--btn.is-current {
-  border-color: var(--gold-2);
+  border-color: #ffe27a;
   animation: chtut-glow 1.4s ease-in-out infinite;
 }
 @keyframes chtut-glow {
   0%, 100% {
     transform: scale(1);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.03) var(--gold-2), 0 0 calc(var(--node) * 0.12) 0 rgba(255, 220, 110, 0.95);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--wood-edge),
+      0 0 0 calc(var(--node) * 0.035) #ffd95a, 0 0 calc(var(--node) * 0.16) calc(var(--node) * 0.02) rgba(255, 228, 120, 1);
   }
   50% {
     transform: scale(1.07);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--wood-edge), 0 0 0 calc(var(--node) * 0.06) var(--gold-1), 0 0 calc(var(--node) * 0.3) calc(var(--node) * 0.05) rgba(255, 220, 110, 0.6);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--wood-edge),
+      0 0 0 calc(var(--node) * 0.065) #fff1a8, 0 0 calc(var(--node) * 0.34) calc(var(--node) * 0.08) rgba(255, 232, 130, 0.75);
   }
 }
 
-/* ---- 玩家棋子:自己的頭像用遊戲裡本來的金色頭像框 + 金色尖腳,上下晃 ---- */
+/* ---- 玩家棋子:手機約 48px,酒紅框(牌桌絨布紅)+ 細白內線 + 酒紅尖腳,上下晃 ---- */
 .chmap__pawn {
   position: absolute;
   z-index: 3;
   pointer-events: none;
-  /* 尖端插進節點上緣一點(節點圓心 = 錨點,頭像圈上緣 = -0.4u) */
-  transform: translate(-50%, calc(-100% - var(--node) * 0.36));
+  /* 尖端插進節點上緣一點(節點圓心 = 錨點,頭像圈上緣 = -0.46u) */
+  transform: translate(-50%, calc(-100% - var(--node) * 0.42));
 }
 .chmap__pawn-bob {
   animation: chpawn-bob 1.6s ease-in-out infinite;
@@ -520,9 +548,9 @@
   filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
 }
 .chmap__pawn-pin .pavatar {
-  border: calc(var(--node) * 0.035) solid var(--gold-3);
+  border: calc(var(--node) * 0.042) solid var(--felt-mid);
   background: radial-gradient(circle at 40% 32%, #fff8e4, #f0d9a6);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 0 1.5px var(--gold-4);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 1.5px var(--felt-deep);
 }
 .chmap__pawn-pin::after {
   content: '';
@@ -530,9 +558,9 @@
   left: 50%;
   top: calc(100% - 1px);
   transform: translateX(-50%);
-  border-left: calc(var(--node) * 0.075) solid transparent;
-  border-right: calc(var(--node) * 0.075) solid transparent;
-  border-top: calc(var(--node) * 0.1) solid var(--gold-3);
+  border-left: calc(var(--node) * 0.08) solid transparent;
+  border-right: calc(var(--node) * 0.08) solid transparent;
+  border-top: calc(var(--node) * 0.11) solid var(--felt-mid);
 }
 /* 新手教學旁:棋子站在木牌正左邊,尖端朝右指向木牌 */
 .chmap__pawn.is-side {
@@ -544,21 +572,22 @@
   left: calc(100% - 1px);
   top: 50%;
   transform: translateY(-50%);
-  border-top: calc(var(--node) * 0.075) solid transparent;
-  border-bottom: calc(var(--node) * 0.075) solid transparent;
-  border-left: calc(var(--node) * 0.1) solid var(--gold-3);
+  border-top: calc(var(--node) * 0.08) solid transparent;
+  border-bottom: calc(var(--node) * 0.08) solid transparent;
+  border-left: calc(var(--node) * 0.11) solid var(--felt-mid);
   border-right: 0;
 }
 .chmap__pawn.is-side .chmap__pawn-bob {
   animation-name: chpawn-nudge;
 }
+/* 晃動幅度 2026-10-22 +30%(0.07u → 0.091u) */
 @keyframes chpawn-bob {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(calc(var(--node) * -0.07)); }
+  50% { transform: translateY(calc(var(--node) * -0.091)); }
 }
 @keyframes chpawn-nudge {
   0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(calc(var(--node) * 0.07)); }
+  50% { transform: translateX(calc(var(--node) * 0.091)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
