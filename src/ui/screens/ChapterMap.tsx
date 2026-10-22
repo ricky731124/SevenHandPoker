@@ -68,6 +68,12 @@ export default function ChapterMap() {
   // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 84px、電腦 900 高約 200px。
   // 地圖上每樣東西各自用 u 乘自己的倍率(頭像 0.92u、棋子 0.545u、木牌…),改一樣不會牽動別樣。
   const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
+  // 頭像圈 0.94u,取「偶數整數 px」:圓心位移剛好半徑(整數),節點才不會落在半個像素上——
+  // 手機上金光一閃(重畫)時,半像素的東西會 1px 上下跳(使用者看到特殊卡/頭像在抖)
+  // 0.955u 往上取偶數:第一章第 4 關平台最寬,要 0.952u 才蓋得住左邊投影(所有頭像同一大小)
+  const ringPx = 2 * Math.ceil((nodePx * 0.955) / 2)
+  // 節點/棋子/木牌的座標也一律取整數 px
+  const at = (p: { x: number; y: number }) => ({ left: Math.round((p.x / 100) * worldW), top: Math.round((p.y / 100) * worldH) })
 
   // ---- 捲到焦點(進場 / 切章 / 視窗改大小時) ----
   const scrollToFocus = useCallback(() => {
@@ -160,11 +166,11 @@ export default function ChapterMap() {
     frontier.chapter !== chapter.index || pawnTutorial
       ? null
       : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
-  // 棋子:手機約 48px,酒紅框(牌桌絨布紅;金色會跟通關金框撞)
+  // 棋子:手機約 50px,奶白框配咖啡邊(酒紅融不進背景、金色會跟通關金框撞)
   const pawn = (
     <div className="chmap__pawn-bob">
       <div className="chmap__pawn-pin">
-        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.545)} />
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.572)} />
       </div>
     </div>
   )
@@ -176,7 +182,13 @@ export default function ChapterMap() {
           key={chapter.index}
           className="chmap__world"
           data-ch={chapter.index}
-          style={{ width: worldW, height: worldH, top: Math.min(0, (box.h - worldH) / 2), ['--node' as string]: `${nodePx}px` }}
+          style={{
+            width: worldW,
+            height: worldH,
+            top: Math.round(Math.min(0, (box.h - worldH) / 2)),
+            ['--node' as string]: `${nodePx}px`,
+            ['--ring' as string]: `${ringPx}px`,
+          }}
         >
           <img className="chmap__thumb" src={CHAPTER_THUMBS[chapter.index]} alt="" draggable={false} />
           <img
@@ -191,7 +203,7 @@ export default function ChapterMap() {
           <div className="chmap__fade" aria-hidden />
 
           {chapter.tutorial && (
-            <div className="chmap__tutorial" style={{ left: `${chapter.tutorial.x}%`, top: `${chapter.tutorial.y}%` }}>
+            <div className="chmap__tutorial" style={at(chapter.tutorial)}>
               {/* 木牌(木紋+釘子+貓爪)斜 10 度,蓋在圖上那塊空白板子上,站在圖上原本那兩根腳上(不另畫桿子) */}
               <div className="chmap__tut-tilt">
                 <button
@@ -218,7 +230,7 @@ export default function ChapterMap() {
 
           {chapter.nodes.map((pos, i) => {
             const stage = stages[i]
-            const style = { left: `${pos.x}%`, top: `${pos.y}%` }
+            const style = at(pos)
             if (!stage) return <ComingSoon key={i} style={style} tilt={SOON_TILT[i % SOON_TILT.length]} />
             return (
               <StageNode
@@ -226,6 +238,7 @@ export default function ChapterMap() {
                 stage={stage}
                 style={style}
                 size={nodePx}
+                ring={ringPx}
                 cleared={cleared}
                 unlocked={isStageUnlocked(stage, cleared, tutorialSeen)}
                 current={frontier.target === stage.id}
@@ -235,7 +248,7 @@ export default function ChapterMap() {
           })}
 
           {pawnAt && (
-            <div className="chmap__pawn" style={{ left: `${pawnAt.x}%`, top: `${pawnAt.y}%` }} aria-hidden>
+            <div className="chmap__pawn" style={at(pawnAt)} aria-hidden>
               {pawn}
             </div>
           )}
@@ -291,6 +304,7 @@ function StageNode({
   stage,
   style,
   size,
+  ring,
   cleared,
   unlocked,
   current,
@@ -299,6 +313,8 @@ function StageNode({
   stage: CampaignStage
   style: React.CSSProperties
   size: number
+  /** 頭像圈直徑(偶數整數 px) */
+  ring: number
   cleared: string[]
   unlocked: boolean
   current: boolean
@@ -317,9 +333,11 @@ function StageNode({
         onClick={onOpen}
         aria-label={`第 ${stage.index} 關 ${stage.name}`}
       >
+        {/* 目前這關的金光:獨立一層只動 transform/opacity(不重畫頭像,也就不會抖) */}
+        {current && <span className="chnode__glow" aria-hidden />}
         <span className="chnode__ring">
-          {/* 頭像圈 = 0.92u:量過三章平台,沙地最寬 0.891u,統一放大到左右都蓋得住(大家同一大小) */}
-          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(size * 0.92 * 0.86)} />
+          {/* 頭像圈 = 0.94u:要連平台左邊的投影一起蓋住(大家同一大小) */}
+          <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(ring * 0.86)} />
         </span>
         <span className="chnode__no">{stage.index}</span>
         {card && (

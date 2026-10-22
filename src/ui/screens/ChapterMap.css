@@ -223,8 +223,10 @@
 .chnode {
   position: absolute;
   z-index: 2;
-  /* 頭像圓心對在平台中心(進度點落在平台前緣);頭像圈 = 0.92u,半徑 0.46u */
-  transform: translate(-50%, calc(var(--node) * -0.46));
+  /* 頭像圓心對在平台中心(進度點落在平台前緣)。寬固定 = 頭像圈(偶數整數 px),
+     位移剛好半徑 → 整個節點落在整數像素上,不會半像素抖動 */
+  width: var(--ring);
+  transform: translate(calc(var(--ring) / -2), calc(var(--ring) / -2));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -232,8 +234,9 @@
 }
 .chnode__btn {
   position: relative;
-  width: calc(var(--node) * 0.92);
-  height: calc(var(--node) * 0.92);
+  flex: 0 0 auto;
+  width: var(--ring);
+  height: var(--ring);
   padding: 0;
   border: 0;
   background: none;
@@ -358,23 +361,34 @@
     linear-gradient(145deg, var(--m1) 0%, var(--m2) 40%, var(--m3) 58%, var(--m2) 78%, var(--m1) 100%) border-box;
   box-shadow: 0 0 0 1px rgba(80, 50, 5, 0.6), 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(246, 201, 69, 0.55);
 }
+/* 目前這關:圈本身加一道靜態金邊;閃的是後面獨立的 .chnode__glow */
 .chnode.is-current .chnode__ring {
-  animation: chnode-pulse 1.3s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 0 0 calc(var(--node) * 0.03) #ffcc33, 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.chnode__glow {
+  position: absolute;
+  inset: calc(var(--node) * -0.26);
+  border-radius: 50%;
+  pointer-events: none;
+  /* 亮金實心環 + 往外暈開的金光 */
+  background: radial-gradient(
+    circle,
+    rgba(255, 196, 20, 0) 47%,
+    rgba(255, 200, 30, 1) 52%,
+    rgba(255, 226, 110, 0.95) 57%,
+    rgba(255, 190, 20, 0.55) 66%,
+    rgba(255, 190, 20, 0) 78%
+  );
+  animation: chnode-glow 1.3s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@keyframes chnode-glow {
+  0%, 100% { transform: scale(0.9); opacity: 0.55; }
+  50% { transform: scale(1.06); opacity: 1; }
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
 .chnode.is-locked .chnode__ring img {
   filter: grayscale(0.35) brightness(0.92);
-}
-/* 金色閃:實心金圈 + 往外擴散的金光(比之前明顯) */
-@keyframes chnode-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45),
-      0 0 0 calc(var(--node) * 0.035) rgba(255, 214, 80, 0.95), 0 0 calc(var(--node) * 0.08) calc(var(--node) * 0.04) rgba(255, 220, 110, 0.85);
-  }
-  50% {
-    box-shadow: 0 0 0 1px rgba(50, 25, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45),
-      0 0 0 calc(var(--node) * 0.06) rgba(255, 236, 150, 1), 0 0 calc(var(--node) * 0.26) calc(var(--node) * 0.1) rgba(255, 220, 110, 0.35);
-  }
 }
 
 /* ---- 木牌(敬請期待 / 新手教學 共用):木紋 + 四角釘子 + 前面小 icon ---- */
@@ -531,13 +545,15 @@
   }
 }
 
-/* ---- 玩家棋子:手機約 48px,酒紅框(牌桌絨布紅)+ 細白內線 + 酒紅尖腳,上下晃 ---- */
+/* ---- 玩家棋子:手機約 50px,奶白框配咖啡邊 + 奶白尖腳(咖啡描邊),上下晃 ---- */
 .chmap__pawn {
   position: absolute;
   z-index: 3;
   pointer-events: none;
-  /* 尖端插進節點上緣一點(節點圓心 = 錨點,頭像圈上緣 = -0.46u) */
-  transform: translate(-50%, calc(-100% - var(--node) * 0.42));
+  /* 尖端插進頭像圈上緣一點(節點圓心 = 錨點,頭像圈上緣 = -半徑) */
+  transform: translate(-50%, calc(-100% - var(--ring) / 2 + var(--node) * 0.04));
+  --pawn-cream: #fff4dc;
+  --pawn-edge: #6d3f1c;
 }
 .chmap__pawn-bob {
   animation: chpawn-bob 1.6s ease-in-out infinite;
@@ -548,39 +564,59 @@
   filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
 }
 .chmap__pawn-pin .pavatar {
-  border: calc(var(--node) * 0.042) solid var(--felt-mid);
-  background: radial-gradient(circle at 40% 32%, #fff8e4, #f0d9a6);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 1.5px var(--felt-deep);
+  border: calc(var(--node) * 0.045) solid var(--pawn-cream);
+  background: radial-gradient(circle at 40% 32%, #fffaf0, #f3e2bf);
+  box-shadow: 0 0 0 2px var(--pawn-edge), inset 0 0 0 1.5px rgba(109, 63, 28, 0.35);
 }
+/* 尖腳:咖啡色大三角在下、奶白小三角疊上去 = 有描邊的奶白尖腳 */
+.chmap__pawn-pin::before,
 .chmap__pawn-pin::after {
   content: '';
   position: absolute;
   left: 50%;
-  top: calc(100% - 1px);
   transform: translateX(-50%);
-  border-left: calc(var(--node) * 0.08) solid transparent;
-  border-right: calc(var(--node) * 0.08) solid transparent;
-  border-top: calc(var(--node) * 0.11) solid var(--felt-mid);
+}
+.chmap__pawn-pin::before {
+  top: calc(100% - 1px);
+  border-left: calc(var(--node) * 0.1) solid transparent;
+  border-right: calc(var(--node) * 0.1) solid transparent;
+  border-top: calc(var(--node) * 0.135) solid var(--pawn-edge);
+}
+.chmap__pawn-pin::after {
+  top: calc(100% - 3px);
+  border-left: calc(var(--node) * 0.075) solid transparent;
+  border-right: calc(var(--node) * 0.075) solid transparent;
+  border-top: calc(var(--node) * 0.1) solid var(--pawn-cream);
 }
 /* 新手教學旁:棋子站在木牌正左邊,尖端朝右指向木牌 */
 .chmap__pawn.is-side {
   top: 50%;
-  right: calc(100% + var(--node) * 0.16);
+  right: calc(100% + var(--node) * 0.18);
   transform: translateY(-50%);
 }
+.chmap__pawn.is-side .chmap__pawn-pin::before,
 .chmap__pawn.is-side .chmap__pawn-pin::after {
-  left: calc(100% - 1px);
+  left: auto;
   top: 50%;
   transform: translateY(-50%);
-  border-top: calc(var(--node) * 0.08) solid transparent;
-  border-bottom: calc(var(--node) * 0.08) solid transparent;
-  border-left: calc(var(--node) * 0.11) solid var(--felt-mid);
   border-right: 0;
+}
+.chmap__pawn.is-side .chmap__pawn-pin::before {
+  right: calc(var(--node) * -0.135 + 1px);
+  border-top: calc(var(--node) * 0.1) solid transparent;
+  border-bottom: calc(var(--node) * 0.1) solid transparent;
+  border-left: calc(var(--node) * 0.135) solid var(--pawn-edge);
+}
+.chmap__pawn.is-side .chmap__pawn-pin::after {
+  right: calc(var(--node) * -0.1 + 3px);
+  border-top: calc(var(--node) * 0.075) solid transparent;
+  border-bottom: calc(var(--node) * 0.075) solid transparent;
+  border-left: calc(var(--node) * 0.1) solid var(--pawn-cream);
 }
 .chmap__pawn.is-side .chmap__pawn-bob {
   animation-name: chpawn-nudge;
 }
-/* 晃動幅度 2026-10-22 +30%(0.07u → 0.091u) */
+/* 晃動幅度 0.091u(2026-10-22 +30%) */
 @keyframes chpawn-bob {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(calc(var(--node) * -0.091)); }
@@ -592,7 +628,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chmap__pawn-bob,
-  .chnode.is-current .chnode__ring,
+  .chnode__glow,
   .chboard--btn.is-current {
     animation: none;
   }
