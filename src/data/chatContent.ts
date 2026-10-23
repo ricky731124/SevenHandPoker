@@ -160,7 +160,7 @@ const CHAT: ChatContent = {
     { t: '愈想愈不對勁' },
     { t: '友誼的小船說翻就翻', cta: 'quickmatch' },
     { t: '根據我的大數統計，先攻有87%的勝率' },
-    { t: '英國短毛貓都會偷囤牌' },
+    { t: '英短貓都會偷囤牌' },
     { t: '英短貓長的很像大叔' },
     { t: '鳥鳥只會強攻，很容易後繼無力' },
     { t: '北極熊相較前兩關是個平衡型的BOSS' },
@@ -459,7 +459,7 @@ const CHAT: ChatContent = {
     kw_botq: [{ t: '哈哈你想太多了啦' }, { t: '我先去換個電池XD' }, { t: '別問那多，我們用遊戲來對話吧', cta: 'quickmatch' }, { t: '機器人會打這麼爛嗎' }, { t: '你這樣問我好受傷' }],
     kw_howto: [{ t: '{name}先照新手教學走一遍最快，很好上手', cta: 'tutorial' }, { t: '規則不難，跟著教學打一場就懂了', cta: 'tutorial' }, { t: '先打主線第一關，打完就懂七成了', cta: 'campaign' }, { t: '{name}有不懂的直接問，我們都在' }],
     kw_strategy: [{ t: '想變強？先把主線打熟，boss 什麼牌風都摸過一輪', cta: 'campaign' }, { t: '三條 CP 值超高、耗牌少，記起來' }, { t: '「偷窺」牌拿來賭補牌超好用，去設一張帶著', cta: 'loadout' }, { t: '先看對手放幾張，再決定要不要搶這格' }, { t: '別每格都想贏' }],
-    kw_bossask: [{ t: '{bossName}那關嗎，牠主打{bossStyle}，招牌卡是{bossCard}，帶對牌就好打', guard: 'hasBoss' }, { t: '英國短毛貓超愛囤牌，你要逼牠出手' }, { t: '鳥鳥只會強攻，撐過前面就贏一半' }, { t: '打不過就回去主線多練幾場', cta: 'campaign' }, { t: '{bossName}那關我也卡過，多打幾次就摸熟了', guard: 'hasBoss' }, { t: '卡關的話先去把預設特殊牌設好', cta: 'loadout' }],
+    kw_bossask: [{ t: '{bossName}那關嗎，牠主打{bossStyle}，招牌卡是{bossCard}，帶對牌就好打', guard: 'hasBoss' }, { t: '英短貓超愛囤牌，你要逼牠出手' }, { t: '鳥鳥只會強攻，撐過前面就贏一半' }, { t: '打不過就回去主線多練幾場', cta: 'campaign' }, { t: '{bossName}那關我也卡過，多打幾次就摸熟了', guard: 'hasBoss' }, { t: '卡關的話先去把預設特殊牌設好', cta: 'loadout' }],
     kw_cardask: [{ t: '「{anyCard}」我覺得最萬用，帶著不吃虧' }, { t: '鬼牌留到最後補洞最賺，別急著出' }, { t: '想試特殊牌就先設預設牌組，每場自動帶', cta: 'loadout' }, { t: '「偷窺」配補牌，穩', cta: 'loadout' }, { t: '改花色的那幾張拿來湊同花很好用' }],
     // 嗆人機：通用回嗆 + owner 專屬(對你嘴更兇)
     kw_taunt: [

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import { useCampaignStore } from '../../state/campaignStore'
 import { usePlatformStore } from '../../state/platformStore'
@@ -9,6 +10,7 @@ import {
   CHAPTER_MAP_ASPECT,
   CHAPTER_NUMERALS,
   chapterClearedCount,
+  chapterIndexOfStage,
   chapterMapUrl,
   chapterStages,
   focusForChapter,
@@ -16,6 +18,8 @@ import {
   getChapter,
   initialFocus,
   isChapterUnlocked,
+  lastClearedStageIndex,
+  pendingUnlock,
   type Chapter,
 } from '../../game/chapters'
 import { isStageUnlocked } from '../../game/campaign'
@@ -42,9 +46,36 @@ export default function ChapterMap() {
   const clearedKey = Object.keys(clearedAt ?? {}).sort().join(',')
   const cleared = useMemo(() => (clearedKey ? clearedKey.split(',') : []), [clearedKey])
 
-  // 進場要看哪章、捲到哪(只算一次;之後切章另外算)
-  const fromTutorial = useCampaignStore((s) => s.mapFocus === 'tutorial')
-  const [focus, setFocus] = useState(() => initialFocus(viewStageId, cleared, tutorialSeen, fromTutorial) as { chapter: number; target: string })
+  // ---- 解鎖動畫(打完整隻 boss 的 x-3 才播;這台裝置看過到第幾關記在 localStorage,沒看過的進來就補播) ----
+  const uid = usePlatformStore((s) => s.uid)
+  const profileReady = usePlatformStore((s) => !!s.profile)
+  // 進場記號只看「進來那一刻」,用完馬上清掉(不然之後從小關地圖返回又會被當成剛從教學/前往下一關來)
+  const [mapFocus] = useState(() => useCampaignStore.getState().mapFocus)
+  useEffect(() => {
+    if (useCampaignStore.getState().mapFocus) useCampaignStore.setState({ mapFocus: null })
+  }, [])
+  const seenKey = uid ? `shp.unlockSeen.${uid}` : null
+  const [anim, setAnim] = useState<UnlockAnim | null>(() => {
+    if (!profileReady || !seenKey) return null
+    const seen = readSeen(seenKey)
+    if (seen == null) {
+      writeSeen(seenKey, lastClearedStageIndex(cleared)) // 第一次進來(或新裝置):不補播以前的
+      return null
+    }
+    const p = pendingUnlock(cleared, seen)
+    if (!p) return null
+    const cross = !!p.to && chapterIndexOfStage(p.to.index) !== chapterIndexOfStage(p.from.index)
+    return { ...p, cross, phase: 'pre' }
+  })
+  const animStart = useRef(anim)
+
+  // 進場要看哪章、捲到哪(只算一次;之後切章另外算)。有動畫 → 從剛打完的那關開始
+  const fromTutorial = mapFocus === 'tutorial'
+  const [focus, setFocus] = useState(() =>
+    anim
+      ? { chapter: chapterIndexOfStage(anim.from.index), target: anim.from.id }
+      : (initialFocus(viewStageId, cleared, tutorialSeen, fromTutorial) as { chapter: number; target: string }),
+  )
   const chapter = getChapter(focus.chapter) ?? CHAPTERS[0]
   const [cardStage, setCardStage] = useState<CampaignStage | null>(null)
 
@@ -65,12 +96,11 @@ export default function ChapterMap() {
   }, [])
   const worldW = Math.max(box.w, Math.round(box.h * CHAPTER_MAP_ASPECT))
   const worldH = Math.round(worldW / CHAPTER_MAP_ASPECT)
-  // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 84px、電腦 900 高約 200px。
-  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像 0.92u、棋子 0.545u、木牌…),改一樣不會牽動別樣。
+  // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 88px、電腦 900 高約 200px。
+  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像圈 0.955u、棋子 0.595u、木牌…),改一樣不會牽動別樣。
   const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
-  // 頭像圈 0.94u,取「偶數整數 px」:圓心位移剛好半徑(整數),節點才不會落在半個像素上——
-  // 手機上金光一閃(重畫)時,半像素的東西會 1px 上下跳(使用者看到特殊卡/頭像在抖)
-  // 0.955u 往上取偶數:第一章第 4 關平台最寬,要 0.952u 才蓋得住左邊投影(所有頭像同一大小)
+  // 頭像圈 0.955u 往上取「偶數整數 px」:第一章第 4 關平台最寬,要 0.952u 才蓋得住左邊投影(所有頭像同一大小);
+  // 偶數 → 圓心位移剛好半徑(整數),節點才不會落在半個像素上(半像素的東西重畫時會 1px 跳)
   const ringPx = 2 * Math.ceil((nodePx * 0.955) / 2)
   // 節點/棋子/木牌的座標也一律取整數 px
   const at = (p: { x: number; y: number }) => ({ left: Math.round((p.x / 100) * worldW), top: Math.round((p.y / 100) * worldH) })
@@ -85,7 +115,8 @@ export default function ChapterMap() {
       const i = stages.findIndex((s) => s?.id === focus.target)
       if (i >= 0) x = chapter.nodes[i].x
     }
-    el.scrollLeft = x ? (x / 100) * worldW - el.clientWidth / 2 : 0
+    // 取整數:捲在半個像素上,切章/返回的淡入結束那刻會重新對齊像素 → 節點左右跳 1px
+    el.scrollLeft = x ? Math.round((x / 100) * worldW - el.clientWidth / 2) : 0
   }, [focus, chapter, stages, worldW])
   useLayoutEffect(() => { scrollToFocus() }, [focus, worldW]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -160,17 +191,94 @@ export default function ChapterMap() {
     setFocus(focusForChapter(ch.index, cleared, tutorialSeen))
   }
 
-  // 棋子:站在現在那關上方;還沒看教學 → 貼在教學木牌正左邊(畫在木牌裡,見下)
-  const pawnTutorial = frontier.chapter === chapter.index && frontier.target === 'tutorial'
-  const pawnAt =
-    frontier.chapter !== chapter.index || pawnTutorial
+  // ---- 解鎖動畫時間軸(約 3 秒,不能跳過;跨章約 4.4 秒)----
+  //   pre → stamp(剛打完那關蓋「✓ 通關」、框變金)→ walk(貓爪印一路印到下一關、棋子跳三下過去)
+  //   → unlock(下一關鎖頭晃一下碎掉、銅框變銀、開始閃金光)→ 結束(從「前往下一關」來的就打開下一關資訊卡)
+  //   跨章:walk 走出右邊 → tab(左側下一章按鈕鎖頭飛走、亮起來)→ 切到下一章 → land(棋子降落)→ unlock
+  useEffect(() => {
+    const a = animStart.current
+    if (!a || !seenKey) return
+    writeSeen(seenKey, lastClearedStageIndex(cleared)) // 一開播就記看過(中途離開也不會每次重播)
+    const openNext = mapFocus === 'unlockNext'
+    const timers: number[] = []
+    const later = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms))
+    const phase = (p: UnlockPhase) => setAnim((x) => (x ? { ...x, phase: p } : x))
+    const finish = () => {
+      setAnim(null)
+      if (openNext && a.to) setCardStage(a.to)
+    }
+    later(350, () => { phase('stamp'); sfx.place() })
+    if (!a.to) {
+      later(1500, finish) // 下一關還沒做:只蓋章
+    } else {
+      later(950, () => phase('walk'))
+      ;[950, 1350, 1750].forEach((ms) => later(ms, () => sfx.select()))
+      if (!a.cross) {
+        later(2150, () => { phase('unlock'); sfx.reward() })
+        later(3000, finish)
+      } else {
+        later(2150, () => { phase('tab'); sfx.success() })
+        later(2950, () => {
+          setFocus({ chapter: chapterIndexOfStage(a.to!.index), target: a.to!.id })
+          phase('land')
+        })
+        later(3550, () => { phase('unlock'); sfx.reward() })
+        later(4400, finish)
+      }
+    }
+    return () => timers.forEach((t) => clearTimeout(t))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 從「前往下一關」來、但沒有動畫要播(例如已經在別處看過)→ 直接打開下一關資訊卡
+  useEffect(() => {
+    if (animStart.current || mapFocus !== 'unlockNext') return
+    const st = stages.find((s) => s?.id === frontier.target)
+    if (st) setCardStage(st)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 動畫中:這章的起點(剛打完那關)與終點(下一關;跨章時 = 右邊出口)
+  const animFrom = anim && chapterIndexOfStage(anim.from.index) === chapter.index ? chapter.nodes[anim.from.index - (chapter.index - 1) * 7 - 1] : null
+  const animToHere = anim?.to && chapterIndexOfStage(anim.to.index) === chapter.index ? chapter.nodes[anim.to.index - (chapter.index - 1) * 7 - 1] : null
+  const animEnd = animFrom ? animToHere ?? (anim?.cross ? { x: Math.min(98, animFrom.x + 9), y: animFrom.y - 2 } : null) : null
+
+  // walk 開始時把畫面捲到兩點中間
+  useEffect(() => {
+    if (anim?.phase !== 'walk' || !animFrom || !animEnd) return
+    const el = scrollerRef.current
+    if (!el) return
+    const mid = (((animFrom.x + animEnd.x) / 2) / 100) * worldW
+    el.scrollTo({ left: Math.round(mid - el.clientWidth / 2), behavior: 'smooth' })
+  }, [anim?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 棋子:站在現在那關上方;還沒看教學 → 貼在教學木牌正左邊(畫在木牌裡,見下)。
+  // 動畫中改由動畫決定(起點站著 → 跳過去 → 終點站著)
+  const pawnTutorial = !anim && frontier.chapter === chapter.index && frontier.target === 'tutorial'
+  const pawnAt = anim
+    ? anim.phase === 'pre' || anim.phase === 'stamp'
+      ? animFrom
+      : anim.phase === 'unlock'
+        ? animToHere
+        : null
+    : frontier.chapter !== chapter.index || pawnTutorial
       ? null
       : chapter.nodes[stages.findIndex((s) => s?.id === frontier.target)] ?? null
-  // 棋子:手機約 50px,奶白框配咖啡邊(酒紅融不進背景、金色會跟通關金框撞)
+
+  /** 動畫中節點要顯示成什麼(資料上已經通關/解鎖,但要照時間軸一步一步變) */
+  const override = (s: CampaignStage): NodeOverride | undefined => {
+    if (!anim) return undefined
+    if (s.id === anim.from.id) return anim.phase === 'pre' ? { state: 'current' } : { state: 'done', fx: anim.phase === 'stamp' ? 'stamp' : undefined }
+    if (anim.to && s.id === anim.to.id) return anim.phase === 'unlock' ? { state: 'current', fx: 'unlock' } : { state: 'locked' }
+    return undefined
+  }
+  // 跨章:下一章的按鈕在 tab 之前看起來還是鎖著
+  const tabLockedByAnim = (ch: Chapter) =>
+    !!anim?.cross && !!anim.to && chapterIndexOfStage(anim.to.index) === ch.index && ['pre', 'stamp', 'walk'].includes(anim.phase)
+  const tabUnlocking = (ch: Chapter) => !!anim?.cross && !!anim.to && chapterIndexOfStage(anim.to.index) === ch.index && anim.phase === 'tab'
+  // 棋子:手機約 52px,奶白框配咖啡邊(酒紅融不進背景、金色會跟通關金框撞)
   const pawn = (
     <div className="chmap__pawn-bob">
       <div className="chmap__pawn-pin">
-        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.572)} />
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.595)} />
       </div>
     </div>
   )
@@ -242,10 +350,22 @@ export default function ChapterMap() {
                 cleared={cleared}
                 unlocked={isStageUnlocked(stage, cleared, tutorialSeen)}
                 current={frontier.target === stage.id}
+                override={override(stage)}
                 onOpen={() => { sfx.click(); setCardStage(stage) }}
               />
             )
           })}
+
+          {/* 解鎖動畫:貓爪印一路印過去 + 棋子跳過去 / 跨章降落 */}
+          {anim && animFrom && animEnd && ['walk', 'tab', 'unlock'].includes(anim.phase) && (
+            <PawTrail a={at(animFrom)} b={at(animEnd)} u={nodePx} />
+          )}
+          {anim?.phase === 'walk' && animFrom && animEnd && (
+            <FlyingPawn a={at(animFrom)} b={at(animEnd)} u={nodePx} fadeOut={!animToHere}>
+              {pawn}
+            </FlyingPawn>
+          )}
+          {anim?.phase === 'land' && animToHere && <LandingPawn at={at(animToHere)} u={nodePx}>{pawn}</LandingPawn>}
 
           {pawnAt && (
             <div className="chmap__pawn" style={at(pawnAt)} aria-hidden>
@@ -266,18 +386,20 @@ export default function ChapterMap() {
       <nav className="chmap__tabs" aria-label="章節">
         {CHAPTERS.map((ch) => {
           const has = !!chapterStages(ch)[0]
-          const open = has && isChapterUnlocked(ch, cleared, tutorialSeen)
+          const open = has && isChapterUnlocked(ch, cleared, tutorialSeen) && !tabLockedByAnim(ch)
           const done = chapterClearedCount(ch, cleared)
           const total = chapterStages(ch).filter(Boolean).length
+          const unlocking = tabUnlocking(ch)
           return (
             <button
               key={ch.index}
               type="button"
-              className={`chmap__tab${ch.index === chapter.index ? ' is-active' : ''}${open ? '' : ' is-locked'}`}
+              className={`chmap__tab${ch.index === chapter.index ? ' is-active' : ''}${open ? '' : ' is-locked'}${unlocking ? ' is-unlocking' : ''}`}
               disabled={!open}
               onPointerEnter={(e) => { if (e.pointerType === 'mouse' && open) sfx.hover() }}
               onClick={() => { sfx.click(); switchChapter(ch) }}
             >
+              {unlocking && <span className="chmap__tab-lockfly" aria-hidden>🔒</span>}
               <span className="chmap__tab-no">
                 {!open && <span className="chmap__tab-lock">🔒</span>}第{CHAPTER_NUMERALS[ch.index - 1]}章
               </span>
@@ -296,7 +418,127 @@ export default function ChapterMap() {
           onClose={() => setCardStage(null)}
         />
       )}
+
+      {/* 解鎖動畫播放中:整個畫面不能點(使用者:3 秒就硬看完,不做跳過) */}
+      {anim && <div className="chmap__block" aria-hidden />}
     </div>
+  )
+}
+
+// ---- 解鎖動畫 -------------------------------------------------------------
+
+type UnlockPhase = 'pre' | 'stamp' | 'walk' | 'tab' | 'land' | 'unlock'
+interface UnlockAnim {
+  from: CampaignStage
+  to?: CampaignStage
+  /** 下一關在下一章 */
+  cross: boolean
+  phase: UnlockPhase
+}
+interface NodeOverride {
+  state: 'current' | 'done' | 'locked'
+  fx?: 'stamp' | 'unlock'
+}
+type Pt = { left: number; top: number }
+
+function readSeen(key: string): number | null {
+  try {
+    const v = localStorage.getItem(key)
+    return v == null ? null : Number(v)
+  } catch {
+    return null
+  }
+}
+function writeSeen(key: string, n: number) {
+  try {
+    localStorage.setItem(key, String(n))
+  } catch {
+    /* 私密模式等:不記就是了 */
+  }
+}
+
+/** 兩點之間往上拱的弧線(地圖上沒有路的座標,走弧線;貓爪印不用貼著路也自然) */
+function arcPoint(a: Pt, b: Pt, t: number, lift: number): Pt {
+  const cx = (a.left + b.left) / 2
+  const cy = (a.top + b.top) / 2 - lift
+  const m = 1 - t
+  return { left: m * m * a.left + 2 * m * t * cx + t * t * b.left, top: m * m * a.top + 2 * m * t * cy + t * t * b.top }
+}
+const arcLift = (a: Pt, b: Pt, u: number) => Math.max(u * 0.35, Math.hypot(b.left - a.left, b.top - a.top) * 0.18)
+
+/** 貓爪印:走在頭像「下方的地面」(兩個頭像幾乎相鄰,連中心的話腳印都蓋在頭像上看不到):
+ *  在進度點 /「✓ 通關」標籤的下面,從這關走到下一關,一個一個印出來,左右腳交錯、腳尖朝前進方向 */
+function PawTrail({ a, b, u }: { a: Pt; b: Pt; u: number }) {
+  // 走在兩關裡「比較低的那個」下方同一條線上(高低差大時才不會擦到另一關的進度點)
+  const y = Math.max(a.top, b.top) + u * 0.95
+  const s = { left: a.left + u * 0.12, top: y }
+  const e = { left: b.left - u * 0.12, top: y }
+  const sag = -u * 0.05 // 微微往下彎
+  // 個數依距離(間距約 0.25u,腳印才不會互疊),3~6 個
+  const N = Math.max(3, Math.min(6, Math.floor((e.left - s.left) / (u * 0.25))))
+  return (
+    <>
+      {Array.from({ length: N }, (_, i) => {
+        const t = 0.06 + (0.88 * i) / (N - 1)
+        const p = arcPoint(s, e, t, sag)
+        const q = arcPoint(s, e, t + 0.01, sag)
+        const ang = Math.atan2(q.top - p.top, q.left - p.left)
+        const side = i % 2 === 0 ? 1 : -1
+        const off = u * 0.05 * side
+        return (
+          <span
+            key={i}
+            className="chmap__paw"
+            style={{
+              left: Math.round(p.left - Math.sin(ang) * off),
+              top: Math.round(p.top + Math.cos(ang) * off),
+              animationDelay: `${i * 0.17}s`,
+              ['--rot' as string]: `${(ang * 180) / Math.PI + 90}deg`,
+            }}
+          >
+            <Paw />
+          </span>
+        )
+      })}
+    </>
+  )
+}
+
+/** 棋子沿弧線跳三下過去(跨章時跳出右邊、最後淡出) */
+function FlyingPawn({ a, b, u, fadeOut, children }: { a: Pt; b: Pt; u: number; fadeOut: boolean; children: React.ReactNode }) {
+  const lift = arcLift(a, b, u)
+  const xs: number[] = []
+  const ys: number[] = []
+  for (let k = 0; k <= 6; k++) {
+    const p = arcPoint(a, b, k / 6, lift)
+    xs.push(p.left - a.left)
+    ys.push(p.top - a.top - (k % 2 === 1 ? u * 0.32 : 0)) // 奇數格 = 每一跳的最高點
+  }
+  return (
+    <motion.div
+      className="chmap__flyer"
+      style={{ left: a.left, top: a.top }}
+      initial={{ x: 0, y: 0, opacity: 1 }}
+      animate={{ x: xs, y: ys, opacity: fadeOut ? [1, 1, 1, 1, 1, 0.6, 0] : 1 }}
+      transition={{ duration: 1.2, ease: 'easeInOut' }}
+    >
+      <div className="chmap__pawn">{children}</div>
+    </motion.div>
+  )
+}
+
+/** 跨章:棋子從上面掉下來、彈一下站好 */
+function LandingPawn({ at, u, children }: { at: Pt; u: number; children: React.ReactNode }) {
+  return (
+    <motion.div
+      className="chmap__flyer"
+      style={{ left: at.left, top: at.top }}
+      initial={{ y: -u * 1.6, opacity: 0 }}
+      animate={{ y: [-u * 1.6, 0, -u * 0.22, 0], opacity: [0, 1, 1, 1] }}
+      transition={{ duration: 0.6, times: [0, 0.55, 0.78, 1], ease: 'easeOut' }}
+    >
+      <div className="chmap__pawn">{children}</div>
+    </motion.div>
   )
 }
 
@@ -306,8 +548,9 @@ function StageNode({
   size,
   ring,
   cleared,
-  unlocked,
-  current,
+  unlocked: realUnlocked,
+  current: realCurrent,
+  override,
   onOpen,
 }: {
   stage: CampaignStage
@@ -318,14 +561,20 @@ function StageNode({
   cleared: string[]
   unlocked: boolean
   current: boolean
+  /** 解鎖動畫中照時間軸顯示(資料上已經變了,畫面一步一步變) */
+  override?: NodeOverride
   onOpen: () => void
 }) {
   const subsDone = stage.subStages.map((ss) => cleared.includes(ss.id))
-  const done = subsDone.every(Boolean)
+  const ov = override?.state
+  const done = ov ? ov === 'done' : subsDone.every(Boolean)
+  const unlocked = ov ? ov !== 'locked' : realUnlocked
+  const current = ov ? ov === 'current' : realCurrent
   const card = getSpecialCard(stage.signatureCard)
   const state = done ? 'is-done' : !unlocked ? 'is-locked' : current ? 'is-current' : 'is-open'
+  const fx = override?.fx ? ` fx-${override.fx}` : ''
   return (
-    <div className={`chnode ${state}`} style={{ ...style, ['--node' as string]: `${size}px` }}>
+    <div className={`chnode ${state}${fx}`} style={{ ...style, ['--node' as string]: `${size}px` }}>
       <button
         type="button"
         className="chnode__btn"
@@ -336,7 +585,7 @@ function StageNode({
         {/* 目前這關的金光:獨立一層只動 transform/opacity(不重畫頭像,也就不會抖) */}
         {current && <span className="chnode__glow" aria-hidden />}
         <span className="chnode__ring">
-          {/* 頭像圈 = 0.94u:要連平台左邊的投影一起蓋住(大家同一大小) */}
+          {/* 頭像圈 = ring(約 0.955u):要連平台左邊的投影、右邊石框一起蓋住(大家同一大小) */}
           <PlayerAvatar avatarId={stage.bossAvatar} size={Math.round(ring * 0.86)} />
         </span>
         <span className="chnode__no">{stage.index}</span>
@@ -346,6 +595,13 @@ function StageNode({
           </span>
         )}
         {!unlocked && <span className="chnode__lock">🔒</span>}
+        {/* 解鎖動畫:鎖頭晃一下、裂成兩半飛走 */}
+        {override?.fx === 'unlock' && (
+          <span className="chnode__lockbreak" aria-hidden>
+            <i>🔒</i>
+            <i>🔒</i>
+          </span>
+        )}
       </button>
       {done ? (
         <span className="chnode__clear">✓ 通關</span>
@@ -447,7 +703,7 @@ function MapScrollbar({
       thumb.classList.add('is-active')
     }
     const onThumbMove = (e: PointerEvent) => {
-      if (dragging) el.scrollLeft = startLeft + (e.clientX - startX) * ratio()
+      if (dragging) el.scrollLeft = Math.round(startLeft + (e.clientX - startX) * ratio())
     }
     const onThumbUp = () => {
       dragging = false
@@ -457,7 +713,7 @@ function MapScrollbar({
       if (e.target !== track) return
       const r = track.getBoundingClientRect()
       const x = e.clientX - r.left - thumb.clientWidth / 2
-      el.scrollTo({ left: x * ratio(), behavior: 'smooth' })
+      el.scrollTo({ left: Math.round(x * ratio()), behavior: 'smooth' })
     }
     thumb.addEventListener('pointerdown', onThumbDown)
     thumb.addEventListener('pointermove', onThumbMove)

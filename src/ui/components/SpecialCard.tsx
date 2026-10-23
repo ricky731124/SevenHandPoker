@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useId, useRef } from 'react'
 import type { Suit } from '../../game/cards'
 import { SPECIAL_CARDS, type SpecialCardDef } from '../../game/specialCards'
 import { sfx } from '../../audio/sfx'
@@ -11,7 +11,10 @@ import './SpecialCard.css'
  */
 
 /** Full illustrated face for a card id, drawn on a 0..100 canvas. */
-export function SpecialCardArt({ id, color, uid }: { id: string; color: string; uid: string }) {
+export function SpecialCardArt({ id, color, uid: uidBase }: { id: string; color: string; uid: string }) {
+  // 漸層 id 一定要每個實例唯一:同一張卡常同時出現兩份(出戰牌組 + 牌池),id 重複時 url(#…) 指到別份;
+  // 取消選牌、那份被移除後 Chrome 不會改指另一份 → 卡面變黑(2026-10-23 使用者回報)。
+  const uid = `${uidBase}-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const g = (s: string) => `${s}-${uid}`
   return (
     <svg viewBox="0 0 100 118" width="100%" height="100%" style={{ display: 'block' }} preserveAspectRatio="xMidYMid meet">

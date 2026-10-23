@@ -47,8 +47,9 @@ interface CampaignStore {
   pendingUpgrade: boolean
 
   openMap: (stageId: string) => void
-  /** 進章節大地圖時要先看哪:'tutorial' = 從新手教學回來(回第一章教學木牌)。 */
-  mapFocus: 'tutorial' | null
+  /** 進章節大地圖時要先看哪:'tutorial' = 從新手教學回來(回第一章教學木牌);
+   *  'unlockNext' = 剛第一次打完某關 x-3 按「前往下一關」→ 大地圖播完解鎖動畫後自動打開下一關的資訊卡。 */
+  mapFocus: 'tutorial' | 'unlockNext' | null
   /** 從主選單/聊天/教學進主線:章節大地圖,捲到玩家現在該打的地方(不沿用上次看的那關);
    *  從新手教學回來帶 { tutorial: true } → 回第一章的教學木牌。 */
   openChapters: (opts?: { tutorial?: boolean }) => void
@@ -157,11 +158,20 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   goNextStage: () => {
     const s = get().series
     const nudge = get().pendingUpgrade
+    const stage = get().stage
+    // 第一次打完整隻 boss(x-3,有發獎勵 = 首次)→ 先回章節大地圖播解鎖動畫,播完自動打開下一關資訊卡
+    const bossFirstClear = !!s && !!stage && !!get().reward && stage.subStages[stage.subStages.length - 1].id === s.subId
     set({ series: null, stage: null, outcome: null, reward: null, pendingUpgrade: false })
+    if (bossFirstClear) {
+      set({ viewStageId: null, mapFocus: 'unlockNext', pendingStart: null })
+      useAppStore.getState().go('campaignStages')
+      if (nudge && usePlatformStore.getState().isAnonymous) useAppStore.getState().askUpgrade()
+      return
+    }
     const nextId = s ? nextSubStageId(s.subId) : null
     const found = nextId ? getSubStage(nextId) : undefined
     if (found) {
-      set({ viewStageId: found.stage.id, pendingStart: nextId })
+      set({ viewStageId: found.stage.id, pendingStart: nextId, mapFocus: null })
       useAppStore.getState().go('campaign')
     } else {
       // no next stage (all cleared) → back to the current map

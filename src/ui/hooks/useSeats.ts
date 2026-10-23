@@ -41,7 +41,7 @@ export default function useSeats(): { p1: Seat; p2: Seat } {
 
   let foeSeat: Seat
   if (!online) {
-    // campaign boss: the CHARACTER name (= avatar name, e.g. 鳥鳥 / 英國短毛貓 /
+    // campaign boss: the CHARACTER name (= avatar name, e.g. 鳥鳥 / 英短貓 /
     // 北極熊), NOT the stage name (哪裡來的鎹鴉? …). Portrait = the stage's bossAvatar.
     if (campStage) {
       const av = AVATARS.find((a) => a.id === campStage.bossAvatar)

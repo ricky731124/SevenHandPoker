@@ -95,14 +95,14 @@ describe('內容覆蓋：每種劇本都真的會出現', () => {
     expect(seen.size).toBeGreaterThanOrEqual(6)
   })
 
-  it('主線進度 → BOSS 情報用真實關卡資料（過 1-3 → 第 2 關英國短毛貓、囤牌、讓我看看）', () => {
+  it('主線進度 → BOSS 情報用真實關卡資料（過 1-3 → 第 2 關英短貓、囤牌、讓我看看）', () => {
     const line = CHAT.kwPools.kw_bossask.find((l) => l.guard === 'hasBoss')!
     let seen = ''
     for (let i = 0; i < 300 && !seen; i++) {
       const u = reactUnit(who({ clearedOrder: 2, text: '打不過' }), BOTS, { onlineCount: 21, hasLive: false })[0]
       if (u?.text && tpl(line.t!, true).test(u.text)) seen = u.text
     }
-    expect(seen).toContain('英國短毛貓')
+    expect(seen).toContain('英短貓')
     expect(seen).toContain('囤牌')
     expect(seen).toContain('讓我看看')
   })

@@ -11,6 +11,8 @@ import {
   getChapter,
   initialFocus,
   isChapterUnlocked,
+  lastClearedStageIndex,
+  pendingUnlock,
 } from './chapters'
 import { campaignPreloadQueue } from '../ui/hooks/useStageMapPreload'
 
@@ -76,6 +78,36 @@ describe('進場/切章要看哪裡', () => {
   it('切到現在所在的章 → 現在那關;切到別章 → 最左邊', () => {
     expect(focusForChapter(2, upTo('s8-1'), true)).toEqual({ chapter: 2, target: 's8' })
     expect(focusForChapter(1, upTo('s8-1'), true)).toEqual({ chapter: 1, target: 'start' })
+  })
+})
+
+describe('解鎖動畫要不要播', () => {
+  it('連續全破到第幾關', () => {
+    expect(lastClearedStageIndex([])).toBe(0)
+    expect(lastClearedStageIndex(upTo('s3-2'))).toBe(2)
+    expect(lastClearedStageIndex(upTo('s3-3'))).toBe(3)
+  })
+  it('第一次進來(沒紀錄)不補播以前的', () => expect(pendingUnlock(upTo('s5-3'), null)).toBeNull())
+  it('x-1、x-2 打完不播', () => {
+    expect(pendingUnlock(upTo('s4-1'), 3)).toBeNull()
+    expect(pendingUnlock(upTo('s4-2'), 3)).toBeNull()
+  })
+  it('x-3 打完 → 從這關播到下一關', () => {
+    const p = pendingUnlock(upTo('s4-3'), 3)!
+    expect(p.from.index).toBe(4)
+    expect(p.to?.index).toBe(5)
+  })
+  it('看過了就不再播', () => expect(pendingUnlock(upTo('s4-3'), 4)).toBeNull())
+  it('第 7 關打完 → 下一關在第二章(跨章)', () => {
+    const p = pendingUnlock(upTo('s7-3'), 6)!
+    expect(chapterIndexOfStage(p.from.index)).toBe(1)
+    expect(chapterIndexOfStage(p.to!.index)).toBe(2)
+  })
+  it('最後一關打完、下一關還沒做 → 只蓋章(沒有 to)', () => {
+    const last = CAMPAIGN[CAMPAIGN.length - 1]
+    const p = pendingUnlock(ALL_SUB_STAGE_IDS, last.index - 1)!
+    expect(p.from.index).toBe(last.index)
+    expect(p.to).toBeUndefined()
   })
 })
 

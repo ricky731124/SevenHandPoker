@@ -39,9 +39,10 @@
   cursor: grabbing !important;
 }
 
+/* 不對整張地圖做淡入動畫:動畫結束那刻圖層會重新對齊像素,節點會左右跳一下(切章/返回時)。
+   地圖圖片本身已經有淡入(.chmap__img),節點直接出現。 */
 .chmap__world {
   position: relative;
-  animation: chmap-in 0.35s ease-out;
   /* 底圖淡化:降飽和 + 蓋一層半透明(第三章夜景蓋暗色,蓋白會灰濛濛)。
      有淡化後節點外框用回木框/通關金框就分得出來(2026-10-21 撤掉每章對比色外框) */
   --fade-sat: 0.72;
@@ -49,10 +50,6 @@
 }
 .chmap__world[data-ch='3'] {
   --fade: rgba(16, 8, 36, 0.26);
-}
-@keyframes chmap-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 .chmap__thumb,
 .chmap__img,
@@ -379,12 +376,13 @@
     rgba(255, 190, 20, 0.55) 66%,
     rgba(255, 190, 20, 0) 78%
   );
-  animation: chnode-glow 1.3s ease-in-out infinite;
+  /* 2026-10-23 閃太多 → 放慢、幅度變小(光圈大小/金色不變) */
+  animation: chnode-glow 2.2s ease-in-out infinite;
   will-change: transform, opacity;
 }
 @keyframes chnode-glow {
-  0%, 100% { transform: scale(0.9); opacity: 0.55; }
-  50% { transform: scale(1.06); opacity: 1; }
+  0%, 100% { transform: scale(0.96); opacity: 0.75; }
+  50% { transform: scale(1.02); opacity: 1; }
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
 .chnode.is-locked .chnode__ring img {
@@ -624,6 +622,145 @@
 @keyframes chpawn-nudge {
   0%, 100% { transform: translateX(0); }
   50% { transform: translateX(calc(var(--node) * 0.091)); }
+}
+
+/* ---- 解鎖動畫(打完整隻 boss 才播,約 3 秒,不能跳過) ---- */
+/* 播放中整個畫面不能點 */
+.chmap__block {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+}
+/* 貓爪印:一個一個「啪」地印出來,腳尖朝前進方向 */
+.chmap__paw {
+  position: absolute;
+  z-index: 2;
+  width: calc(var(--node) * 0.19);
+  height: calc(var(--node) * 0.19);
+  margin: calc(var(--node) * -0.095) 0 0 calc(var(--node) * -0.095);
+  color: #5c3414;
+  /* 淺色描邊,在花的地圖上也看得清楚 */
+  filter: drop-shadow(0 0 1px #fff3dc) drop-shadow(0 0 1px #fff3dc) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+  animation: chpaw-pop 0.28s ease-out both;
+}
+.chmap__paw svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes chpaw-pop {
+  0% { opacity: 0; transform: rotate(var(--rot)) scale(0.2); }
+  70% { opacity: 1; transform: rotate(var(--rot)) scale(1.25); }
+  100% { opacity: 1; transform: rotate(var(--rot)) scale(1); }
+}
+/* 跳過去的棋子:外層定位 + framer 動 x/y,裡面就是一般的棋子(.chmap__pawn 從 0,0 開始掛) */
+.chmap__flyer {
+  position: absolute;
+  z-index: 4;
+  width: 0;
+  height: 0;
+}
+.chmap__flyer .chmap__pawn {
+  left: 0;
+  top: 0;
+}
+/* 蓋章:「✓ 通關」從大到小砸下來,框閃一下變金 */
+.chnode.fx-stamp .chnode__clear {
+  animation: chstamp 0.5s cubic-bezier(0.2, 1.7, 0.4, 1) both;
+}
+@keyframes chstamp {
+  0% { opacity: 0; transform: scale(2.6) rotate(-14deg); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.chnode.fx-stamp .chnode__ring {
+  animation: chring-flash 0.7s ease-out;
+}
+@keyframes chring-flash {
+  0% { filter: brightness(1.9); }
+  100% { filter: brightness(1); }
+}
+/* 碎鎖:先晃一下,再裂成兩半往兩邊掉、淡出;外框閃一下(銅 → 銀) */
+.chnode__lockbreak {
+  position: absolute;
+  left: -12%;
+  bottom: -8%;
+  width: calc(var(--node) * 0.3);
+  height: calc(var(--node) * 0.3);
+  font-size: calc(var(--node) * 0.26);
+  line-height: 1;
+  pointer-events: none;
+  animation: chlock-shake 0.3s ease-in-out;
+}
+.chnode__lockbreak i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-style: normal;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.chnode__lockbreak i:first-child {
+  clip-path: inset(0 50% 0 0);
+  animation: chlock-l 0.75s ease-in 0.25s both;
+}
+.chnode__lockbreak i:last-child {
+  clip-path: inset(0 0 0 50%);
+  animation: chlock-r 0.75s ease-in 0.25s both;
+}
+/* 裂開時的金色爆光 */
+.chnode__lockbreak::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 236, 140, 0.95) 0%, rgba(255, 200, 40, 0.6) 35%, rgba(255, 200, 40, 0) 70%);
+  animation: chlock-burst 0.6s ease-out 0.25s both;
+}
+@keyframes chlock-shake {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  25% { transform: translateX(-3px) rotate(-10deg); }
+  75% { transform: translateX(3px) rotate(10deg); }
+}
+@keyframes chlock-l {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  100% { opacity: 0; transform: translate(calc(var(--node) * -0.3), calc(var(--node) * 0.32)) rotate(-40deg); }
+}
+@keyframes chlock-r {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  100% { opacity: 0; transform: translate(calc(var(--node) * 0.3), calc(var(--node) * 0.32)) rotate(40deg); }
+}
+@keyframes chlock-burst {
+  0% { opacity: 0; transform: scale(0.3); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+.chnode.fx-unlock .chnode__ring {
+  animation: chring-flash 0.7s ease-out 0.25s both;
+}
+/* 跨章:左側下一章按鈕亮起來、鎖頭往上飛走 */
+.chmap__tab {
+  position: relative;
+}
+.chmap__tab.is-unlocking {
+  animation: chtab-unlock 0.8s ease-out;
+}
+@keyframes chtab-unlock {
+  0% { transform: scale(1); box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 0 rgba(255, 214, 80, 0.9); }
+  40% { transform: scale(1.12); box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 8px rgba(255, 214, 80, 0.7); }
+  100% { transform: scale(1); box-shadow: 0 3px 0 var(--wood-edge), 0 0 0 16px rgba(255, 214, 80, 0); }
+}
+.chmap__tab-lockfly {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  font-size: clamp(16px, 4vh, 26px);
+  pointer-events: none;
+  animation: chtab-lockfly 0.8s ease-out both;
+}
+@keyframes chtab-lockfly {
+  0% { opacity: 1; transform: translate(-50%, 0) scale(1) rotate(0); }
+  100% { opacity: 0; transform: translate(-50%, -140%) scale(1.5) rotate(25deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {

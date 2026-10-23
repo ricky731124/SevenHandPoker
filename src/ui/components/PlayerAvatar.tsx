@@ -10,7 +10,7 @@ import type { PlayerId } from '../../game/state'
 const AVATAR_IMG: Record<string, string> = {
   cat: 'avatars/cat.webp', // 橘貓 (default / host)
   bird: 'avatars/bird.webp', // 鳥鳥 (guest default / 哪裡來的鎹鴉? boss + 第1關獎勵)
-  cat2: 'avatars/cat2.webp', // 英國短毛貓 (明天開始168 boss + 第2關獎勵)
+  cat2: 'avatars/cat2.webp', // 英短貓 (明天開始168 boss + 第2關獎勵)
   bear: 'avatars/bear.webp', // 北極熊 (第3關 boss + 獎勵)
   dog: 'avatars/dog.webp', // 紅貴賓 (第4關 boss + 獎勵)
   cat3: 'avatars/cat3.webp', // 波斯貓 (第5關 boss + 獎勵)
@@ -25,7 +25,7 @@ const AVATAR_EMOJI: Record<string, string> = { cat: '🐱', bird: '🐦', cat2: 
 export const AVATARS: { id: string; name: string; free: boolean }[] = [
   { id: 'cat', name: '橘貓', free: true },
   { id: 'bird', name: '鳥鳥', free: false },
-  { id: 'cat2', name: '英國短毛貓', free: false },
+  { id: 'cat2', name: '英短貓', free: false },
   { id: 'bear', name: '北極熊', free: false },
   { id: 'dog', name: '紅貴賓', free: false },
   { id: 'cat3', name: '波斯貓', free: false },

@@ -27,16 +27,16 @@ export const CHAPTERS: Chapter[] = [
   {
     index: 1,
     name: '新手娛樂城',
-    // x = (平台左側投影的左緣 + 沙地右緣) / 2:頭像要連左邊的投影一起蓋住(2026-10-22 程式量,
-    // 投影約 5px@2146 寬);y = 沙地中心。
+    // x = (平台左側投影的左緣 + 右側石框外緣) / 2:頭像要左右對稱蓋住投影跟石框(2026-10-23 程式量,
+    // 投影約 5px、石框約 10px@2146 寬;第 4 關石框跟沙地同色、量的時候已含在沙地裡,維持原值);y = 沙地中心。
     nodes: [
-      { x: 17.94, y: 49.6 },
-      { x: 30.92, y: 53.8 },
-      { x: 40.89, y: 59.3 },
+      { x: 18.17, y: 49.6 },
+      { x: 31.15, y: 53.8 },
+      { x: 41.12, y: 59.3 },
       { x: 50.05, y: 51 },
-      { x: 61.49, y: 53 },
-      { x: 72.44, y: 45.5 },
-      { x: 82.92, y: 50.9 },
+      { x: 61.72, y: 53 },
+      { x: 72.65, y: 45.5 },
+      { x: 83.15, y: 50.9 },
     ],
     tutorial: { x: 26.5, y: 22.8 },
   },
@@ -44,13 +44,13 @@ export const CHAPTERS: Chapter[] = [
     index: 2,
     name: '種子選拔賽',
     nodes: [
-      { x: 18.87, y: 49.4 },
-      { x: 33.83, y: 53.3 },
-      { x: 44.18, y: 58.9 },
-      { x: 54.73, y: 51.2 },
-      { x: 66.1, y: 54.7 },
-      { x: 77.7, y: 51.4 },
-      { x: 88.61, y: 55.4 },
+      { x: 19.08, y: 49.4 },
+      { x: 34.04, y: 53.3 },
+      { x: 44.38, y: 58.9 },
+      { x: 54.96, y: 51.2 },
+      { x: 66.33, y: 54.7 },
+      { x: 77.91, y: 51.4 },
+      { x: 88.82, y: 55.4 },
     ],
   },
   {
@@ -118,6 +118,33 @@ export function initialFocus(viewStageId: string | null, clearedIds: string[], t
   if (st) return { chapter: chapterIndexOfStage(st.index), target: st.id }
   if (fromTutorial) return { chapter: 1, target: 'tutorial' }
   return frontierFocus(clearedIds, tutorialSeen)
+}
+
+/** 從第 1 關起,連續「三小關全過」打到第幾關(0 = 一關都還沒全破)。 */
+export function lastClearedStageIndex(clearedIds: Iterable<string>): number {
+  const set = new Set(clearedIds)
+  let n = 0
+  for (const s of [...CAMPAIGN].sort((a, b) => a.index - b.index)) {
+    if (!s.subStages.every((ss) => set.has(ss.id))) break
+    n = s.index
+  }
+  return n
+}
+
+/**
+ * 解鎖動畫(2026-10-23 使用者定):打完某關 x-3(整隻 boss)才播,x-1/x-2 不播。
+ * `seen` = 這台裝置上次在大地圖「看過動畫」時已打完到第幾關(localStorage;null = 第一次,不補播舊的)。
+ * 有新打完的關 → 回傳要從哪關播到哪關(下一關還沒做 = to 為 undefined,只蓋章)。
+ */
+export function pendingUnlock(
+  clearedIds: Iterable<string>,
+  seen: number | null,
+): { from: CampaignStage; to?: CampaignStage } | null {
+  const last = lastClearedStageIndex(clearedIds)
+  if (seen == null || last <= seen || last === 0) return null
+  const from = CAMPAIGN.find((s) => s.index === last)
+  if (!from) return null
+  return { from, to: CAMPAIGN.find((s) => s.index === last + 1) }
 }
 
 /** 切到某章時捲到哪:玩家現在所在的章 → 現在那關;其他(已全破)的章 → 最左邊開頭。 */

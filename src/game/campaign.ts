@@ -135,8 +135,8 @@ export const CAMPAIGN: CampaignStage[] = [
     id: 's2',
     index: 2,
     name: '明天開始168',
-    bossAvatar: 'cat2', // 英國短毛貓 = cat2.png(已存在)
-    bossName: '英國短毛貓',
+    bossAvatar: 'cat2', // 英短貓 = cat2.png(已存在)
+    bossName: '英短貓',
     signatureCard: 'spy',
     // 龜到你發火:主打囤牌,spy 給合法高看破(看穿你的詐唬)。
     profile: {
