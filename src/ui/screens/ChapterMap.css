@@ -227,7 +227,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--node) * 0.04);
+  /* 進度點 /「✓ 通關」離頭像圈一點點(2026-10-24 微微下移) */
+  gap: calc(var(--node) * 0.075);
 }
 .chnode__btn {
   position: relative;
@@ -364,24 +365,24 @@
 }
 .chnode__glow {
   position: absolute;
-  inset: calc(var(--node) * -0.26);
+  /* 2026-10-24:只比頭像圈大一點點(之前會蓋到下面的進度點);有棋子就知道人在哪,金光不用誇張 */
+  inset: calc(var(--node) * -0.1);
   border-radius: 50%;
   pointer-events: none;
-  /* 亮金實心環 + 往外暈開的金光 */
+  /* closest-side:100% = 這層的半徑(頭像圈邊緣約在 83%)→ 亮金環貼著圈外、往外淡出 */
   background: radial-gradient(
-    circle,
-    rgba(255, 196, 20, 0) 47%,
-    rgba(255, 200, 30, 1) 52%,
-    rgba(255, 226, 110, 0.95) 57%,
-    rgba(255, 190, 20, 0.55) 66%,
-    rgba(255, 190, 20, 0) 78%
+    circle closest-side,
+    rgba(255, 196, 20, 0) 78%,
+    rgba(255, 200, 30, 1) 83%,
+    rgba(255, 228, 120, 0.95) 88%,
+    rgba(255, 190, 20, 0) 100%
   );
   /* 2026-10-23 閃太多 → 放慢、幅度變小(光圈大小/金色不變) */
   animation: chnode-glow 2.2s ease-in-out infinite;
   will-change: transform, opacity;
 }
 @keyframes chnode-glow {
-  0%, 100% { transform: scale(0.96); opacity: 0.75; }
+  0%, 100% { transform: scale(0.98); opacity: 0.7; }
   50% { transform: scale(1.02); opacity: 1; }
 }
 /* 沒解鎖:頭像只稍微褪色(要看得出是誰、有吸引力),鎖頭說明進不去 */
@@ -634,7 +635,7 @@
 /* 貓爪印:一個一個「啪」地印出來,腳尖朝前進方向 */
 .chmap__paw {
   position: absolute;
-  z-index: 2;
+  z-index: 3; /* 頭像連頭像,頭尾會蓋在頭像邊緣上 */
   width: calc(var(--node) * 0.19);
   height: calc(var(--node) * 0.19);
   margin: calc(var(--node) * -0.095) 0 0 calc(var(--node) * -0.095);

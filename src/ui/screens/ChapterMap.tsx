@@ -97,7 +97,7 @@ export default function ChapterMap() {
   const worldW = Math.max(box.w, Math.round(box.h * CHAPTER_MAP_ASPECT))
   const worldH = Math.round(worldW / CHAPTER_MAP_ASPECT)
   // 基準單位 u(CSS 的 --node)跟著圖高等比:手機約 88px、電腦 900 高約 200px。
-  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像圈 0.955u、棋子 0.595u、木牌…),改一樣不會牽動別樣。
+  // 地圖上每樣東西各自用 u 乘自己的倍率(頭像圈 0.955u、棋子 0.613u、木牌…),改一樣不會牽動別樣。
   const nodePx = Math.round(Math.min(240, Math.max(80, worldH * 0.225)))
   // 頭像圈 0.955u 往上取「偶數整數 px」:第一章第 4 關平台最寬,要 0.952u 才蓋得住左邊投影(所有頭像同一大小);
   // 偶數 → 圓心位移剛好半徑(整數),節點才不會落在半個像素上(半像素的東西重畫時會 1px 跳)
@@ -274,11 +274,11 @@ export default function ChapterMap() {
   const tabLockedByAnim = (ch: Chapter) =>
     !!anim?.cross && !!anim.to && chapterIndexOfStage(anim.to.index) === ch.index && ['pre', 'stamp', 'walk'].includes(anim.phase)
   const tabUnlocking = (ch: Chapter) => !!anim?.cross && !!anim.to && chapterIndexOfStage(anim.to.index) === ch.index && anim.phase === 'tab'
-  // 棋子:手機約 52px,奶白框配咖啡邊(酒紅融不進背景、金色會跟通關金框撞)
+  // 棋子:手機約 54px,奶白框配咖啡邊(酒紅融不進背景、金色會跟通關金框撞)
   const pawn = (
     <div className="chmap__pawn-bob">
       <div className="chmap__pawn-pin">
-        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.595)} />
+        <PlayerAvatar avatarId={myAvatar} size={Math.round(nodePx * 0.613)} />
       </div>
     </div>
   )
@@ -464,27 +464,32 @@ function arcPoint(a: Pt, b: Pt, t: number, lift: number): Pt {
   const m = 1 - t
   return { left: m * m * a.left + 2 * m * t * cx + t * t * b.left, top: m * m * a.top + 2 * m * t * cy + t * t * b.top }
 }
-const arcLift = (a: Pt, b: Pt, u: number) => Math.max(u * 0.35, Math.hypot(b.left - a.left, b.top - a.top) * 0.18)
+/**
+ * 弧線拱多高:每段路走起來要「一樣長」(步數、時間都一樣,步伐才一致)——
+ * 距離短的就拱高一點把路拉長,距離長的幾乎直走。二次貝茲弧長 ≈ √(d² + 4/3·c²),
+ * 取目標路長 1.6u 反推控制點高度 c;最少拱 0.3u。
+ */
+const PATH_LEN = 1.6
+function arcLift(a: Pt, b: Pt, u: number) {
+  const d = Math.hypot(b.left - a.left, b.top - a.top)
+  const L = u * PATH_LEN
+  return Math.max(u * 0.3, d < L ? Math.sqrt((L * L - d * d) * 0.75) : 0)
+}
 
-/** 貓爪印:走在頭像「下方的地面」(兩個頭像幾乎相鄰,連中心的話腳印都蓋在頭像上看不到):
- *  在進度點 /「✓ 通關」標籤的下面,從這關走到下一關,一個一個印出來,左右腳交錯、腳尖朝前進方向 */
+/** 貓爪印:頭像連頭像,沿弧線一個一個印出來(固定 6 步、每步間隔一樣),左右腳交錯、腳尖朝前進方向;
+ *  頭尾會蓋到頭像邊緣(使用者:蓋到沒關係) */
 function PawTrail({ a, b, u }: { a: Pt; b: Pt; u: number }) {
-  // 走在兩關裡「比較低的那個」下方同一條線上(高低差大時才不會擦到另一關的進度點)
-  const y = Math.max(a.top, b.top) + u * 0.95
-  const s = { left: a.left + u * 0.12, top: y }
-  const e = { left: b.left - u * 0.12, top: y }
-  const sag = -u * 0.05 // 微微往下彎
-  // 個數依距離(間距約 0.25u,腳印才不會互疊),3~6 個
-  const N = Math.max(3, Math.min(6, Math.floor((e.left - s.left) / (u * 0.25))))
+  const lift = arcLift(a, b, u)
+  const N = 6
   return (
     <>
       {Array.from({ length: N }, (_, i) => {
-        const t = 0.06 + (0.88 * i) / (N - 1)
-        const p = arcPoint(s, e, t, sag)
-        const q = arcPoint(s, e, t + 0.01, sag)
+        const t = 0.14 + (0.72 * i) / (N - 1)
+        const p = arcPoint(a, b, t, lift)
+        const q = arcPoint(a, b, t + 0.01, lift)
         const ang = Math.atan2(q.top - p.top, q.left - p.left)
         const side = i % 2 === 0 ? 1 : -1
-        const off = u * 0.05 * side
+        const off = u * 0.06 * side
         return (
           <span
             key={i}

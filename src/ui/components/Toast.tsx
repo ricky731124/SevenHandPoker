@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { useToastStore } from '../../state/toastStore'
 import './Toast.css'
 
@@ -10,7 +11,11 @@ export default function Toast() {
   // inner motion element only animates y/opacity. Keeping them separate stops
   // framer-motion's transform from clobbering the centering translate (which
   // made the toast drift off to the right).
-  return (
+  //
+  // Portal 到 <body>,跟彈窗(Modal 也是 portal 到 body)在同一層比 z-index:
+  // 手機直放時 #root 整個轉 90 度(transform)→ 自成一個圖層,留在 #root 裡的提示 z-index 再高
+  // 也只在 #root 裡面算,會被 body 底下的彈窗蓋住還被模糊(例:特殊卡選單裡死神之眼「不能用」看不到)。
+  return createPortal(
     <div className="toast-anchor">
       <motion.div
         className="toast"
@@ -20,6 +25,7 @@ export default function Toast() {
       >
         {message}
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   )
 }
