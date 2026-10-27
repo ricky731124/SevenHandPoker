@@ -201,6 +201,16 @@
   font-size: 14px;
   color: var(--parch-muted, #8a745a);
 }
+/* 限定房玩法小標(LIMITED-ROOM-SPEC §8.4) */
+.livecard__mode {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #7a45b0;
+  color: #fff4d6;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
 .livecard__watchers {
   margin-left: auto;
   font-size: 18px; /* 眼睛/數量再大,與 LIVE 齊平(#1) */

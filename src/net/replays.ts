@@ -2,6 +2,7 @@ import { get, onValue, push, query, limitToLast, ref, remove, serverTimestamp } 
 import { getDb } from './firebase'
 import type { PlayerId } from '../game/state'
 import type { Move } from '../game/replay'
+import type { LimitedMode } from '../game/limited'
 
 /**
  * 賽事回放(§6.1)。存的是**棋譜**(move-log),不是影片:回放時 `createGame(seed, firstPicker)`
@@ -28,6 +29,8 @@ export interface ReplayRecord {
   firstPicker: PlayerId
   special: boolean // 房型:true=特殊(牌)房、false=一般房
   matchType: MatchType
+  /** 限定房玩法(有 = 限定房;回放照這個建牌組)。舊回放沒有 = 一般 / 特殊房。 */
+  mode?: LimitedMode
   /** true = 手動中離(未自然結束)→ winner 為對手;回放播到離開那步為止。 */
   abandoned?: boolean
   p1: ReplayPlayer
@@ -57,6 +60,7 @@ function payloadOf(rec: Omit<ReplayRecord, 'v' | 'endedAt'>): object {
     firstPicker: rec.firstPicker,
     special: rec.special,
     matchType: rec.matchType,
+    ...(rec.mode ? { mode: rec.mode } : {}),
     ...(rec.abandoned ? { abandoned: true } : {}),
     p1: rec.p1,
     p2: rec.p2,

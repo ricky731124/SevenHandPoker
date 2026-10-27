@@ -63,8 +63,15 @@ export default function ShowdownModal({
   const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
   const myName = me === 'p1' ? showdown.p1Name : showdown.p2Name // 牌型名(順子/無牌型…)
   const foeName = foe === 'p1' ? showdown.p1Name : showdown.p2Name
-  const myWild = me === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
-  const foeWild = foe === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
+  // 鬼牌變成什麼:限定房一格多張鬼牌 → 每張都列(pXWilds);一般房最多一張(pXWildAs)
+  const wildsOf = (p: PlayerId): TCard[] => {
+    const many = p === 'p1' ? showdown.p1Wilds : showdown.p2Wilds
+    const one = p === 'p1' ? showdown.p1WildAs : showdown.p2WildAs
+    return many?.length ? many : one ? [one] : []
+  }
+  const myWild = wildsOf(me)
+  const foeWild = wildsOf(foe)
+  const note = showdown.note ? NOTE_TEXT[showdown.note] : null
   const tie = showdown.winner === 'both'
   const iWon = tie || showdown.winner === me
   // 觀戰:標題用勝方名字;遊玩:用「你/對手」。
@@ -99,6 +106,8 @@ export default function ShowdownModal({
       <Row label={foeLabel} name={foeName} cards={slot[foe]} won={tie || showdown.winner === foe} wildAs={foeWild} />
       <div className="showdown__vs accent">{tie ? '平手・雙方各得' : 'VS'}</div>
       <Row label={meLabel} name={myName} cards={slot[me]} won={iWon} wildAs={myWild} />
+      {/* 限定房:牌一樣大時是哪一步分出的(LIMITED-ROOM-SPEC §4.2) */}
+      {note && <div className="showdown__note">{note}</div>}
       {!spectator && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
           <Button onClick={onClose}>繼續</Button>
@@ -108,7 +117,14 @@ export default function ShowdownModal({
   )
 }
 
-function Row({ label, name, cards, won, wildAs }: { label: string; name: string; cards: TCard[]; won: boolean; wildAs?: TCard }) {
+const NOTE_TEXT: Record<NonNullable<Showdown['note']>, string> = {
+  jokers: '牌一樣大・鬼牌少的贏',
+  rank: '牌一樣大・正牌點數大的贏',
+  suit: '牌一樣大・正牌花色大的贏',
+  tie: '完全一樣・平手',
+}
+
+function Row({ label, name, cards, won, wildAs }: { label: string; name: string; cards: TCard[]; won: boolean; wildAs: TCard[] }) {
   // A card whose suit was changed by a suit-bloom special (at most one per match).
   const resuited = cards.find((c) => c.resuitFrom)
   return (
@@ -116,13 +132,15 @@ function Row({ label, name, cards, won, wildAs }: { label: string; name: string;
       <div className="showdown__meta">
         <span className="showdown__label">{label}</span>
         <span className="showdown__hand accent">{name}</span>
-        {wildAs && (
+        {wildAs.length > 0 && (
           <span className="showdown__wild">
             鬼牌→
-            <span style={{ color: SUIT_IS_RED[wildAs.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
-              {SUIT_SYMBOL[wildAs.suit]}
-              {rankLabel(wildAs.rank)}
-            </span>
+            {wildAs.map((w, i) => (
+              <span key={i} style={{ color: SUIT_IS_RED[w.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800, marginLeft: i ? 3 : 0 }}>
+                {SUIT_SYMBOL[w.suit]}
+                {rankLabel(w.rank)}
+              </span>
+            ))}
           </span>
         )}
         {resuited && (

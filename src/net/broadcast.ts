@@ -67,7 +67,7 @@ export function startBroadcast(opts: {
   }
 
   // Create the Live card + arm crash cleanup (a hard-closed tab won't run end()/stop()).
-  void writeLiveEntry(code, opts.p1, opts.p2)
+  void writeLiveEntry(code, opts.p1, opts.p2, opts.initial.mode)
   void onDisconnect(liveNode).remove().catch(() => {})
   void onDisconnect(spectateNode).remove().catch(() => {})
 
@@ -110,7 +110,8 @@ export function startBroadcast(opts: {
             firstPicker: lastEngine.firstPicker,
             special: r.special,
             matchType: r.matchType,
-            p1: { name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
+            ...(lastEngine.mode ? { mode: lastEngine.mode } : {}),
+            p1:{ name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
             p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },
             winner,
             moves: r.moves,
@@ -135,6 +136,7 @@ export function startBroadcast(opts: {
         firstPicker: lastEngine.firstPicker,
         special: r.special,
         matchType: r.matchType,
+        ...(lastEngine.mode ? { mode: lastEngine.mode } : {}),
         abandoned: true,
         p1: { name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
         p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },

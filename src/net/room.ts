@@ -9,11 +9,18 @@ import {
   update,
 } from 'firebase/database'
 import { getDb } from './firebase'
+import type { LimitedMode } from '../game/limited'
 
 export type RoomStatus = 'waiting' | 'playing' | 'ended'
 export type Role = 'host' | 'guest'
-/** Room type (SPEC §15 / Phase C #9). `special` = special-card room. */
-export type RoomType = 'normal' | 'special'
+/** Room type (SPEC §15 / Phase C #9). `special` = special-card room. `limited` = 限定房(LIMITED-ROOM-SPEC). */
+export type RoomType = 'normal' | 'special' | 'limited'
+
+/**
+ * 限定房擋舊版(LIMITED-ROOM-SPEC §12):新版加入任何房間都會寫這個版本號,RTDB 規則要求
+ * 「限定房的 guest 一定要有」→ 手機上還在跑舊版的人用房號加入限定房會被規則擋下來。
+ */
+export const ROOM_CLIENT_VER = 1
 
 export interface PlayerPresence {
   connected: boolean
@@ -45,6 +52,10 @@ export interface Room {
   roomType?: RoomType
   /** Host-chosen per-turn seconds; absent ⇒ default. */
   timeLimit?: number
+  /** 限定房玩法(開房 / 進配對那一刻決定,之後不變)。只有 roomType === 'limited' 才有。 */
+  limitedMode?: LimitedMode
+  /** 加入的 guest 是新版(見 ROOM_CLIENT_VER);限定房的規則靠它擋舊版。 */
+  guestVer?: number
   /** 房間來源:'match'=快速配對(系統配)、'friend'=開房找朋友;absent ⇒ 'friend'(舊房)。§6 回放配對方式用。 */
   origin?: 'match' | 'friend'
   players: { host: PlayerPresence; guest?: PlayerPresence }
@@ -122,6 +133,7 @@ export async function createRoom(
   roomType: RoomType = 'normal',
   timeLimit = 50,
   origin: 'match' | 'friend' = 'friend',
+  limitedMode: LimitedMode | null = null,
 ): Promise<{ code: string }> {
   const me = getClientId()
   void sweepStaleRooms() // reap dead rooms opportunistically; don't await
@@ -137,6 +149,7 @@ export async function createRoom(
         roomType,
         timeLimit,
         origin,
+        ...(roomType === 'limited' && limitedMode ? { limitedMode } : {}),
         guestId: null,
         players: { host: { connected: true, lastSeen: serverTimestamp() as unknown as number } },
       }
@@ -170,6 +183,7 @@ export async function joinRoom(code: string, myUid: string | null = null): Promi
 
   await update(roomRef(code), {
     guestId: me,
+    guestVer: ROOM_CLIENT_VER,
     status: 'playing',
     'players/guest': { connected: true, lastSeen: serverTimestamp() },
   })
@@ -183,6 +197,8 @@ export interface RoomInfo {
   exists: boolean
   roomType: RoomType
   timeLimit: number
+  /** 限定房玩法(roomType === 'limited' 才有) */
+  limitedMode?: LimitedMode
   /** host's display name (for the join-confirm popup), if published yet */
   hostName: string | null
   /** already full (a guest joined) — can't join */
@@ -200,6 +216,7 @@ export async function getRoomInfo(code: string): Promise<RoomInfo> {
       exists: true,
       roomType: r.roomType ?? 'normal',
       timeLimit: r.timeLimit ?? 50,
+      ...(r.limitedMode ? { limitedMode: r.limitedMode } : {}),
       hostName: r.players?.host?.name ?? null,
       full: !!r.guestId,
     }

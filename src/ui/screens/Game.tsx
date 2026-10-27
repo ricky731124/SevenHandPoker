@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, cardFxMs, useGameStore } from '../../state/gameStore'
@@ -37,6 +37,7 @@ import BroadcasterDanmaku from '../components/game/BroadcasterDanmaku'
 import HandRankModal from '../components/game/HandRankModal'
 import ConfirmSubmit from '../components/game/ConfirmSubmit'
 import ShowdownModal from '../components/game/ShowdownModal'
+import { LimitedBadge, LimitedRuleModal } from '../components/game/LimitedRule'
 import MagnifierModal from '../components/game/MagnifierModal'
 import EndModal from '../components/game/EndModal'
 import CampaignEndModal from '../components/game/CampaignEndModal'
@@ -62,7 +63,7 @@ export default function Game() {
     // a plain single-player game over the top of them.
     if (pending?.mode === 'ai' && !pending.campaignSubId && !pending.casualBot) {
       const saved = (usePlatformStore.getState().profile?.equipped.specialCards ?? []) as SpecialCardId[]
-      startSinglePlayer(!!pending.special, saved, false, pending.timeLimit ?? 50)
+      startSinglePlayer(!!pending.special, saved, false, pending.timeLimit ?? 50, pending.limited ?? null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending])
@@ -79,14 +80,24 @@ function PlayGame() {
   const g = useGameStore()
   const seats = useSeats()
   const [introDone, setIntroDone] = useState(false)
+  const [ruleDone, setRuleDone] = useState(false)
   // Show the VS splash again whenever a new coin toss begins (new game / rematch).
   useEffect(() => {
-    if (g.status === 'coinToss') setIntroDone(false)
+    if (g.status === 'coinToss') {
+      setIntroDone(false)
+      setRuleDone(false)
+    }
   }, [g.status])
+  const limited = g.limitedMode ?? g.engine?.mode ?? null
+  const closeRule = useCallback(() => setRuleDone(true), [])
 
   if (g.status === 'coinToss') {
     if (!introDone) {
       return <VsIntro p1={seats.p1} p2={seats.p2} onDone={() => setIntroDone(true)} />
+    }
+    // 限定房:VS 畫面之後跳規則卡(§8.3)。連線對戰 15 秒自動收,不讓對手乾等。
+    if (limited && !ruleDone) {
+      return <LimitedRuleModal mode={limited} open onClose={closeRule} autoCloseMs={g.online ? 15000 : undefined} />
     }
     // Special-card room: pre-match pick (B) before the coin toss (online: both
     // must confirm — PreMatchSpecial shows a waiting state after you confirm).
@@ -312,6 +323,7 @@ export function GameBoard() {
   // 觀戰(#4):觀戰者點任一方頭像 → 開該玩家的 PlayerInfoCard(uid=真人 uid 或人機 botId)。
   const [specCard, setSpecCard] = useState<{ uid: string | null; name: string; avatarId: string } | null>(null)
   const [helpOpen, setHelpOpen] = useState(false) // 牌型大小速查 (#5)
+  const [ruleOpen, setRuleOpen] = useState(false) // 限定房:點牌桌標籤再看一次規則卡
   const foeRole = g.online ? (g.online.role === 'host' ? 'guest' : 'host') : null
   const foeUid = foeRole ? ((room?.players?.[foeRole] as { uid?: string | null } | undefined)?.uid ?? null) : null
 
@@ -579,6 +591,10 @@ export function GameBoard() {
           <span className="spec-hud__eye" title="觀戰人數">👁 {g.spectateWatchers}</span>
         </div>
       )}
+
+      {/* 限定房:牌桌上方常駐玩法標籤(§8.4);觀戰 / 回放也標,但只有對戰者點得開規則卡 */}
+      {engine.mode && <LimitedBadge mode={engine.mode} onClick={spec ? undefined : () => setRuleOpen(true)} />}
+      {engine.mode && !spec && <LimitedRuleModal mode={engine.mode} open={ruleOpen} onClose={() => setRuleOpen(false)} />}
 
       {timed && (
         <div className={`game__timer${secsLeft <= 10 && !isPaused ? ' game__timer--low' : ''}`}>

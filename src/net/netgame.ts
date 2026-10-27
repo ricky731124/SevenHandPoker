@@ -45,6 +45,7 @@ import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import type { Card } from '../game/cards'
+import type { LimitedMode } from '../game/limited'
 
 /**
  * Phase-2/3 orchestrator: bridges the RTDB room and the local gameStore.
@@ -124,6 +125,7 @@ export interface AttachOpts {
   /** reconnect: room config from the fetched room (guest has no local snapshot) */
   special?: boolean
   timeLimit?: number
+  limitedMode?: LimitedMode | null
 }
 
 let active: { code: string; detach: () => void } | null = null
@@ -165,10 +167,11 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
   const room0 = useNetStore.getState().room
   const special = room0?.roomType === 'special'
   const timeLimit = room0?.timeLimit ?? 50
+  const limitedMode = room0?.roomType === 'limited' ? (room0.limitedMode ?? null) : null
   if (opts?.reconnect && opts.hostSnapshot) {
     g.restoreOnlineHost(online, opts.hostSnapshot)
   } else if (!(g.online?.role === 'host' && g.online.code === code && g.engine)) {
-    g.startOnlineHost(online, special, timeLimit, myLoadout())
+    g.startOnlineHost(online, special, timeLimit, myLoadout(), limitedMode)
   }
   const s0 = useGameStore.getState()
   if (s0.engine) {
@@ -425,6 +428,7 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
   // config passed from tryReconnect's room fetch (else fall back to the store).
   const special = opts?.special ?? room0?.roomType === 'special'
   const timeLimit = opts?.timeLimit ?? room0?.timeLimit ?? 50
+  const limitedMode = opts?.limitedMode ?? (room0?.roomType === 'limited' ? (room0.limitedMode ?? null) : null)
   if (!(g.online?.role === 'guest' && g.online.code === code)) {
     g.startOnlineGuest(
       {
@@ -445,6 +449,7 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
       // not the profile's equipped deck — otherwise a mid-match reload silently hands
       // the guest its full preset deck instead of the cards it picked (#7).
       opts?.reconnect ? (readGuestLoadout(code) as SpecialCardId[] | null) ?? myLoadout() : myLoadout(),
+      limitedMode,
     )
   }
   const unsubGame = onValue(gameRef(code), (snap) => {
@@ -621,6 +626,7 @@ export async function tryReconnect(): Promise<boolean> {
       hostSnapshot,
       special: room.roomType === 'special',
       timeLimit: room.timeLimit ?? 50,
+      limitedMode: room.roomType === 'limited' ? (room.limitedMode ?? null) : null,
     })
     useAppStore.getState().launchGame({ mode: role, roomId: code })
     return true

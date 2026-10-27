@@ -12,6 +12,7 @@ import {
   type RoomType,
 } from '../net/room'
 import { usePlatformStore } from './platformStore'
+import type { LimitedMode } from '../game/limited'
 
 export type NetPhase = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error'
 
@@ -25,7 +26,7 @@ interface NetStore {
   _presenceUnsub: (() => void) | null
 
   /** host: create a room and wait for a guest */
-  create: (roomType?: RoomType, timeLimit?: number, origin?: 'match' | 'friend') => Promise<void>
+  create: (roomType?: RoomType, timeLimit?: number, origin?: 'match' | 'friend', limitedMode?: LimitedMode | null) => Promise<void>
   /** guest: join an existing room by code */
   join: (code: string) => Promise<void>
   /** re-subscribe to an existing room after an accidental reload (no re-join) */
@@ -43,12 +44,12 @@ export const useNetStore = create<NetStore>((set, get) => ({
   _unsub: null,
   _presenceUnsub: null,
 
-  create: async (roomType = 'normal', timeLimit = 50, origin: 'match' | 'friend' = 'friend') => {
+  create: async (roomType = 'normal', timeLimit = 50, origin: 'match' | 'friend' = 'friend', limitedMode = null) => {
     get()._unsub?.()
     get()._presenceUnsub?.()
     set({ phase: 'connecting', error: null, role: 'host', code: null, room: null })
     try {
-      const { code } = await createRoom(usePlatformStore.getState().uid, roomType, timeLimit, origin)
+      const { code } = await createRoom(usePlatformStore.getState().uid, roomType, timeLimit, origin, limitedMode)
       saveSession(code, 'host')
       const unsub = subscribeRoom(code, (room) => update(set, get, room))
       const presence = maintainPresence(code, 'host')

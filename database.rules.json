@@ -4,7 +4,7 @@
       "$roomId": {
         ".read": true,
         ".write": true,
-        ".validate": "$roomId.matches(/^[0-9]{3}$/)"
+        ".validate": "$roomId.matches(/^[0-9]{3}$/) && (newData.child('roomType').val() !== 'limited' || !newData.child('guestId').exists() || (newData.child('guestVer').isNumber() && newData.child('guestVer').val() >= 1))"
       }
     },
     "users": {

@@ -2,6 +2,7 @@ import { get, onValue, onDisconnect, ref, remove, runTransaction, serverTimestam
 import { getDb, waitForConnected, withTimeout } from './firebase'
 import { useNetStore } from '../state/netStore'
 import type { RoomType } from './room'
+import type { LimitedMode } from '../game/limited'
 
 /**
  * Free-match ("自由匹配") queue. Two humans searching the same room type get
@@ -45,10 +46,13 @@ export function joinMatchmaking(
   roomType: RoomType,
   me: { uid: string; name: string; avatar: string },
   handlers: MatchmakingHandlers,
+  /** 限定房:進隊列那一刻決定的玩法。隊列按玩法分開(limited-ghost…),跨午夜不會配到別種玩法。 */
+  limitedMode: LimitedMode | null = null,
 ): () => void {
   const db = getDb()
-  const myRef = ref(db, `matchmaking/${roomType}/${me.uid}`)
-  const listRef = ref(db, `matchmaking/${roomType}`)
+  const queue = roomType === 'limited' && limitedMode ? `limited-${limitedMode}` : roomType
+  const myRef = ref(db, `matchmaking/${queue}/${me.uid}`)
+  const listRef = ref(db, `matchmaking/${queue}`)
   let done = false
   let unsubList: (() => void) | null = null
   let unsubMine: (() => void) | null = null
@@ -121,7 +125,7 @@ export function joinMatchmaking(
       .sort((a, b) => a.ts - b.ts)
     for (const target of older) {
       if (done) return
-      const tRef = ref(db, `matchmaking/${roomType}/${target.uid}`)
+      const tRef = ref(db, `matchmaking/${queue}/${target.uid}`)
       const res = await runTransaction(tRef, (cur: QueueEntry | null) => {
         if (!cur || cur.claimedBy || cur.room) return // already taken → abort
         cur.claimedBy = me.uid
@@ -132,10 +136,10 @@ export function joinMatchmaking(
       done = true
       stop()
       try {
-        await useNetStore.getState().create(roomType, FREE_MATCH_TIME_LIMIT, 'match') // §6 快速配對來源
+        await useNetStore.getState().create(roomType, FREE_MATCH_TIME_LIMIT, 'match', limitedMode) // §6 快速配對來源
         const code = useNetStore.getState().code
         if (!code) throw new Error('no code')
-        await dbSet(ref(db, `matchmaking/${roomType}/${target.uid}/room`), code)
+        await dbSet(ref(db, `matchmaking/${queue}/${target.uid}/room`), code)
         leaveQueue()
         handlers.onMatched('host', code)
       } catch {

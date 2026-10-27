@@ -11,10 +11,13 @@ import AccountButton from '../components/AccountButton'
 import LiveBoard from '../components/LiveBoard'
 import LobbyChat from '../components/LobbyChat'
 import { sfx } from '../../audio/sfx'
+import { LIMITED_INFO } from '../../game/limited'
+import { limitedModeNow } from '../../net/limitedClock'
 import './Menu.css'
 
 type Opponent = 'ai' | 'friend'
 type TimeLimit = 50 | 99
+type RoomKind = 'normal' | 'special' | 'limited'
 
 export default function Menu() {
   const go = useAppStore((s) => s.go)
@@ -26,9 +29,11 @@ export default function Menu() {
   // Create-match config (#9): opponent · room type · per-turn time. Single-select
   // per group; pre-checked with sensible defaults (好友 · 特殊 · 99 秒).
   const [opponent, setOpponent] = useState<Opponent | null>('friend')
-  const [special, setSpecial] = useState<boolean | null>(true)
+  const [kind, setKind] = useState<RoomKind | null>('special')
   const [time, setTime] = useState<TimeLimit | null>(99)
-  const createReady = opponent !== null && special !== null && time !== null
+  const createReady = opponent !== null && kind !== null && time !== null
+  // 今天的限定房玩法(伺服器時間換算台灣星期;測試期固定一種)。開房那一刻再算一次寫進房間。
+  const todayName = LIMITED_INFO[limitedModeNow()].name
 
   const ensureAccount = () => void usePlatformStore.getState().ensureAccount()
 
@@ -36,11 +41,14 @@ export default function Menu() {
   const confirmCreate = () => {
     if (!createReady) return
     ensureAccount()
+    const special = kind === 'special'
+    // 限定房:玩法在開房這一刻決定(LIMITED-ROOM-SPEC §9),朋友房也照當天玩法
+    const limited = kind === 'limited' ? limitedModeNow() : undefined
     if (opponent === 'ai') {
-      launchGame({ mode: 'ai', special: special!, timeLimit: time! })
+      launchGame({ mode: 'ai', special, timeLimit: time!, limited })
     } else {
-      void net.create(special ? 'special' : 'normal', time!)
-      launchGame({ mode: 'host', special: special!, timeLimit: time! })
+      void net.create(kind!, time!, 'friend', limited ?? null)
+      launchGame({ mode: 'host', special, timeLimit: time! })
     }
   }
 
@@ -141,6 +149,19 @@ export default function Menu() {
         >
           特殊房配對
         </Button>
+        <Button
+          full
+          icon={<IconGlobe />}
+          onClick={() => {
+            sfx.click()
+            ensureAccount()
+            setDialog('start') // 保留「開始遊戲」面板在底下,取消配對即回到圖一
+            openMatchmaking('limited')
+          }}
+        >
+          限定房配對
+        </Button>
+        <p className="menu__today">今日・{todayName}</p>
       </Modal>
 
       {/* Create-match config: opponent · room type · time (each required), confirm */}
@@ -156,11 +177,12 @@ export default function Menu() {
         />
         <CheckGroup
           label="房型"
-          value={special === null ? null : special ? 'special' : 'normal'}
-          onChange={(v) => setSpecial(v === 'special')}
+          value={kind}
+          onChange={setKind}
           options={[
             { value: 'normal', label: '一般房間' },
             { value: 'special', label: '特殊房間' },
+            { value: 'limited', label: '限定房間', sub: `今日：${todayName}` },
           ]}
         />
         <CheckGroup
@@ -230,12 +252,13 @@ function CheckGroup<T extends string>({
   label: string
   value: T | null
   onChange: (v: T) => void
-  options: { value: T; label: string }[]
+  options: { value: T; label: string; sub?: string }[]
 }) {
+  const hasSub = options.some((o) => o.sub)
   return (
     <div className="cfg-group">
       <div className="cfg-group__label">{label}</div>
-      <div className="cfg-checks" role="group" aria-label={label}>
+      <div className={`cfg-checks${options.length > 2 ? ' cfg-checks--3' : ''}`} role="group" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
@@ -251,6 +274,16 @@ function CheckGroup<T extends string>({
           </button>
         ))}
       </div>
+      {/* 選項下面的小字(例:限定房間「今日：百鬼夜行」),跟按鈕同欄對齊 */}
+      {hasSub && (
+        <div className={`cfg-checks cfg-subs${options.length > 2 ? ' cfg-checks--3' : ''}`} aria-hidden="true">
+          {options.map((o) => (
+            <span key={o.value} className="cfg-sub">
+              {o.sub ?? ''}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

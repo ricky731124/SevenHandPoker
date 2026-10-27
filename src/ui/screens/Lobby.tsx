@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useNetStore } from '../../state/netStore'
 import { roomLink } from '../../net/room'
+import { LIMITED_INFO } from '../../game/limited'
 import Button from '../components/Button'
 import PlayerAvatar from '../components/PlayerAvatar'
 import { sfx } from '../../audio/sfx'
@@ -54,7 +55,12 @@ export default function Lobby({ mode }: { mode: 'host' | 'guest'; roomId?: strin
 
       {room && (
         <p className="lobby__msg">
-          {room.roomType === 'special' ? '特殊牌房' : '一般房'} · 限時 {room.timeLimit ?? 50} 秒
+          {room.roomType === 'limited'
+            ? `限定房・${room.limitedMode ? LIMITED_INFO[room.limitedMode].name : ''}`
+            : room.roomType === 'special'
+              ? '特殊牌房'
+              : '一般房'}{' '}
+          · 限時 {room.timeLimit ?? 50} 秒
         </p>
       )}
 

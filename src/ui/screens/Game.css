@@ -821,6 +821,8 @@
   flex: 0 0 auto;
 }
 .showdown__vs { text-align: center; font-size: 20px; font-weight: 900; }
+/* 限定房:牌一樣大時的判定說明(鬼牌少的贏…) */
+.showdown__note { text-align: center; margin: 2px 0 6px; font-size: 15px; font-weight: 800; color: #7a3c9a; }
 .showdown__result { text-align: center; font-size: 20px; font-weight: 800; padding: 8px; border-radius: 10px; }
 .showdown__result--win { color: #1f9d57; }
 .showdown__result--lose { color: #c02b2b; }

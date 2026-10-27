@@ -3,6 +3,7 @@ import { SLOT_COUNT } from '../game/state'
 import type { GameState, PlayerId, Phase, Showdown, SlotOwner, WinReason } from '../game/state'
 import type { SpecialCardId } from '../game/specialCards'
 import type { SortMode, SortDir } from '../game/sort'
+import type { LimitedMode } from '../game/limited'
 
 /**
  * Networked game (Phase 2). The HOST owns the authoritative GameState and writes
@@ -54,6 +55,8 @@ export interface SyncGame {
   specialUsed: Record<PlayerId, boolean>
   /** 死神之眼翻開的格子(GameState.exposed)。RTDB 會丟空陣列 → 讀端一律 ?? []。 */
   exposed?: { p1?: number[]; p2?: number[] }
+  /** 限定房玩法(GameState.mode);沒有 = 一般房 / 特殊房。 */
+  mode?: LimitedMode
 }
 
 const HIDDEN: Card = { id: '_', suit: 'S', rank: 2 }
@@ -71,6 +74,9 @@ function cleanShowdown(sd: Showdown): Showdown {
   const out: Showdown = { slot: sd.slot, winner: sd.winner, p1Name: sd.p1Name, p2Name: sd.p2Name }
   if (sd.p1WildAs) out.p1WildAs = sd.p1WildAs
   if (sd.p2WildAs) out.p2WildAs = sd.p2WildAs
+  if (sd.p1Wilds?.length) out.p1Wilds = sd.p1Wilds // 限定房多張鬼牌
+  if (sd.p2Wilds?.length) out.p2Wilds = sd.p2Wilds
+  if (sd.note) out.note = sd.note
   return out
 }
 
@@ -100,6 +106,7 @@ export function serializeForGuest(engine: GameState, foeSel: { total: number; id
     specialUsed: engine.specialUsed,
   }
   if (engine.exposed) out.exposed = engine.exposed
+  if (engine.mode) out.mode = engine.mode
   return out
 }
 
@@ -136,6 +143,8 @@ export interface SpecView {
   paused?: boolean
   /** 玩家送出的貼圖:誰(p1/p2)、貼圖 id、n(去重)→ 觀戰也吃到貼圖效果(#6)。 */
   emote?: { by: PlayerId; id: string; n: number } | null
+  /** 限定房玩法 → 觀戰也標出玩法、攤牌照限定房規則說明。 */
+  mode?: LimitedMode
 }
 
 /** Broadcaster-side live UI state that isn't in the engine (§ 推牌/特殊牌/暫停/貼圖). */
@@ -173,6 +182,7 @@ export function serializeForSpectator(engine: GameState, extras?: SpecExtras): S
   if (extras?.fx) v.fx = extras.fx
   if (extras?.paused) v.paused = true
   if (extras?.emote) v.emote = extras.emote
+  if (engine.mode) v.mode = engine.mode
   return v
 }
 
@@ -205,6 +215,7 @@ export function deserializeForSpectator(v: SpecView): GameState {
     winReason: v.winReason ?? null,
     tieBreakWinner: 'p1',
     specialUsed: v.specialUsed ?? { p1: false, p2: false },
+    ...(v.mode ? { mode: v.mode } : {}),
   }
 }
 
@@ -243,6 +254,7 @@ export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: {
     // Host-arbitrated special-card budget (RTDB may drop an all-false object).
     specialUsed: g.specialUsed ?? { p1: false, p2: false },
     exposed,
+    ...(g.mode ? { mode: g.mode } : {}),
   }
   // RTDB drops empty arrays, so a foeSel that was {total, idx:[]} reads back
   // without idx — normalise so the UI never touches idx.length on undefined.

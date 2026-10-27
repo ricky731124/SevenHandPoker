@@ -7,6 +7,8 @@ import { joinMatchmaking } from '../../net/matchmaking'
 import { leaseBot, releaseLeasedBot } from '../../net/bots'
 import { rollCasualBot } from '../../game/casualBots'
 import type { SpecialCardId } from '../../game/specialCards'
+import { LIMITED_INFO, type LimitedMode } from '../../game/limited'
+import { limitedModeNow } from '../../net/limitedClock'
 import Modal from '../components/Modal'
 import Button from '../components/Button'
 import { sfx } from '../../audio/sfx'
@@ -34,6 +36,8 @@ export default function Matchmaking() {
   const close = useAppStore((s) => s.closeMatchmaking)
   const [elapsed, setElapsed] = useState(0)
   const cancelRef = useRef<null | (() => void)>(null)
+  // 限定房:進配對那一刻決定玩法(LIMITED-ROOM-SPEC §9),之後不變;隊列按玩法分開,人機打同一種
+  const [limited] = useState<LimitedMode | null>(() => (matchType === 'limited' ? limitedModeNow() : null))
 
   useEffect(() => {
     let cancelled = false
@@ -64,8 +68,9 @@ export default function Matchmaking() {
         aiLoadout: bot.aiLoadout,
         boss: bot.boss,
         foe: { name: bot.name, avatarId: bot.avatarId, botId: bot.botId },
+        limitedMode: limited,
       })
-      launchGame({ mode: 'ai', special, timeLimit: 99, casualBot: true })
+      launchGame({ mode: 'ai', special, timeLimit: 99, casualBot: true, ...(limited ? { limited } : {}) })
       close()
     }
     void (async () => {
@@ -98,6 +103,7 @@ export default function Matchmaking() {
             close()
           },
         },
+        limited,
       )
     })()
     return () => {
@@ -123,7 +129,7 @@ export default function Matchmaking() {
       <div className="mm">
         <div className="mm__spinner" aria-hidden="true" />
         <p className="mm__sub">
-          {matchType === 'special' ? '特殊房' : '一般房'} · 配對時間：{elapsed} 秒
+          {limited ? `限定房・${LIMITED_INFO[limited].name}` : matchType === 'special' ? '特殊房' : '一般房'} · 配對時間：{elapsed} 秒
         </p>
         <p className="mm__phase">{phaseText(elapsed)}</p>
         {/* Lock 取消 for the first 2s: an instant pairing (someone already waiting)

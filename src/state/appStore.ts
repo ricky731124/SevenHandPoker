@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ReplayEntry } from '../net/replays'
+import type { LimitedMode } from '../game/limited'
 
 export type Screen = 'menu' | 'howto' | 'settings' | 'personalize' | 'leaderboard' | 'game' | 'tutorial' | 'campaign' | 'campaignStages'
 export type GameMode = 'ai' | 'host' | 'guest'
@@ -40,10 +41,10 @@ interface AppState {
   /** Pending game launch config, consumed by Game screen. `special` = special-
    *  card room (loadout + pre-match pick + in-game activation). `timeLimit` =
    *  per-turn seconds (SPEC §15 / #9 create-match config). */
-  pendingGame: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean } | null
+  pendingGame: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean; limited?: LimitedMode } | null
   /** Room type chosen for 自由匹配; non-null = the matchmaking OVERLAY is showing
    *  (rendered on top of the menu, not a separate screen). */
-  matchType: 'normal' | 'special' | null
+  matchType: 'normal' | 'special' | 'limited' | null
   /** Live code being spectated; non-null = the SpectatorGame overlay is showing
    *  (full-open read-only table on top of the menu). §4.3 */
   spectateCode: string | null
@@ -71,9 +72,10 @@ interface AppState {
   /** 聊天 CTA 導個人化時要落在哪個頁籤(avatar/stats/achievements/cards/emoji)；Personalize 讀完清空。 */
   personalizeTab: string | null
   go: (screen: Screen) => void
-  launchGame: (cfg: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean }) => void
-  /** Show the free-match overlay for a room type (一般/特殊) — stays over the menu. */
-  openMatchmaking: (type: 'normal' | 'special') => void
+  /** limited = 對戰電腦打限定房時的玩法(開房那一刻決定) */
+  launchGame: (cfg: { mode: GameMode; roomId?: string; special?: boolean; timeLimit?: number; campaignSubId?: string; casualBot?: boolean; limited?: LimitedMode }) => void
+  /** Show the free-match overlay for a room type (一般/特殊/限定) — stays over the menu. */
+  openMatchmaking: (type: 'normal' | 'special' | 'limited') => void
   /** Close the free-match overlay (manual 取消 → back to the menu underneath). */
   closeMatchmaking: () => void
   /** Open/close the spectate overlay for a live code (§4.3). */

@@ -4,6 +4,7 @@ import { usePlatformStore } from '../../state/platformStore'
 import { subscribeLiveIndex, type LiveEntry, type LivePlayer } from '../../net/liveIndex'
 import { pruneDeadExhibition, subscribeExhibitionLiveCode } from '../../game/exhibition'
 import PlayerAvatar from './PlayerAvatar'
+import { LIMITED_INFO } from '../../game/limited'
 import { sfx } from '../../audio/sfx'
 import './LiveBoard.css'
 
@@ -34,6 +35,7 @@ function LiveCard({ entry, myUid }: { entry: LiveEntry; myUid: string | null }) 
         ) : (
           <span className="livecard__ended-tag">已結束</span>
         )}
+        {entry.mode && <span className="livecard__mode">限定房・{LIMITED_INFO[entry.mode]?.name}</span>}
         {live ? (
           <span className="livecard__watchers" title="觀戰人數">
             👁 {entry.spectators ?? 0}

@@ -1,6 +1,7 @@
 import { get, onValue, ref, remove, serverTimestamp, update, set as dbSet } from 'firebase/database'
 import { getDb } from './firebase'
 import { currentUser } from '../platform/auth'
+import type { LimitedMode } from '../game/limited'
 
 /**
  * `liveIndex`/`spectate` 的寫入規則要求 `auth != null`。若沒有 Firebase 登入(在主畫面閒置的純訪客 /
@@ -41,6 +42,8 @@ export interface LiveEntry {
   endedAt: number | null
   winner: 'p1' | 'p2' | null
   spectators: number
+  /** 限定房玩法 → 卡片上標「限定房・百鬼夜行」;一般 / 特殊房沒有 */
+  mode?: LimitedMode
 }
 
 const liveRef = (code: string) => ref(getDb(), `liveIndex/${code}`)
@@ -54,6 +57,7 @@ export async function writeLiveEntry(
   code: string,
   p1: LivePlayer,
   p2: LivePlayer,
+  mode?: LimitedMode,
 ): Promise<void> {
   if (!authed()) return // 沒 auth → 必被拒且會卡佇列重送,直接跳過(§洪水修正)
   try {
@@ -65,6 +69,7 @@ export async function writeLiveEntry(
       endedAt: null,
       winner: null,
       spectators: 0,
+      ...(mode ? { mode } : {}),
     })
   } catch {
     /* best-effort — rules not published yet, or offline */

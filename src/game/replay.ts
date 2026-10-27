@@ -1,3 +1,4 @@
+import type { LimitedMode } from './limited'
 import {
   applyDraw,
   applyPick,
@@ -98,6 +99,8 @@ export interface ReplayFrame {
 export interface ReplayInput {
   seed: number
   firstPicker: PlayerId
+  /** 限定房玩法(牌組 / 比牌跟著變);舊回放沒有 = 一般。 */
+  mode?: LimitedMode
   moves: Move[]
   /** 雙方顯示名(caption 用);缺省 → 玩家1/玩家2。 */
   names?: { p1: string; p2: string }
@@ -124,7 +127,7 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
   const name = (by: PlayerId) => (by === 'p1' ? p1 : p2)
   // online host 的 tieBreak 是 p1;casual 預設 p2。這只影響「鬼牌同分」極罕見平手歸屬,
   // 且錄製當時的結果已由 moves 決定 → 回放用 firstPicker 對應的預設即可(不影響一般局)。
-  let g = createGame(input.seed, input.firstPicker)
+  let g = createGame(input.seed, input.firstPicker, 'p2', input.mode ?? null)
   const frames: ReplayFrame[] = []
   const add = (state: GameState, actor: string | undefined, action: string, sound?: ReplaySound, drawN?: number) => {
     frames.push({ state, actor, action, caption: actor ? `${actor} ${action}` : action, sound, drawN })

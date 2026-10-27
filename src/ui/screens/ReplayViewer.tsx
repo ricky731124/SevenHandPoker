@@ -44,6 +44,7 @@ export default function ReplayViewer() {
     const frames = buildFrames({
       seed: rec.seed,
       firstPicker: rec.firstPicker,
+      mode: rec.mode,
       moves: rec.moves,
       names: { p1: info.p1.name, p2: info.p2.name },
     })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getRoomInfo, type RoomInfo } from '../../net/room'
 import Button from './Button'
 import Modal from './Modal'
+import { LIMITED_INFO } from '../../game/limited'
 
 /**
  * Join-confirmation popup — shown for BOTH deep-link (?room=) and manual code
@@ -51,7 +52,12 @@ export default function JoinConfirm({
             <b>{info.hostName || '朋友'}</b> 建立的房間
           </p>
           <p className="joinconfirm__meta">
-            {info.roomType === 'special' ? '特殊牌房' : '一般房'} · 限時 {info.timeLimit} 秒
+            {info.roomType === 'limited'
+              ? `限定房・${info.limitedMode ? LIMITED_INFO[info.limitedMode].name : ''}`
+              : info.roomType === 'special'
+                ? '特殊牌房'
+                : '一般房'}{' '}
+            · 限時 {info.timeLimit} 秒
           </p>
           <p className="acct-note">確定要加入嗎？</p>
         </div>

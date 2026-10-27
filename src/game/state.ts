@@ -1,6 +1,7 @@
 import type { Card, Suit } from './cards'
-import { isSpecial, isStarterSpecial, makeBlank, makeDeck, makeJoker } from './cards'
-import { compareValue, evaluate } from './evaluate'
+import { isSpecial, isStarterSpecial, makeBlank, makeJoker } from './cards'
+import { compareLimited, compareValue, evaluate, type LimitedTieStep } from './evaluate'
+import { makeLimitedDeck, usesLimitedCompare, type LimitedMode } from './limited'
 import { mulberry32, shuffle } from './rng'
 
 export type PlayerId = 'p1' | 'p2'
@@ -29,6 +30,11 @@ export interface Showdown {
   /** if a side's pile held a joker, the concrete card it became (for the reveal) */
   p1WildAs?: Card
   p2WildAs?: Card
+  /** 限定房一格多張鬼牌:每張鬼牌各變成什麼(只有 ≥2 張才有) */
+  p1Wilds?: Card[]
+  p2Wilds?: Card[]
+  /** 限定房「牌一樣大」時是哪一步分出的(攤牌多跳一行說明);一般房沒有 */
+  note?: LimitedTieStep
 }
 
 /** True if `player` holds the coin for this slot (including a shared tie). */
@@ -68,6 +74,11 @@ export interface GameState {
    * 雙方都看得到)。選填:舊快照/回放/測試造的 state 沒有這欄 = 沒有被翻開的牌堆。
    */
   exposed?: Record<PlayerId, number[]>
+  /**
+   * 限定房玩法(LIMITED-ROOM-SPEC §12)。沒有 = 一般房 / 特殊房 / 主線 / 舊快照 / 舊回放,
+   * 一切照舊。發牌、比牌都看這個欄位。
+   */
+  mode?: LimitedMode
 }
 
 export const otherPlayer = (p: PlayerId): PlayerId => (p === 'p1' ? 'p2' : 'p1')
@@ -76,9 +87,15 @@ export const otherPlayer = (p: PlayerId): PlayerId => (p === 'p1' ? 'p2' : 'p1')
  * @param tieBreakWinner who wins a same-type simultaneous win / board-full coin
  * tie. Single-player defaults to the computer (p2); online passes the host (p1).
  */
-export function createGame(seed: number, firstPicker: PlayerId, tieBreakWinner: PlayerId = 'p2'): GameState {
+export function createGame(
+  seed: number,
+  firstPicker: PlayerId,
+  tieBreakWinner: PlayerId = 'p2',
+  mode: LimitedMode | null = null,
+): GameState {
   const rng = mulberry32(seed)
-  const deck = shuffle(makeDeck(), rng)
+  // 沒有限定房玩法 → makeLimitedDeck 給的就是原本的 52 張(洗牌結果跟以前一模一樣)
+  const deck = shuffle(makeLimitedDeck(seed, mode), rng)
   const hands: Record<PlayerId, Card[]> = { p1: [], p2: [] }
   // Deal 10 each from the 52-deck, alternating (p1, p2, ...) for determinism.
   for (let i = 0; i < INITIAL_HAND; i++) {
@@ -107,6 +124,7 @@ export function createGame(seed: number, firstPicker: PlayerId, tieBreakWinner: 
     winReason: null,
     tieBreakWinner,
     specialUsed: { p1: false, p2: false },
+    ...(mode ? { mode } : {}), // RTDB/快照不收 undefined 欄位 → 有才寫
   }
 }
 
@@ -231,7 +249,9 @@ export function applyPlace(state: GameState, player: PlayerId, slotIndex: number
   if (slot.p1.length > 0 && slot.p2.length > 0 && slot.owner === null) {
     const v1 = evaluate(slot.p1)
     const v2 = evaluate(slot.p2)
-    const cmp = compareValue(v1, v2)
+    // 限定房百鬼夜行 / 撲朔迷離:決勝五步(鬼牌少的贏…);其他照原本比法
+    const lim = usesLimitedCompare(state.mode) ? compareLimited(slot.p1, slot.p2) : null
+    const cmp = lim ? lim.cmp : compareValue(v1, v2)
     // A joker can copy an in-play card → exact tie possible → both own the slot (§2.3).
     const winner: PlayerId | 'both' = cmp > 0 ? 'p1' : cmp < 0 ? 'p2' : 'both'
     slot.owner = winner
@@ -243,6 +263,9 @@ export function applyPlace(state: GameState, player: PlayerId, slotIndex: number
       p1WildAs: v1.wildAs,
       p2WildAs: v2.wildAs,
     }
+    if (v1.wildsAs) next.lastShowdown.p1Wilds = v1.wildsAs
+    if (v2.wildsAs) next.lastShowdown.p2Wilds = v2.wildsAs
+    if (lim?.by) next.lastShowdown.note = lim.by
     next.phase = 'showdown'
   }
 

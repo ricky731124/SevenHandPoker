@@ -29,6 +29,7 @@ import {
   type PlayerId,
 } from '../game/state'
 import type { Suit } from '../game/cards'
+import type { LimitedMode } from '../game/limited'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
 import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
@@ -46,7 +47,7 @@ import { bossChooseSpecial, rollMain, type BossRuntime } from '../game/bossAI'
 import { useToastStore } from './toastStore'
 import { usePlatformStore } from './platformStore'
 import { useAchievementStore } from './achievementStore'
-import { matchHandTypeCounts, handTypeOf, isSfDuel } from '../game/achievements'
+import { matchHandTypeCounts, handTypeOf, isSfDuel, countsInLimited } from '../game/achievements'
 import { sfx } from '../audio/sfx'
 
 /**
@@ -245,6 +246,7 @@ function reportPickHandType(state: GameState, me: PlayerId, pileIds: string[]): 
   const pile = state.hands[me].filter((c) => pileIds.includes(c.id))
   const metric = handTypeOf(pile)
   if (!metric) return
+  if (state.mode && !countsInLimited(metric)) return // 限定房牌型成就不算(LIMITED-ROOM-SPEC §10)
   const count = matchHandTypeCounts(state, me)[metric] + 1 // prior placed + this send
   void usePlatformStore.getState().reportHandPlayed(metric, count)
 }
@@ -254,9 +256,34 @@ function reportPickHandType(state: GameState, me: PlayerId, pileIds: string[]): 
 function reportShowdownDuel(engine: GameState): void {
   const sd = engine.lastShowdown
   if (!sd) return
+  if (engine.mode && !countsInLimited('sfDuel')) return // 限定房不算狹路相逢
   const slot = engine.slots[sd.slot]
   if (slot && isSfDuel(slot.p1, slot.p2)) void usePlatformStore.getState().reportSfDuel()
 }
+
+/**
+ * 限定房推牌位置隨機(LIMITED-ROOM-SPEC §7):對手只看得到張數。由出牌這端產生假位置再送出,
+ * 同一次選牌中保持穩定 —— 多選一張就多一個隨機位置、取消一張就少一個,不整批重抽(不閃動)。
+ * key 換了(換手 / 手牌張數變了)就重來。
+ */
+let _fakePos: { key: string; pos: Map<string, number> } = { key: '', pos: new Map() }
+export function fakeSel(key: string, total: number, ids: string[]): LiveSel | null {
+  if (_fakePos.key !== key) _fakePos = { key, pos: new Map() }
+  const pos = _fakePos.pos
+  for (const id of [...pos.keys()]) if (!ids.includes(id)) pos.delete(id)
+  const used = new Set(pos.values())
+  for (const id of ids) {
+    if (pos.has(id)) continue
+    const free = Array.from({ length: total }, (_, i) => i).filter((i) => !used.has(i))
+    if (!free.length) break
+    const p = free[Math.floor(Math.random() * free.length)]
+    pos.set(id, p)
+    used.add(p)
+  }
+  const idx = ids.map((id) => pos.get(id)).filter((i): i is number => i !== undefined).sort((a, b) => a - b)
+  return idx.length ? { total, idx } : null
+}
+const pickKey = (e: GameState, me: PlayerId) => `${me}:${e.placementsDone.p1}:${e.placementsDone.p2}:${e.hands[me].length}`
 
 export type Status = 'coinToss' | 'playing' | 'ended'
 
@@ -387,6 +414,9 @@ interface GameStore {
   // ----- special cards (Phase C, single-player) -----
   /** this match is a special-card room (loadout + pre-match pick + in-game tray) */
   special: boolean
+  /** 限定房玩法(LIMITED-ROOM-SPEC);null = 一般房 / 特殊房 / 主線。新局 createGame 照這個建牌組,
+   *  engine.mode 也會帶著(guest / 觀戰 / 回放看 engine.mode)。 */
+  limitedMode: LimitedMode | null
   /** the ≤3 cards carried into THIS match (from the pre-match pick screen) */
   loadout: SpecialCardId[]
   /** the single-player AI opponent's carried loadout (empty unless a special AI room) */
@@ -452,7 +482,7 @@ interface GameStore {
   foeWantsRematch: boolean
 
   // lifecycle
-  startSinglePlayer: (special?: boolean, loadout?: SpecialCardId[], ready?: boolean, timeLimit?: number) => void
+  startSinglePlayer: (special?: boolean, loadout?: SpecialCardId[], ready?: boolean, timeLimit?: number, limitedMode?: LimitedMode | null) => void
   /** campaign: start one match vs a boss (BossRuntime), reporting the result to the series. */
   startCampaignMatch: (opts: {
     special: boolean
@@ -480,6 +510,8 @@ interface GameStore {
     aiLoadout: SpecialCardId[]
     boss: BossRuntime
     foe: { name: string; avatarId: string; botId?: string }
+    /** 限定房快配人機:進配對那一刻決定的玩法 */
+    limitedMode?: LimitedMode | null
   }) => void
   finishCoinToss: () => void
   finishCoinTossOnline: () => void
@@ -510,8 +542,8 @@ interface GameStore {
   /** #5:更新觀戰人數(SpectatorGame 收到 liveIndex 時)。 */
   setSpectateWatchers: (n: number) => void
   nextGame: () => void
-  startOnlineHost: (o: Omit<OnlineInfo, 'role'>, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[]) => void
-  startOnlineGuest: (o: Omit<OnlineInfo, 'role'>, reconnect?: boolean, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[]) => void
+  startOnlineHost: (o: Omit<OnlineInfo, 'role'>, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[], limitedMode?: LimitedMode | null) => void
+  startOnlineGuest: (o: Omit<OnlineInfo, 'role'>, reconnect?: boolean, special?: boolean, timeLimit?: number, loadout?: SpecialCardId[], limitedMode?: LimitedMode | null) => void
   restoreOnlineHost: (o: Omit<OnlineInfo, 'role'>, snap: HostSnapshot) => void
   setFoeWantsRematch: (v: boolean) => void
   applyGuestView: (v: { engine: GameState; foeSel: LiveSel | null }) => void
@@ -631,6 +663,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   sortDir: 'asc',
   foeSelection: null,
   special: false,
+  limitedMode: null,
   loadout: [],
   aiLoadout: [],
   aiBoss: null,
@@ -662,10 +695,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rematchPending: false,
   foeWantsRematch: false,
 
-  startSinglePlayer: (special = false, loadout = [], ready = false, timeLimit = 50) => {
+  startSinglePlayer: (special = false, loadout = [], ready = false, timeLimit = 50, limitedMode = null) => {
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     set({
       mode: 'ai',
+      limitedMode,
       timeLimit,
       me: 'p1',
       engine: null,
@@ -701,6 +735,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     set({
       mode: 'ai',
+      limitedMode: null, // 主線永遠沒有限定房
       timeLimit,
       me: 'p1',
       engine: null,
@@ -731,7 +766,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
 
-  startCasualBotMatch: ({ special, timeLimit, loadout, aiLoadout, boss, foe }) => {
+  startCasualBotMatch: ({ special, timeLimit, loadout, aiLoadout, boss, foe, limitedMode = null }) => {
     // 防重開局:已在對局中(playing、未結束)就忽略。配對 race(bot timer 重觸發 / 真人插隊與人機
     // 同時落地 / persona 忙的 3s 重試)可能二度呼叫 → 會把進行中的對局整個重開+重發牌+多開廣播
     // (使用者回報「打到一半被重發牌」+ 殘留假 live 卡)。rematch 是在對局結束(phase==='ended')後才開,故放行。
@@ -740,6 +775,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     set({
       mode: 'ai',
+      limitedMode,
       timeLimit,
       me: 'p1',
       engine: null,
@@ -775,7 +811,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // live 卡、觀戰看不到結束)。冪等擋掉。(rematch 走 startCasualBotMatch 會先把 status 歸 coinToss。)
     if (get().status === 'playing' && get().engine) return
     const first = get().coinFirstPicker ?? 'p1'
-    const engine = createGame(randomSeed(), first)
+    const engine = createGame(randomSeed(), first, 'p2', get().limitedMode)
     set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, cardFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
     sfx.deal() // 開局發牌
     persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
@@ -848,6 +884,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   restoreLocal: (snap) => {
     set({
       mode: 'ai',
+      limitedMode: snap.engine.mode ?? null,
       timeLimit: snap.timeLimit,
       me: snap.me,
       engine: snap.engine,
@@ -894,7 +931,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // intro), but pre-filled with LAST match's loadout — not the profile
     // default (that only seeds the very first match). ready=false → B shows;
     // startSinglePlayer seeds `loadout` with the carried-over selection.
-    const { special, loadout, timeLimit, casualFoe, aiBoss, aiLoadout } = get()
+    const { special, loadout, timeLimit, casualFoe, aiBoss, aiLoadout, limitedMode } = get()
     // Free-match rematch: same opponent (fresh main-style roll), still counts as PvP.
     if (casualFoe && aiBoss) {
       get().startCasualBotMatch({
@@ -904,22 +941,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
         aiLoadout,
         boss: { profile: aiBoss.profile, main: rollMain(aiBoss.profile), execution: aiBoss.execution },
         foe: casualFoe,
+        limitedMode, // 跨日換玩法 = 步驟 5 才做;目前照原玩法再來一局
       })
       return
     }
-    get().startSinglePlayer(special, loadout, false, timeLimit)
+    get().startSinglePlayer(special, loadout, false, timeLimit, limitedMode)
   },
 
   // ----- Online (Phase 2 / 3) -----
   // Host owns the engine and runs it locally (like single-player but the
   // opponent's moves arrive as intents instead of from the AI). Both sides play
   // the coin-toss ritual off the same randomised first picker.
-  startOnlineHost: (o, special = false, timeLimit = 50, loadout = []) => {
+  startOnlineHost: (o, special = false, timeLimit = 50, loadout = [], limitedMode = null) => {
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     // Online: a same-type simultaneous win / board-full coin tie goes to the host (p1).
-    const engine = createGame(randomSeed(), firstPicker, 'p1')
+    const engine = createGame(randomSeed(), firstPicker, 'p1', limitedMode)
     set({
       mode: 'host',
+      limitedMode,
       online: { ...o, role: 'host' },
       me: 'p1',
       engine,
@@ -956,9 +995,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Guest holds no engine of its own — it renders whatever the host syncs and
   // sends intents for its moves. On reconnect (mid-game) skip the coin toss.
-  startOnlineGuest: (o, reconnect = false, special = false, timeLimit = 50, loadout = []) => {
+  startOnlineGuest: (o, reconnect = false, special = false, timeLimit = 50, loadout = [], limitedMode = null) => {
     set({
       mode: 'guest',
+      limitedMode,
       online: { ...o, role: 'guest' },
       me: 'p2',
       engine: null,
@@ -997,6 +1037,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   restoreOnlineHost: (o, snap) => {
     set({
       mode: 'host',
+      limitedMode: snap.engine.mode ?? null,
       online: { ...o, role: 'host' },
       me: 'p1',
       engine: snap.engine,
@@ -1180,7 +1221,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!online) return
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
     // Online rematch is host-run too → host (p1) wins ties.
-    const engine = createGame(randomSeed(), firstPicker, 'p1')
+    const engine = createGame(randomSeed(), firstPicker, 'p1', get().limitedMode)
     set({
       engine,
       status: 'coinToss',
@@ -1220,6 +1261,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { engine, me, selected, sortMode, sortDir, online } = get()
     if (!online || !engine) return
     if (!(engine.phase === 'pick' && engine.turn === me)) return
+    // 限定房:對手只看得到張數 → 送隨機位置(§7)
+    if (engine.mode) return online.sendLive(fakeSel(pickKey(engine, me), engine.hands[me].length, selected))
     const ordered = sortHand(engine.hands[me], sortMode, sortDir)
     const idSet = new Set(selected)
     const idx = ordered.map((c, i) => (idSet.has(c.id) ? i : -1)).filter((i) => i >= 0)
@@ -1275,7 +1318,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Pushed-out positions in MY current sorted order, so the opponent's view
     // matches the live preview exactly (no jump on submit).
     let sortedSel: LiveSel | null = null
-    if (engine) {
+    if (engine?.mode) {
+      sortedSel = fakeSel(pickKey(engine, me), engine.hands[me].length, selected) // 限定房:跟推牌預覽同一組假位置
+    } else if (engine) {
       const ordered = sortHand(engine.hands[me], sortMode, sortDir)
       const idSet = new Set(selected)
       const idx = ordered.map((c, i) => (idSet.has(c.id) ? i : -1)).filter((i) => i >= 0)
@@ -1308,7 +1353,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const order = engine.hands[picker]
         const idSet = new Set(ids)
         const idx = order.map((c, i) => (idSet.has(c.id) ? i : -1)).filter((i) => i >= 0)
-        foeSelection = { total: order.length, idx }
+        // 限定房:對手只看得到張數(§7)→ 電腦出的牌也用隨機位置
+        foeSelection = engine.mode ? fakeSel(pickKey(engine, picker), order.length, ids) : { total: order.length, idx }
       }
       const next = applyPick(engine, picker, ids)
       // 送出本身是按鈕 click(已在 UI 觸發);牌的落地聲由對手放牌(placeAt→place)收尾,

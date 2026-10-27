@@ -139,6 +139,46 @@
 .cfg-check:active {
   transform: translateY(1px);
 }
+/* 三個選項(房型:一般 / 特殊 / 限定)擠一排 → 字、間距縮一點,手機寬度也放得下 */
+.cfg-checks--3 {
+  gap: 6px;
+}
+.cfg-checks--3 .cfg-check {
+  gap: 5px;
+  padding: 9px 4px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.cfg-checks--3 .cfg-box {
+  width: 15px;
+  height: 15px;
+}
+.cfg-checks--3 .cfg-check--on .cfg-box::after {
+  left: 3px;
+  top: -1px;
+}
+/* 選項下面的小字(限定房間「今日：百鬼夜行」),跟按鈕同欄 */
+.cfg-subs {
+  margin-top: 3px;
+}
+.cfg-sub {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--parch-text);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+/* 快速配對:限定房配對按鈕下的「今日・百鬼夜行」 */
+.menu__today {
+  margin: -4px 0 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--parch-text);
+  opacity: 0.75;
+}
 .cfg-box {
   flex: 0 0 auto;
   width: 18px;

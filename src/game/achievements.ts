@@ -41,14 +41,19 @@ export interface AchFamily {
   scope: 'pvp' | 'solo' | 'all'
   /** human blurb for a given threshold */
   desc: (n: number) => string
+  /**
+   * 限定房可解(LIMITED-ROOM-SPEC §10):限定房只算場數 / 勝場 / 連勝類,牌型成就一律不算。
+   * ⚠️ 新增成就時要決定這個標記,預設關(不寫 = 限定房不算)。
+   */
+  limitedOk?: boolean
 }
 
 export const ACHIEVEMENTS: AchFamily[] = [
-  { id: 'games', name: '身經百戰', icon: 'games', metric: 'games', thresholds: [30, 50, 100], scope: 'pvp', desc: (n) => `真人對戰遊玩 ${n} 場` },
-  { id: 'wins', name: '常勝將軍', icon: 'wins', metric: 'wins', thresholds: [30, 50, 100], scope: 'pvp', desc: (n) => `真人對戰獲得 ${n} 勝` },
-  { id: 'streak', name: '勢如破竹', icon: 'streak', metric: 'streak', thresholds: [3, 5, 10], scope: 'pvp', desc: (n) => `真人對戰連勝 ${n} 場` },
-  { id: 'soloGames', name: '百戰不殆', icon: 'soloGames', metric: 'soloGames', thresholds: [30, 50, 100], scope: 'solo', desc: (n) => `電腦對戰遊玩 ${n} 場` },
-  { id: 'soloWins', name: 'AI領主', icon: 'soloWins', metric: 'soloWins', thresholds: [30, 50, 100], scope: 'solo', desc: (n) => `電腦對戰獲得 ${n} 勝` },
+  { id: 'games', name: '身經百戰', icon: 'games', metric: 'games', thresholds: [30, 50, 100], scope: 'pvp', desc: (n) => `真人對戰遊玩 ${n} 場`, limitedOk: true },
+  { id: 'wins', name: '常勝將軍', icon: 'wins', metric: 'wins', thresholds: [30, 50, 100], scope: 'pvp', desc: (n) => `真人對戰獲得 ${n} 勝`, limitedOk: true },
+  { id: 'streak', name: '勢如破竹', icon: 'streak', metric: 'streak', thresholds: [3, 5, 10], scope: 'pvp', desc: (n) => `真人對戰連勝 ${n} 場`, limitedOk: true },
+  { id: 'soloGames', name: '百戰不殆', icon: 'soloGames', metric: 'soloGames', thresholds: [30, 50, 100], scope: 'solo', desc: (n) => `電腦對戰遊玩 ${n} 場`, limitedOk: true },
+  { id: 'soloWins', name: 'AI領主', icon: 'soloWins', metric: 'soloWins', thresholds: [30, 50, 100], scope: 'solo', desc: (n) => `電腦對戰獲得 ${n} 勝`, limitedOk: true },
   { id: 'flush', name: '同花', icon: 'flush', metric: 'flush', thresholds: [2, 3, 4], scope: 'all', desc: (n) => `單場打出 ${n} 組同花` },
   { id: 'fullHouse', name: '葫蘆', icon: 'fullHouse', metric: 'fullHouse', thresholds: [2, 3, 4], scope: 'all', desc: (n) => `單場打出 ${n} 組葫蘆` },
   { id: 'quads', name: '鐵支', icon: 'quads', metric: 'quads', thresholds: [1, 2, 3], scope: 'all', desc: (n) => `單場打出 ${n} 組鐵支` },
@@ -65,6 +70,11 @@ export function isSfDuel(p1: Card[], p2: Card[]): boolean {
     evaluate(p1).category === CATEGORY.STRAIGHT_FLUSH &&
     evaluate(p2).category === CATEGORY.STRAIGHT_FLUSH
   )
+}
+
+/** 這個成就指標在限定房算不算(看成就定義的 limitedOk 標記)。 */
+export function countsInLimited(metric: AchMetric): boolean {
+  return ACHIEVEMENTS.some((a) => a.metric === metric && a.limitedOk)
 }
 
 export function getAchievement(id: string): AchFamily | undefined {

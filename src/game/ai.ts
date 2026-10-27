@@ -14,6 +14,7 @@ import {
 import { getSpecialCard, type SpecialCardId } from './specialCards'
 import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
 import { bossPick, bossPlace, type BossRuntime } from './bossAI'
+import { defaultLimitedBrain, limitedPick, limitedPlace } from './limitedAI'
 
 /**
  * The default single-difficulty AI (used by 對戰電腦 and non-campaign play).
@@ -26,6 +27,8 @@ import { bossPick, bossPlace, type BossRuntime } from './bossAI'
  */
 
 export function aiPick(state: GameState, me: PlayerId, boss?: BossRuntime): string[] {
+  // 限定房:改走限定層(LIMITED-ROOM-SPEC §11);普通電腦套預設個性。其他情況完全照舊。
+  if (state.mode) return limitedPick(state, me, boss ?? defaultLimitedBrain())
   if (boss) return bossPick(state, me, boss)
   const hand = state.hands[me]
   const cands = candidatePiles(hand)
@@ -40,6 +43,7 @@ export function aiPick(state: GameState, me: PlayerId, boss?: BossRuntime): stri
 }
 
 export function aiPlace(state: GameState, me: PlayerId, boss?: BossRuntime): number {
+  if (state.mode) return limitedPlace(state, me, boss ?? defaultLimitedBrain())
   if (boss) return bossPlace(state, me, boss)
   // BLIND placement: the AI must not peek at the incoming pile's values (the
   // human places blind too). It routes the enemy pile toward slots where its
