@@ -15,6 +15,21 @@ import type { Suit } from './cards'
 
 export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh' | 'explode' | 'deathEye'
 
+/**
+ * 這場能不能帶這張卡(戰前選卡畫面用)。共同卡池(雙方都有的卡才能帶)只套在「快速配對」配到的真人——
+ * 跟陌生人打,老手帶十張打新手不公平;朋友房(建立/加入房間,舊房沒標記的也算)各帶各的(2026-10-27 使用者定)。
+ * 主線 boss 照關卡進度、快配人機只從你已解鎖的卡裡挑 → 不經過這裡。
+ * @param foeSpecials 對手已解鎖的卡(還沒收到 = null → 只開基本卡)
+ */
+export function usableInMatch(
+  id: SpecialCardId,
+  opts: { iHave: boolean; online: boolean; origin?: 'match' | 'friend'; foeSpecials: string[] | null; baseline: SpecialCardId },
+): boolean {
+  if (!opts.iHave) return false
+  if (!opts.online || opts.origin !== 'match') return true
+  return opts.foeSpecials ? opts.foeSpecials.includes(id) : id === opts.baseline
+}
+
 export interface SpecialCardDef {
   id: SpecialCardId
   name: string
@@ -30,6 +45,9 @@ export interface SpecialCardDef {
   accent: string
   /** suit-bloom cards only: the suit the chosen card is re-suited to */
   suit?: Suit
+  /** 會動到對手的卡:用「被打的人」的角度寫的一句介紹。對手用了你還沒有的卡時跳出來,
+   *  不然你不知道剛剛發生了什麼(朋友房不受共同卡池限制後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡)。 */
+  foeNote?: string
 }
 
 export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
@@ -56,6 +74,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     name: '讓我看看',
     short: '查看對手手牌',
     desc: '直接查看對手目前的手牌。因為會影響對手，對手會被告知。',
+    foeNote: '「讓我看看」：可以直接看你目前所有的手牌',
     affectsFoe: true,
     needsTarget: false,
     accent: '#a1233a',
@@ -105,6 +124,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     name: '強迫更新',
     short: '對手手牌全部重抽',
     desc: '對手的手牌（空白牌、鬼牌除外）全部洗回牌堆，整副重洗後再抽回相同張數。因為會影響對手，對手會被告知。',
+    foeNote: '「強迫更新」：把你的手牌洗回牌堆、重抽一樣的張數',
     affectsFoe: true,
     needsTarget: false,
     accent: '#6b3fa0',
@@ -114,6 +134,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     name: '爆破',
     short: '炸掉對手一張手牌',
     desc: '隨機炸掉對手一張手牌（開局的空白牌、鬼牌除外），被炸的牌直接消失。',
+    foeNote: '「爆破」：隨機炸掉你一張手牌，被炸的牌直接消失',
     affectsFoe: true,
     needsTarget: false,
     accent: '#d9480f',
@@ -123,6 +144,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     name: '死神之眼',
     short: '透視對手目前已放在決鬥區的所有牌',
     desc: '翻開對手目前已放在決鬥區的所有牌（之後放的不算）。對手會被告知。',
+    foeNote: '「死神之眼」：翻開你目前放在決鬥區的所有牌',
     affectsFoe: true,
     needsTarget: false,
     accent: '#b8860b',

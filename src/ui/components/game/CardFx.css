@@ -1,0 +1,145 @@
+/* 舊特殊卡演出層(CardFx.tsx):鋪滿 .game,不吃點擊。只動 transform/opacity,播完整層拿掉。 */
+.card-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 62;
+}
+.card-fx__card {
+  position: absolute;
+  perspective: 600px;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.45));
+}
+.card-fx__flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.card-fx__face {
+  position: absolute;
+  inset: 0;
+}
+.card-fx__emoji {
+  position: absolute;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* 卡名標籤 */
+.card-fx__label {
+  position: absolute;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--wood-edge);
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.card-fx__label.is-victim {
+  border-color: #6b1424;
+  background: linear-gradient(180deg, #b8324a, #7a1420);
+  color: #fff3e6;
+}
+
+/* 永恆鑽石:天上的光柱 + 閃光 */
+.card-fx__beam {
+  position: absolute;
+  transform-origin: 50% 0;
+  border-radius: 0 0 50% 50% / 0 0 18% 18%;
+  background: linear-gradient(180deg, rgba(160, 210, 255, 0) 0%, rgba(190, 230, 255, 0.55) 45%, rgba(255, 255, 255, 0.95) 100%);
+  filter: blur(2px);
+}
+.card-fx__flash {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(150, 205, 255, 0.6) 40%, rgba(150, 205, 255, 0) 70%);
+}
+
+/* 正中紅心:箭(箭桿 + 愛心箭頭) */
+.card-fx__arrow {
+  position: absolute;
+  height: 0;
+  display: flex;
+  align-items: center;
+}
+/* 牌桌是紅的 → 箭用金色箭桿 + 白邊、粉紅愛心箭頭,才看得清楚 */
+.card-fx__arrow-shaft {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  border: 1.5px solid #fff;
+  background: linear-gradient(90deg, #fff 0%, #ffe08a 12%, #e0a92a 60%, #c98a1d 100%);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8), 0 2px 3px rgba(0, 0, 0, 0.35);
+}
+.card-fx__arrow-tip {
+  margin-left: -6px;
+  line-height: 1;
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px #fff);
+}
+.card-fx__emoji .is-glow {
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px #fff);
+}
+
+/* 塊桃鴨:小鴨 + 對話泡泡 */
+.card-fx__duck {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.card-fx__duck-body {
+  display: block;
+  line-height: 1;
+  transform: scaleX(-1); /* 🦆 預設朝左 → 翻成朝右跑 */
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+.card-fx__bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -4px);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #fff;
+  color: #33384a;
+  font-family: var(--font-display);
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 偷窺:掀起的牌角 + 放大鏡 */
+.card-fx__peek-corner {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 1;
+  border-radius: 0 6px 0 0;
+  background: linear-gradient(225deg, rgba(255, 255, 255, 0) 50%, rgba(255, 250, 235, 0.95) 50%);
+}
+.card-fx__magnifier {
+  z-index: 2;
+}
+
+/* 讓我看看:探照燈 + 被照到的牌發亮 */
+/* 探照燈要夠亮,紅桌上才看得出來在掃 */
+.card-fx__spot {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 252, 225, 0.9) 0%, rgba(255, 240, 170, 0.6) 35%, rgba(255, 236, 160, 0) 70%);
+}
+.card-fx__slot-glow {
+  position: absolute;
+  border-radius: 8px;
+  background: rgba(255, 244, 190, 0.35);
+  box-shadow: 0 0 0 4px rgba(255, 226, 110, 1), 0 0 22px 8px rgba(255, 220, 110, 0.85);
+}
+.card-fx__slot-glow.is-victim {
+  box-shadow: 0 0 0 3px rgba(209, 38, 59, 0.85), 0 0 14px 4px rgba(209, 38, 59, 0.5);
+}

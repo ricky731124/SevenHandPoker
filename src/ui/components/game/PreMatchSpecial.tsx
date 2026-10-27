@@ -7,7 +7,7 @@ import { BASELINE_SPECIAL_CARD } from '../../../platform/profile'
 import SpecialCard, { SpecialCardArt } from '../SpecialCard'
 import CardCarousel, { type CarouselSlide } from '../CardCarousel'
 import Button from '../Button'
-import { SPECIAL_CARD_LIST, LOADOUT_SIZE, type SpecialCardDef, type SpecialCardId } from '../../../game/specialCards'
+import { SPECIAL_CARD_LIST, LOADOUT_SIZE, usableInMatch, type SpecialCardDef, type SpecialCardId } from '../../../game/specialCards'
 import '../../screens/Personalize.css'
 import './PreMatchSpecial.css'
 
@@ -23,7 +23,7 @@ function cardArt(c: SpecialCardDef): ReactNode {
  * Pre-match special-card pick (Phase C surface B). Shown for a special-card room
  * after the VS intro and before the coin toss. Shows the cards I OWN; online, a
  * card the opponent hasn't unlocked is shown greyed as「對手未解鎖」and cannot be
- * chosen (PvP intersection pool). No 顯示全部 toggle here — at the table you only
+ * chosen (PvP intersection pool — 只限快速配對;朋友房各帶各的). No 顯示全部 toggle here — at the table you only
  * care about what you can actually bring. Single-tap a card → detail popup;
  * double-tap → select; single-tap a carried slot → remove.
  */
@@ -42,12 +42,10 @@ export default function PreMatchSpecial() {
   const foeSpecials: string[] | null = online
     ? (room?.players?.[online.role === 'host' ? 'guest' : 'host']?.specials ?? null)
     : null
-  // Usable this match = I own it AND (single-player OR the opponent also owns it).
-  const usable = (id: SpecialCardId) => {
-    if (!iHave(id)) return false
-    if (!online) return true
-    return foeSpecials ? foeSpecials.includes(id) : id === BASELINE_SPECIAL_CARD
-  }
+  // 共同卡池只套在快速配對配到的真人;朋友房各帶各的(規則見 usableInMatch)
+  const sharedPool = !!online && room?.origin === 'match'
+  const usable = (id: SpecialCardId) =>
+    usableInMatch(id, { iHave: iHave(id), online: !!online, origin: room?.origin, foeSpecials, baseline: BASELINE_SPECIAL_CARD })
 
   // Show only cards I own (hide my-locked — no meaning at the table).
   const displayed = SPECIAL_CARD_LIST.filter((c) => iHave(c.id as SpecialCardId))
@@ -89,7 +87,7 @@ export default function PreMatchSpecial() {
         <div className="prematch__sub">
           {waiting
             ? '已確認，等待對手選牌…'
-            : online
+            : sharedPool
               ? '選擇本場帶上場的特殊牌（整場只能發動 1 張）· 灰色為對手未解鎖'
               : '選擇本場帶上場的特殊牌（整場只能發動 1 張）'}
         </div>

@@ -159,6 +159,42 @@ export const DEATH_EYE_NOTICE_MS = 6000
 /** 死神之眼的提示文字(使用者定)。 */
 export const DEATH_EYE_VICTIM_MSG = '對手用了死神之眼，你目前決鬥區的牌被看光了'
 
+/**
+ * 舊特殊卡的演出(2026-10-27,CardFx.tsx)。原則(使用者定):動到對手手牌的 → 對手也看得到演出 + 被告知;
+ * 沒動到的(花色卡、偷天換日、偷窺)→ 只有自己看得到,對手只收到「對方似乎使用了特殊牌」。
+ * targets 是陣列:之後「一次改兩張花色」「偷天換日選 1~3 張」直接沿用。
+ */
+export interface CardFxRun {
+  kind: 'suit' | 'swap' | 'peek' | 'spy'
+  /** 誰用的 */
+  by: PlayerId
+  card: SpecialCardId
+  /** 花色卡 / 偷天換日:哪幾張牌從什麼變成什麼(after 不知道 = 連線 guest 換牌,新牌等 host 同步) */
+  targets?: { before: Card; after?: Card }[]
+  /** 偷窺:下次補牌幾張 */
+  count?: number
+  n: number
+}
+export const SUIT_FX_MS = 3000
+export const SWAP_FX_MS = 3200
+export const PEEK_FX_MS = 2800
+export const SPY_FX_MS = 3000
+export const cardFxMs = (k: CardFxRun['kind']): number =>
+  k === 'suit' ? SUIT_FX_MS : k === 'swap' ? SWAP_FX_MS : k === 'peek' ? PEEK_FX_MS : SPY_FX_MS
+
+/**
+ * 對手對我用了一張「會動到我」、但我自己還沒有的卡 → 上方提示跳一句介紹(5 秒,在狀態列提示之後)。
+ * 朋友房不受共同卡池限制(2026-10-27)後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡。
+ * 沒動到我的卡(偷窺、偷天換日、花色卡)本來就不告訴對手是哪張 → 不會走到這裡。
+ */
+export function noteFoeCard(card: SpecialCardId | undefined): void {
+  const def = card ? getSpecialCard(card) : undefined
+  if (!def?.foeNote) return
+  const ps = usePlatformStore.getState()
+  if (ps.username === 'ricky' || ps.profile?.unlocked.specialCards[def.id]) return // 測試帳號全開 / 自己有這張
+  setTimeout(() => useToastStore.getState().show(`你還沒有這張卡 · ${def.foeNote}`, 5000), 600)
+}
+
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
 function playFrameSound(f: ReplayFrame | undefined): void {
   switch (f?.sound) {
@@ -334,6 +370,8 @@ interface GameStore {
   explodeFx: { target: PlayerId; card?: Card; index?: number; n: number } | null
   /** 死神之眼動畫觸發器:翻開了誰(target)的哪幾格(slots)+ n 去重。DeathEyeFx 看到新的 n 播一次。 */
   deathEyeFx: { target: PlayerId; slots: number[]; n: number } | null
+  /** 花色卡 / 偷天換日 / 偷窺 / 讓我看看 的演出觸發器(CardFx.tsx 看到新的 n 播一次;誰看得到見 CardFxRun)。 */
+  cardFx: CardFxRun | null
 
   // UI
   selected: string[]
@@ -582,6 +620,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   refreshFx: null,
   explodeFx: null,
   deathEyeFx: null,
+  cardFx: null,
 
   selected: [],
   confirm: null,
@@ -737,7 +776,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (get().status === 'playing' && get().engine) return
     const first = get().coinFirstPicker ?? 'p1'
     const engine = createGame(randomSeed(), first)
-    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
+    set({ engine, status: 'playing', incomingEmote: null, specEmote: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, cardFx: null, localPause: false, localMatchId: newLocalMatchId(), moveLog: [] }) // 清掉上一局殘留的貼圖/特殊牌通知/暫停;§6 新局重置棋譜
     sfx.deal() // 開局發牌
     persistLocalMatch(get()) // §3.7 本地局:發牌即存快照+marker(online 為 no-op)
     const foe = get().casualFoe
@@ -749,7 +788,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _bcast?.stop() // §5.4 leaving → tear down the Live/spectate nodes (unless已 ended,則留 24h)
     _bcast = null
     clearLocalMatch() // §3.7 leaving → drop the local snapshot/marker
-    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
+    set({ engine: null, status: 'coinToss', selected: [], confirm: null, showdownOpen: false, endOpen: false, magnifier: null, specFx: null, refreshFx: null, explodeFx: null, deathEyeFx: null, cardFx: null, spectateLive: null, broadcastCode: null, broadcastWatchers: 0, specEmote: null, localPause: false })
   },
 
   applySpectate: (engine, info, live) => {
@@ -1473,7 +1512,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setBroadcastCode: (code) => set({ broadcastCode: code }),
   toggleSpectatorDanmaku: () => set({ showSpectatorDanmaku: !get().showSpectatorDanmaku }),
 
-  showSpecialInfo: (info) => set({ specialInfo: info, specialTrayOpen: false }),
+  showSpecialInfo: (info) => {
+    // guest:host 回結果時演出可能還在播 → 等演出播完才跳彈窗
+    const fx = get().cardFx
+    const left = fx && fx.by === get().me && (fx.kind === 'peek' || fx.kind === 'spy') ? cardFxMs(fx.kind) - (Date.now() - fx.n) : 0
+    if (left > 0) setTimeout(() => get().engine && set({ specialInfo: info, specialTrayOpen: false }), left)
+    else set({ specialInfo: info, specialTrayOpen: false })
+  },
 
   openSpecialTray: () => {
     sfx.click()
@@ -1487,6 +1532,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!engine || !def) return
     if (def.needsTarget) {
       // swap / suit-bloom — only enter targeting if a legal target exists.
+      // 偷天換日:牌堆空了就換不了(以前會讓你選牌、選了卻沒反應)→ 先擋下來說清楚
+      if (!def.suit && engine.deck.length === 0) {
+        sfx.error()
+        useToastStore.getState().show('牌堆已空，無法換牌')
+        return
+      }
       const targets = def.suit ? suitTargets(engine, me, def.suit) : swapTargets(engine, me)
       if (targets.length === 0) {
         sfx.error()
@@ -1583,30 +1634,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
       persistLocalMatch(get())
       get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`, DEATH_EYE_NOTICE_MS)
       if (online?.role === 'host') online.sendFx(DEATH_EYE_VICTIM_MSG, { card: id, target: foe, slots })
+    } else if ((id === 'peek' && peekNextDraw(engine, me).length === 0) || (id === 'spy' && engine.hands[otherPlayer(me)].length === 0)) {
+      // 偷窺:已經沒有下一次補牌(最後幾回合)/ 讓我看看:對手手上沒牌 → 先擋下來,
+      // 以前會照樣用掉卡、彈窗卻是空的(白白浪費一張)。補牌次數/張數、對手手牌張數都是公開資訊,guest 也判得出來。
+      sfx.error()
+      useToastStore.getState().show(id === 'peek' ? '已經沒有下一次補牌了' : '對手手上沒有牌')
+      return
     } else if (online?.role === 'guest') {
       // peek / spy online: the host holds the truth → ask it; the result comes
-      // back on the private info channel (netgame → showSpecialInfo).
+      // back on the private info channel (netgame → showSpecialInfo,會等演出播完才跳彈窗).
       sfx.special()
       online.send({ type: 'special', card: id })
-      set({ specialTrayOpen: false })
+      set({
+        specialTrayOpen: false,
+        cardFx: { kind: id as 'peek' | 'spy', by: me, card: id, count: id === 'peek' ? peekNextDraw(engine, me).length : undefined, n: Date.now() },
+      })
     } else {
       // peek / spy (host or single-player): resolve the info now + spend the budget.
       const foe = otherPlayer(me)
       const cards = (id === 'peek' ? peekNextDraw(engine, me) : engine.hands[foe]).slice()
       sfx.special()
       const nextEng = markSpecialUsed(engine, me)
+      const kind = id as 'peek' | 'spy'
+      const n = Date.now()
       set({
         engine: nextEng,
         specialTrayOpen: false,
-        specialInfo: { kind: id as 'peek' | 'spy', cards },
-        specFx: { by: me, card: id, n: Date.now() }, // §特殊牌:觀戰通知(peek/spy 無視覺變化,只跳提示)
+        specFx: { by: me, card: id, n }, // §特殊牌:觀戰通知(peek/spy 無視覺變化,只跳提示)
+        cardFx: { kind, by: me, card: id, count: kind === 'peek' ? cards.length : undefined, n },
       })
+      // 先播演出(放大鏡 / 探照燈),播完才跳結果彈窗(使用者 2026-10-27);同一局才跳
+      setTimeout(() => {
+        if (get().engine && get().cardFx?.n === n) set({ specialInfo: { kind, cards } })
+      }, cardFxMs(kind))
       _bcast?.onEngine(nextEng)
       pushCasualExtras()
       get().recordMove({ t: 'special', by: me, card: id }) // §6 棋譜:peek/spy 不改牌面,只記用過
       get().flashStatus(`你已使用了「${def.name}」`)
       // host: tell the guest (the foe) what happened.
-      if (online?.role === 'host') online.sendFx(id === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
+      if (online?.role === 'host') {
+        if (id === 'spy') online.sendFx('對手正在查看你的手牌', { card: id, target: foe }) // 帶卡名:guest 沒這張卡時跳介紹
+        else online.sendFx('對方似乎使用了特殊牌') // 偷窺沒動到對手 → 不說是哪張
+      }
     }
   },
 
@@ -1618,7 +1687,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // host applies it and syncs the result back (hand + specialUsed).
       online.send({ type: 'special', card: specialTargeting, targetId: cardId })
       sfx.special()
-      set({ specialTargeting: null })
+      // 本機先播演出:花色卡變成什麼是確定的;偷天換日抽到哪張要等 host 同步(after 留空,演出最後揭曉真牌)
+      const before = engine.hands[me].find((c) => c.id === cardId)
+      set({
+        specialTargeting: null,
+        ...(before
+          ? { cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets: [{ before, after: def?.suit ? { ...before, suit: def.suit } : undefined }], n: Date.now() } }
+          : {}),
+      })
       get().flashStatus(`你已使用了「${def?.name}」`)
       return
     }
@@ -1632,13 +1708,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Swap removes the target and draws a new card → drop the now-gone card from
     // the pick selection so the 送出 count stays correct (clubs keeps the id).
     const validIds = new Set(next.hands[me].map((c) => c.id))
+    // 演出用:哪張牌變成什麼(花色卡同一張 id 換花色;偷天換日 = 新抽到、原本手上沒有的那張)
+    const before = engine.hands[me].find((c) => c.id === cardId)!
+    const oldIds = new Set(engine.hands[me].map((c) => c.id))
+    const after = def?.suit ? next.hands[me].find((c) => c.id === cardId) : next.hands[me].find((c) => !oldIds.has(c.id))
+    const n = Date.now()
     // §特殊牌:記通知(觀戰跳 toast + 牌面同步)。⚠️ 這條原本用 set({engine}) 直接改,沒經過
     // applyEngine → casual 廣播端不會鏡射給觀戰(玩家換了牌、觀戰卻沒更新的 bug)。改成也呼廣播。
     set({
       engine: next,
       specialTargeting: null,
       selected: get().selected.filter((id) => validIds.has(id)),
-      specFx: { by: me, card: specialTargeting, n: Date.now() },
+      specFx: { by: me, card: specialTargeting, n },
+      cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets: [{ before, after }], n },
     })
     _bcast?.onEngine(next) // casual:牌面變了 → 鏡射
     pushCasualExtras() // casual:送出通知 + 更新後的推牌狀態
@@ -1695,6 +1777,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : {}),
       // 死神之眼看的是我 → 播透視動畫(我那幾堆翻開)
       ...(decision.card === 'deathEye' ? { deathEyeFx: { target: otherPlayer(ai), slots: deathEyeSlots(engine, ai), n } } : {}),
+      // 讓我看看看的是我 → 我的手牌上播「被偷看」演出(電腦會等演出播完才出牌)。
+      // 電腦用花色卡/偷天換日/偷窺沒動到我 → 不播(使用者原則)
+      ...(decision.card === 'spy' ? { cardFx: { kind: 'spy' as const, by: ai, card: 'spy' as const, n } } : {}),
     })
     _bcast?.onEngine(next)
     pushCasualExtras()
@@ -1712,6 +1797,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               : '對方似乎使用了特殊牌',
       decision.card === 'explode' ? EXPLODE_NOTICE_MS : decision.card === 'deathEye' ? DEATH_EYE_NOTICE_MS : undefined,
     )
+    noteFoeCard(decision.card) // 例:主線 boss 先用了你還沒拿到的招牌卡
     return true
   },
 

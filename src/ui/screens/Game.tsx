@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
-import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, useGameStore } from '../../state/gameStore'
+import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, cardFxMs, useGameStore } from '../../state/gameStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
@@ -22,6 +22,7 @@ import SlotView from '../components/game/SlotView'
 import RefreshFx from '../components/game/RefreshFx'
 import ExplodeFx from '../components/game/ExplodeFx'
 import DeathEyeFx from '../components/game/DeathEyeFx'
+import CardFx from '../components/game/CardFx'
 import TopBar from '../components/game/TopBar'
 import CoinToss from '../components/game/CoinToss'
 import VsIntro from '../components/game/VsIntro'
@@ -389,6 +390,10 @@ export function GameBoard() {
       const eye = useGameStore.getState().deathEyeFx
       const eyeLeft = eye ? DEATH_EYE_FX_MS - (Date.now() - eye.n) : 0
       if (eyeLeft > 0) delay = Math.max(delay, eyeLeft + 400)
+      // 電腦用讓我看看偷看我 → 等「被偷看」演出播完再出牌(其他舊卡沒動到我、我看不到演出 → 不用等)
+      const cfx = useGameStore.getState().cardFx
+      const cfxLeft = cfx && cfx.kind === 'spy' && cfx.by !== me ? cardFxMs('spy') - (Date.now() - cfx.n) : 0
+      if (cfxLeft > 0) delay = Math.max(delay, cfxLeft + 400)
       timer = setTimeout(() => {
         // The AI may spend its one-shot special before picking (#13). If it
         // does, the engine changes → this effect re-runs (now specialUsed) and
@@ -750,6 +755,8 @@ export function GameBoard() {
       {(g.special || spec || replay) && <ExplodeFx me={me} cardW={sz.card} />}
       {/* 死神之眼:眼睛張開閃光 → 被看的那幾堆依序翻開 */}
       {(g.special || spec || replay) && <DeathEyeFx me={me} cardW={sz.card} />}
+      {/* 花色卡 / 偷天換日 / 偷窺 / 讓我看看:自己用的自己看;讓我看看被看的那一方也看得到 */}
+      {g.special && !spec && !replay && <CardFx me={me} cardW={sz.card} />}
 
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on

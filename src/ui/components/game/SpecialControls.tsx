@@ -4,6 +4,7 @@ import { sortHand } from '../../../game/sort'
 import Modal from '../Modal'
 import Card from '../Card'
 import SpecialCard from '../SpecialCard'
+import Button from '../Button'
 import './SpecialControls.css'
 
 /**
@@ -46,6 +47,7 @@ export function SpecialInfoModal() {
     <Modal
       open={open}
       onClose={close}
+      onBack={close}
       title={isPeek ? '偷窺 · 下次補牌' : '讓我看看 · 對手手牌'}
       width={520}
       scrimClass="modal__scrim--light"
@@ -58,6 +60,10 @@ export function SpecialInfoModal() {
           <Card key={c.id} card={c} w={54} />
         ))}
         {cards.length === 0 && <span className="spx-info__empty">沒有可顯示的牌</span>}
+      </div>
+      {/* 自己看完自己關(使用者:要能自己關掉彈窗) */}
+      <div className="confirm__actions">
+        <Button onClick={close}>知道了</Button>
       </div>
     </Modal>
   )

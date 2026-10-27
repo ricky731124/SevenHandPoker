@@ -20,7 +20,7 @@ import {
 import { useAppStore } from '../state/appStore'
 import { useNetStore } from '../state/netStore'
 import { usePlatformStore } from '../state/platformStore'
-import { useGameStore, specExtrasOf, DEATH_EYE_NOTICE_MS, DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
+import { useGameStore, specExtrasOf, noteFoeCard, DEATH_EYE_NOTICE_MS, DEATH_EYE_VICTIM_MSG, EXPLODE_NOTICE_MS, type HostSnapshot, type PauseState, type EmoteMsg } from '../state/gameStore'
 import { serializeForGuest, deserializeForGuest, type Intent, type LiveSel, type SyncGame } from './sync'
 import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
@@ -297,6 +297,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n }, refreshFx: { target: 'p1', n }, selected: [] })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', rng: rec.out })
         useGameStore.getState().flashStatus(`對手對你使用了「${def.name}」，你的手牌已重抽`)
+        noteFoeCard('refresh')
       } else if (intent.card === 'explode') {
         // 爆破:guest 炸 host(我)一張。guest 看不到我的牌 → 由我判能不能用、炸到哪張,再回 fx 告訴 guest。
         if (!canExplode(e, 'p2')) {
@@ -318,6 +319,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         g.recordMove({ t: 'special', by: 'p2', card: 'explode', rng: rec.out })
         const face = cardFaceText(gone)
         g.flashStatus(`對手用「${def.name}」炸掉了你的 ${face}`, EXPLODE_NOTICE_MS)
+        noteFoeCard('explode')
         void dbSet(fxRef(code), {
           msg: `你用「${def.name}」炸掉了對手的 ${face}`,
           id: n,
@@ -337,6 +339,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'deathEye', n }, deathEyeFx: { target: 'p1', slots, n } })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'deathEye' })
         useGameStore.getState().flashStatus(DEATH_EYE_VICTIM_MSG, DEATH_EYE_NOTICE_MS)
+        noteFoeCard('deathEye')
       } else {
         // peek/spy: compute the guest's private result + push to its info channel.
         const cards = intent.card === 'peek' ? peekNextDraw(e, 'p2') : e.hands.p1
@@ -345,9 +348,15 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           cards: cleanCards(cards),
           id: Date.now(),
         })
-        useGameStore.setState({ engine: markSpecialUsed(e, 'p2'), specFx: { by: 'p2', card: intent.card, n: Date.now() } })
+        useGameStore.setState({
+          engine: markSpecialUsed(e, 'p2'),
+          specFx: { by: 'p2', card: intent.card, n: Date.now() },
+          // guest 偷看我(host)的手牌 → 我這邊播「被偷看」演出;偷窺沒動到我 → 不播
+          ...(intent.card === 'spy' ? { cardFx: { kind: 'spy' as const, by: 'p2' as const, card: 'spy' as const, n: Date.now() } } : {}),
+        })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: intent.card }) // §6 棋譜:peek/spy 不改牌面
         useGameStore.getState().flashStatus(intent.card === 'spy' ? '對手正在查看你的手牌' : '對方似乎使用了特殊牌')
+        if (intent.card === 'spy') noteFoeCard('spy')
       }
     }
   })
@@ -487,7 +496,10 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
     const fx = snap.val() as { msg?: string; card?: SpecialCardId; target?: 'p1' | 'p2'; victim?: Card; index?: number; slots?: number[]; id?: number } | null
     const noticeMs = fx?.card === 'explode' ? EXPLODE_NOTICE_MS : fx?.card === 'deathEye' ? DEATH_EYE_NOTICE_MS : undefined
     if (fx?.msg) useGameStore.getState().flashStatus(fx.msg, noticeMs)
+    if (fx?.card && fx.target === 'p2') noteFoeCard(fx.card) // host 對我(guest)用了我沒有的卡 → 跳介紹
     const n = fx?.id ?? Date.now()
+    // host 偷看我(guest)的手牌 → 我這邊播「被偷看」演出
+    if (fx?.card === 'spy' && fx.target === 'p2') useGameStore.setState({ cardFx: { kind: 'spy', by: 'p1', card: 'spy', n } })
     // host 對我(guest)用了死神之眼 → 播透視動畫(我那幾堆翻開;翻開狀態由 guest-view 同步過來)
     if (fx?.card === 'deathEye') useGameStore.setState({ deathEyeFx: { target: fx.target ?? 'p2', slots: fx.slots ?? [], n } })
     // host 對我(guest)用了強迫更新 → 播重抽動畫(新手牌由 guest-view 同步過來)
