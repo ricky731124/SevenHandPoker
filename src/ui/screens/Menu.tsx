@@ -11,8 +11,9 @@ import AccountButton from '../components/AccountButton'
 import LiveBoard from '../components/LiveBoard'
 import LobbyChat from '../components/LobbyChat'
 import { sfx } from '../../audio/sfx'
-import { LIMITED_INFO } from '../../game/limited'
-import { limitedModeNow } from '../../net/limitedClock'
+import { LIMITED_INFO, LIMITED_TEST_MODE } from '../../game/limited'
+import { limitedDayNow, limitedModeNow } from '../../net/limitedClock'
+import { LimitedWeekModal } from '../components/game/LimitedRule'
 import './Menu.css'
 
 type Opponent = 'ai' | 'friend'
@@ -25,6 +26,7 @@ export default function Menu() {
   const openMatchmaking = useAppStore((s) => s.openMatchmaking)
   const net = useNetStore()
   const [dialog, setDialog] = useState<null | 'start' | 'create' | 'join' | 'free'>(null)
+  const [weekOpen, setWeekOpen] = useState(false) // 快速配對「?」→ 限定房一週表
 
   // Create-match config (#9): opponent · room type · per-turn time. Single-select
   // per group; pre-checked with sensible defaults (好友 · 特殊 · 99 秒).
@@ -123,7 +125,24 @@ export default function Menu() {
       </Modal>
 
       {/* Free match: pick room type, then search (30s for a human, else a bot). */}
-      <Modal open={dialog === 'free'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="快速配對" panelClass="menu-free menu-dialog">
+      <Modal
+        open={dialog === 'free'}
+        onClose={() => setDialog('start')}
+        onBack={() => setDialog('start')}
+        title="快速配對"
+        panelClass="menu-free menu-dialog"
+        titleAction={
+          <button
+            type="button"
+            className="backbtn menu__qbtn"
+            onClick={() => { sfx.click(); setWeekOpen(true) }}
+            aria-label="限定房一週表"
+            title="限定房一週表"
+          >
+            ?
+          </button>
+        }
+      >
         <p className="menu__hint">選擇房型,系統會線上為你配對對手,請耐心等待一下。</p>
         <Button
           full
@@ -159,10 +178,12 @@ export default function Menu() {
             openMatchmaking('limited')
           }}
         >
-          限定房配對
+          <span className="menu__btn-label">
+            限定房配對<span className="menu__btn-sub">{todayName}</span>
+          </span>
         </Button>
-        <p className="menu__today">今日・{todayName}</p>
       </Modal>
+      <LimitedWeekModal open={weekOpen} onClose={() => setWeekOpen(false)} today={limitedDayNow()} testMode={LIMITED_TEST_MODE} />
 
       {/* Create-match config: opponent · room type · time (each required), confirm */}
       <Modal open={dialog === 'create'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="建立房間" panelClass="menu-dialog">
@@ -180,9 +201,9 @@ export default function Menu() {
           value={kind}
           onChange={setKind}
           options={[
-            { value: 'normal', label: '一般房間' },
-            { value: 'special', label: '特殊房間' },
-            { value: 'limited', label: '限定房間', sub: `今日：${todayName}` },
+            { value: 'normal', label: '一般房' },
+            { value: 'special', label: '特殊房' },
+            { value: 'limited', label: '限定房', sub: `今日：${todayName}` },
           ]}
         />
         <CheckGroup
@@ -254,11 +275,10 @@ function CheckGroup<T extends string>({
   onChange: (v: T) => void
   options: { value: T; label: string; sub?: string }[]
 }) {
-  const hasSub = options.some((o) => o.sub)
   return (
     <div className="cfg-group">
       <div className="cfg-group__label">{label}</div>
-      <div className={`cfg-checks${options.length > 2 ? ' cfg-checks--3' : ''}`} role="group" aria-label={label}>
+      <div className="cfg-checks" role="group" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
@@ -271,19 +291,15 @@ function CheckGroup<T extends string>({
           >
             <span className="cfg-box" aria-hidden="true" />
             {o.label}
+            {/* 選項下面的小字(例:限定房「今日：百鬼夜行」)。浮在按鈕下方、不佔高度 → 各列間距跟原本一樣 */}
+            {o.sub && (
+              <span className="cfg-sub" aria-hidden="true">
+                {o.sub}
+              </span>
+            )}
           </button>
         ))}
       </div>
-      {/* 選項下面的小字(例:限定房間「今日：百鬼夜行」),跟按鈕同欄對齊 */}
-      {hasSub && (
-        <div className={`cfg-checks cfg-subs${options.length > 2 ? ' cfg-checks--3' : ''}`} aria-hidden="true">
-          {options.map((o) => (
-            <span key={o.value} className="cfg-sub">
-              {o.sub ?? ''}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

@@ -112,7 +112,7 @@ export default function HighlightList({ open, onClose }: { open: boolean; onClos
                     <img className="rp-hava" src={avatarSrc(r.p2?.avatar || 'bird')} alt="" decoding="async" loading="lazy" />
                   </div>
                   <div className="rp-hmeta">
-                    <div className="rp-hmode">{matchLabel(r.matchType)} - {r.mode ? `限定房・${LIMITED_INFO[r.mode]?.name ?? ''}` : roomLabel(r.special)}</div>
+                    <div className="rp-hmode">{matchLabel(r.matchType)} - {r.mode ? LIMITED_INFO[r.mode]?.name ?? '' : roomLabel(r.special)}</div>
                     <div className="rp-htime">{fmtTime(r.endedAt)}</div>
                   </div>
                   <span className="rp-hplay" aria-hidden="true">▶</span>

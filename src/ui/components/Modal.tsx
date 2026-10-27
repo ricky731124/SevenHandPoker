@@ -25,13 +25,15 @@ interface Props {
   /** 觀戰對決彈窗:遮罩不吃點擊(pointer-events:none),只留面板本身可互動 → 面板外(如右下
    *  「離開觀戰」鈕)的點擊穿透到底層仍可按。視覺遮罩照舊。 */
   scrimThrough?: boolean
+  /** 標題列右邊的小鈕(例:快速配對的「?」一週表),跟返回鍵對稱放第 3 欄 */
+  titleAction?: ReactNode
 }
 
 /**
  * Modal with an enter animation only — it unmounts immediately on close
  * (no exit animation) so a throttled rAF can never leave a stuck overlay.
  */
-export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass, onBack, scrimThrough }: Props) {
+export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass, onBack, scrimThrough, titleAction }: Props) {
   // Mobile browser tab: shrink the whole panel (content + art + buttons) to a
   // proportional "one-screen" version. framer owns `transform`, so the scale has
   // to be the animate target here rather than CSS. 1 on standalone/desktop.
@@ -62,6 +64,7 @@ export default function Modal({ open, onClose, title, children, locked, width = 
           <div className="modal__titlebar">
             {onBack && <BackButton onClick={onBack} className="modal__back" />}
             {title && <h2 className={`modal__title${largeTitle ? ' modal__title--large' : ''}`}>{title}</h2>}
+            {titleAction && <div className="modal__action">{titleAction}</div>}
           </div>
         )}
         <div className="modal__body">{children}</div>

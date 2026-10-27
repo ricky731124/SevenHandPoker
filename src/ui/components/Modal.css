@@ -75,6 +75,11 @@
   grid-column: 2;
   margin: 0 !important;
 }
+.modal__titlebar .modal__action {
+  grid-column: 3;
+  display: flex;
+  justify-content: center;
+}
 
 .modal__title {
   /* game-modal titles: just a touch larger than body text (~+2px) */

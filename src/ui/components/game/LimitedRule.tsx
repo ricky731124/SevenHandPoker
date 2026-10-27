@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { LIMITED_INFO, type LimitedMode } from '../../../game/limited'
+import { LIMITED_INFO, LIMITED_SCHEDULE, LIMITED_WEEK, type LimitedMode } from '../../../game/limited'
 import Modal from '../Modal'
 import Button from '../Button'
 import { sfx } from '../../../audio/sfx'
@@ -47,12 +47,13 @@ export function LimitedRuleModal({
   )
 }
 
-/** 牌桌上方常駐的「限定房・百鬼夜行」標籤(§8.4),點了再看一次規則卡。 */
+/** 牌桌右側「?」正上方的玩法方鈕(§8.4),點了再看一次規則卡。 */
 export function LimitedBadge({ mode, onClick }: { mode: LimitedMode; onClick?: () => void }) {
+  const info = LIMITED_INFO[mode]
   return (
     <button
       type="button"
-      className="limited-badge"
+      className={`limited-badge${info.badge.length > 1 ? '' : ' limited-badge--one'}`}
       onClick={
         onClick
           ? () => {
@@ -62,10 +63,37 @@ export function LimitedBadge({ mode, onClick }: { mode: LimitedMode; onClick?: (
           : undefined
       }
       title="看規則"
-      aria-label={`限定房・${LIMITED_INFO[mode].name}`}
+      aria-label={`限定房・${info.name}`}
     >
-      <span className="limited-badge__kind">限定房</span>
-      <span className="limited-badge__name">{LIMITED_INFO[mode].name}</span>
+      {info.badge.map((line) => (
+        <span key={line}>{line}</span>
+      ))}
     </button>
+  )
+}
+
+/** 快速配對「?」:限定房一週表(§8.2)。今天那列標亮;測試期固定玩法時多一行說明。 */
+export function LimitedWeekModal({ open, onClose, today, testMode }: { open: boolean; onClose: () => void; today: number; testMode: LimitedMode | null }) {
+  return (
+    <Modal open={open} onClose={onClose} title="限定房一週表" width={340} panelClass="limited-week">
+      <ul className="limited-week__list">
+        {LIMITED_WEEK.map(({ day, label }) => (
+          <li key={day} className={day === today ? 'limited-week__row limited-week__row--today' : 'limited-week__row'}>
+            <span>{label}</span>
+            <span>{LIMITED_INFO[LIMITED_SCHEDULE[day]].name}</span>
+          </li>
+        ))}
+      </ul>
+      {testMode && <p className="limited-week__note">測試期間每天都是{LIMITED_INFO[testMode].name}</p>}
+      <Button
+        full
+        onClick={() => {
+          sfx.click()
+          onClose()
+        }}
+      >
+        知道了
+      </Button>
+    </Modal>
   )
 }

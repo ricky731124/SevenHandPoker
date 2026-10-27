@@ -120,6 +120,7 @@
   gap: 8px;
 }
 .cfg-check {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
@@ -139,45 +140,43 @@
 .cfg-check:active {
   transform: translateY(1px);
 }
-/* 三個選項(房型:一般 / 特殊 / 限定)擠一排 → 字、間距縮一點,手機寬度也放得下 */
-.cfg-checks--3 {
-  gap: 6px;
-}
-.cfg-checks--3 .cfg-check {
-  gap: 5px;
-  padding: 9px 4px;
-  font-size: 14px;
-  white-space: nowrap;
-}
-.cfg-checks--3 .cfg-box {
-  width: 15px;
-  height: 15px;
-}
-.cfg-checks--3 .cfg-check--on .cfg-box::after {
-  left: 3px;
-  top: -1px;
-}
-/* 選項下面的小字(限定房間「今日：百鬼夜行」),跟按鈕同欄 */
-.cfg-subs {
-  margin-top: 3px;
-}
+/* 選項下面的小字(限定房「今日：百鬼夜行」):絕對定位浮在按鈕正下方,不佔高度 →
+   對手↔房型、房型↔限時 的間距跟原本兩個選項時一模一樣。 */
 .cfg-sub {
-  flex: 1;
+  position: absolute;
+  top: calc(100% + 6px); /* 扣掉按鈕 2px 框 → 跟按鈕留 4px */
+  left: 0;
+  right: 0;
   text-align: center;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--parch-text);
   opacity: 0.75;
   white-space: nowrap;
+  pointer-events: none;
 }
-/* 快速配對:限定房配對按鈕下的「今日・百鬼夜行」 */
-.menu__today {
-  margin: -4px 0 0;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--parch-text);
-  opacity: 0.75;
+/* 快速配對:「限定房配對」後面空一格接今天的玩法(小字)。小字浮在右邊 → 「限定房配對」
+   四個字的位置跟上面兩顆按鈕對齊。 */
+.menu__btn-label {
+  position: relative;
+}
+.menu__btn-sub {
+  position: absolute;
+  left: calc(100% + 0.6em);
+  bottom: 0.15em;
+  font-size: 0.68em;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+/* 快速配對標題列右邊的「?」:跟返回鍵同一顆木鈕的樣子、同大小 */
+.modal__panel.menu-dialog .menu__qbtn {
+  width: clamp(30px, 5vw, 34px);
+  height: clamp(30px, 5vw, 34px);
+  font-family: var(--font-display);
+  font-size: clamp(17px, 2.9vw, 20px);
+  font-weight: 900;
+  line-height: 1;
 }
 .cfg-box {
   flex: 0 0 auto;

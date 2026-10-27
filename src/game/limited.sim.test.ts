@@ -29,6 +29,9 @@ const original = (rt: BossRuntime): Brain => ({
   pick: (g, me, rng) => bossPick(g, me, rt, rng),
   place: (g, me, rng) => bossPlace(g, me, rt, rng),
 })
+// 「每手都出最大」:一般玩家的直覺打法(強攻 + 執行力 0 → 每手都走「上限內最大的大牌」,不送格子)
+const greedy: Brain = limited({ ...defaultLimitedBrain(), main: 'attack', execution: 0 })
+const withMain = (rng: Rng, main: BossRuntime['main']): BossRuntime => ({ ...casualRt(rng), main })
 const random: Brain = {
   pick: (g, me, rng) => {
     const h = [...g.hands[me]].sort(() => rng() - 0.5)
@@ -62,6 +65,10 @@ describe.skipIf(!process.env.SIM)('限定房模擬(SIM=1 才跑)', () => {
       ['對戰電腦(限定層預設) vs 原本邏輯(預設個性)', () => [limited(defaultLimitedBrain()), original(defaultLimitedBrain())]],
       ['快配人機(限定層) vs 隨機', (r) => [limited(casualRt(r)), random]],
       ['快配人機(限定層) vs 對戰電腦(限定層預設)', (r) => [limited(casualRt(r)), limited(defaultLimitedBrain())]],
+      ['快配人機(限定層) vs 每手都出最大', (r) => [limited(casualRt(r)), greedy]],
+      ['強攻 vs 每手都出最大', (r) => [limited(withMain(r, 'attack')), greedy]],
+      ['囤牌 vs 每手都出最大', (r) => [limited(withMain(r, 'hoard')), greedy]],
+      ['平衡 vs 每手都出最大', (r) => [limited(withMain(r, 'balance')), greedy]],
     ]
     const out: string[] = ['| 對局 | 前者勝率 |', '|---|---|']
     rows.forEach(([name, mk], k) => {

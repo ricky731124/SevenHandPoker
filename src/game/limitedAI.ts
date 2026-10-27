@@ -12,7 +12,7 @@ import { isBlank, isJoker } from './cards'
 import { CATEGORY, evaluate } from './evaluate'
 import { candidatePiles, groupBy } from './aiCore'
 import { bossPlace, type BossProfile, type BossRuntime } from './bossAI'
-import { SLOT_COUNT, countCoins, ownsSlot, otherPlayer, type GameState, type PlayerId } from './state'
+import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, ownsSlot, otherPlayer, type GameState, type PlayerId } from './state'
 
 type Rng = () => number
 
@@ -42,18 +42,18 @@ export function limitedPlace(state: GameState, me: PlayerId, rt: BossRuntime, rn
 }
 
 // ---- 百鬼夜行(§11.4) ------------------------------------------------------
+//
+// 一人整局約 11 張鬼、7 手;同花順一手要 2~3 鬼 → 不可能每手都出大牌,一定要放掉幾格。
+// 所以每手只在兩件事裡選:
+//   出大牌 = 同花順(主)/ 鐵支(輔),用最多正牌、最少鬼牌湊;
+//   放掉   = 只出 1 張最不影響之後湊大牌的正牌(把鬼和核心牌留給後面)。
+// 葫蘆 / 順子 / 同花 / 三條 / 對子「中間牌」CP 值太低:又耗正牌又耗鬼還常輸,不主動出,
+// 只有後期沒鬼、湊不出大牌時才用正牌天然的成牌。
 
 /** 這格牌力(牌型 + 最大點數),跟 aiCore.pileStrength 同一把尺。 */
 function power(pile: Card[]): number {
   const v = evaluate(pile)
   return v.category + (v.rankSeq[0] ?? 0) / 15
-}
-
-const jokersIn = (pile: Card[]) => pile.filter(isJoker).length
-
-/** 正牌的「留著的價值」:大牌比較值錢(之後還能湊大的),7~9 小牌便宜。 */
-function realCost(c: Card): number {
-  return c.rank >= 14 ? 0.35 : c.rank >= 13 ? 0.3 : c.rank >= 12 ? 0.25 : c.rank >= 11 ? 0.2 : c.rank >= 10 ? 0.15 : 0.08
 }
 
 /** `who` 拿下格子 i 會不會直接贏(4 幣或湊成 3 連)?公開資訊。 */
@@ -71,94 +71,162 @@ function atMatchPoint(state: GameState, who: PlayerId): boolean {
   return state.slots.some((s, i) => s.owner === null && winsIfOwns(state, who, i))
 }
 
-/**
- * 這回合可以花幾張鬼牌(§11.4 鬼牌預算):手上鬼牌 ÷ 剩幾手 × 主策略係數。
- * 都要溫和:強攻第一手最多 3 張;囤牌第一手手上有像樣的正牌就不花;
- * 快連成三格 / 差一枚金幣 / 要擋對手 → 多花;最後一手全部用掉。
- */
-function jokerBudget(state: GameState, me: PlayerId, rt: BossRuntime, hand: Card[]): number {
-  const j = hand.filter(isJoker).length
-  if (!j) return 0
-  const left = SLOT_COUNT - state.placementsDone[me] // 含這一手
-  if (left <= 1) return j
-  const foe = otherPlayer(me)
-  const cashOut = countCoins(state, foe) >= 2 || state.placementsDone[me] >= 3
-  const factor = rt.main === 'attack' ? 1.35 : rt.main === 'hoard' ? (cashOut ? 1.15 : 0.75) : 1
-  let b = Math.round((j / left) * factor)
-  const first = state.placementsDone[me] === 0
-  if (first && rt.main === 'attack') b = Math.min(b, 3)
-  if (first && rt.main === 'hoard') {
-    // 第一回合真有需要可以不花鬼(手上已經有對子以上的正牌)
-    const reals = hand.filter((c) => !isJoker(c) && !isBlank(c))
-    const hasMade = candidatePiles(reals).some((p) => evaluate(p).category >= CATEGORY.PAIR)
-    b = Math.min(b, hasMade ? 0 : 1)
-  }
-  if (atMatchPoint(state, foe) || atMatchPoint(state, me) || left <= 2) b = Math.max(b + 1, 3)
-  return Math.max(0, Math.min(b, 4, j))
+/** 一個「大牌」組法:正牌 cards + 補 jokers 張鬼。 */
+interface Strong {
+  kind: 'sf' | 'quads'
+  cards: Card[]
+  jokers: number
+  /** 同花順的頭 / 鐵支的點數 */
+  top: number
 }
 
 /**
- * 候選牌堆(§11.4 組牌):先看正牌能組什麼,再用最少的鬼牌補到目標牌型。
- *  - 對子 / 三條 / 鐵支 / 葫蘆:同點數的正牌 + 鬼牌補齊(小牌 7~9 主要用在這裡)。
- *  - 同花順只湊 10~A(同花色的 10/J/Q/K/A 當核心),小牌不塞進同花順(例 #12)。
- *  - 同花(同花色 ≥3 張)、10~A 的順子。
- *  - 正牌本身的成牌、最小的單張(墊牌)。
- * 不產生「整格全鬼」的候選(只有手上沒正牌時才出鬼,見 ghostPick)。
+ * 所有同花順 / 鐵支組法(只列正牌部分,鬼牌另補)。
+ *  - 同花順:每個花色、每個 5 格窗(正牌只有 7~A → 7-J、8-Q、9-K、10-A),窗裡同花色正牌全用上。
+ *    只有 1 張正牌時一定要湊 10~A:1 張小牌 + 4 鬼(例 ♣7~J)比 5 鬼還小(§4.3 #12)。
+ *  - 鐵支:同點數正牌(最多 4 張)+ 鬼補到 4 張。
  */
-function ghostCandidates(reals: Card[], jokers: Card[]): Card[][] {
-  const out: Card[][] = []
-  const J = jokers.length
-  const add = (cards: Card[], j: number) => {
-    if (j > J || cards.length + j > 5 || cards.length + j === 0) return
-    out.push([...cards, ...jokers.slice(0, j)])
-  }
-  const byRank = [...groupBy(reals, (c) => c.rank).values()]
-  for (const g of byRank) {
-    const top = [...g].sort((a, b) => b.suit.localeCompare(a.suit))
-    for (const t of [2, 3, 4]) {
-      const use = top.slice(0, Math.min(t, top.length))
-      add(use, t - use.length)
-    }
-  }
-  // 葫蘆:一組補到三條、另一組補到對子
-  for (const a of byRank) {
-    for (const b of byRank) {
-      if (a === b) continue
-      const ta = a.slice(0, 3)
-      const tb = b.slice(0, 2)
-      add([...ta, ...tb], 3 - ta.length + (2 - tb.length))
-    }
-  }
-  // 同花順(只湊 10~A)與同花
+function strongOptions(reals: Card[]): Strong[] {
+  const out: Strong[] = []
   for (const suited of groupBy(reals, (c) => c.suit).values()) {
-    const high = suited.filter((c) => c.rank >= 10)
-    if (high.length) add(high.slice(0, 5), 5 - Math.min(5, high.length))
-    if (suited.length >= 3) {
-      const best = [...suited].sort((a, b) => b.rank - a.rank).slice(0, 5)
-      add(best, 5 - best.length)
+    for (let top = 11; top <= 14; top++) {
+      const inWin = suited.filter((c) => c.rank <= top && c.rank > top - 5)
+      if (!inWin.length || (inWin.length === 1 && top < 14)) continue
+      out.push({ kind: 'sf', cards: inWin, jokers: 5 - inWin.length, top })
     }
   }
-  // 10~A 的順子(不同花色)
-  const broadway: Card[] = []
-  for (let r = 10; r <= 14; r++) {
-    const c = reals.find((x) => x.rank === r)
-    if (c) broadway.push(c)
+  for (const g of groupBy(reals, (c) => c.rank).values()) {
+    const use = g.slice(0, 4)
+    out.push({ kind: 'quads', cards: use, jokers: 4 - use.length, top: g[0].rank })
   }
-  if (broadway.length >= 2) add(broadway, 5 - broadway.length)
-  // 正牌本身的成牌 + 最小單張(墊牌 / 囤牌時丟)
-  for (const p of candidatePiles(reals)) add(p, 0)
-  const low = [...reals].sort((a, b) => a.rank - b.rank)[0]
-  if (low) add([low], 0)
-  // 同花候選配上鬼牌也可能變成低的同花順(♣789+2 鬼)→ 一律拿掉:小牌不進同花順
-  return out.filter((p) => !(evaluate(p).category === CATEGORY.STRAIGHT_FLUSH && p.some((c) => !isJoker(c) && c.rank < 10)))
+  return out
 }
+
+/**
+ * 在可花的鬼牌內挑一個大牌(§11.4 使用者定案 2026-10-28):
+ *  - 同花順:先比用的鬼少,再比頭大(♣9 10 J + 2 鬼 勝過 ♣10 J + 3 鬼)。
+ *  - 同花順最多比鐵支多用 1 張鬼就選同花順;多 2 張以上才選鐵支。
+ */
+function bestStrong(opts: Strong[], cap: number): Strong | null {
+  const ok = opts.filter((o) => o.jokers <= cap)
+  const by = (a: Strong, b: Strong) => a.jokers - b.jokers || b.top - a.top
+  const sf = ok.filter((o) => o.kind === 'sf').sort(by)[0]
+  const quads = ok.filter((o) => o.kind === 'quads').sort(by)[0]
+  if (sf && (!quads || sf.jokers <= quads.jokers + 1)) return sf
+  return quads ?? null
+}
+
+/** 不管省鬼、只求最大的大牌(差一格就贏 / 最後一手 / 執行力失手時用)。 */
+function biggestStrong(opts: Strong[], cap: number): Strong | null {
+  const rank = (o: Strong) => (o.kind === 'sf' ? 100 : 0) + o.top * 2 - o.jokers * 0.1
+  return opts.filter((o) => o.jokers <= cap).sort((a, b) => rank(b) - rank(a))[0] ?? null
+}
+
+/**
+ * 這些正牌 + 鬼牌還湊得出幾手大牌(每次挑最省鬼的那手,湊完拿掉再算)。剩的鬼 4 張算一手鐵支。
+ * jokersUsed = 湊這幾手正牌要花的鬼(越少代表手上的正牌越好用)。
+ */
+function strongPlan(reals: Card[], jokers: number): { n: number; jokersUsed: number } {
+  let rs = reals
+  let j = jokers
+  let n = 0
+  let used = 0
+  for (;;) {
+    // 一樣省鬼就先用正牌少的(剩的正牌還能多湊一手)
+    const o = strongOptions(rs)
+      .filter((x) => x.jokers <= j)
+      .sort((a, b) => a.jokers - b.jokers || a.cards.length - b.cards.length)[0]
+    if (!o) break
+    n++
+    j -= o.jokers
+    used += o.jokers
+    rs = rs.filter((c) => !o.cards.includes(c))
+  }
+  return { n: n + Math.floor(j / 4), jokersUsed: used }
+}
+const strongCount = (reals: Card[], jokers: number) => strongPlan(reals, jokers).n
+
+/** 之後還會補幾張牌,以及其中大概幾張是鬼(只用公開資訊:牌堆 + 對手手牌 + 沒翻開的對手牌堆)。 */
+function futureDraws(state: GameState, me: PlayerId): { cards: number; jokers: number } {
+  const cards = DRAW_SCHEDULE.slice(state.drawsDone[me]).reduce((s, n) => s + n, 0)
+  const foe = otherPlayer(me)
+  const myJokers = state.hands[me].filter(isJoker).length
+  const myPiles = state.slots.flatMap((s) => s[me])
+  const shownFoe = state.slots.filter((s) => s.owner !== null).flatMap((s) => s[foe])
+  const seenJokers = myJokers + [...myPiles, ...shownFoe].filter(isJoker).length
+  const unseenCards = state.deck.length + state.hands[foe].length + state.slots.filter((s) => s.owner === null).reduce((n, s) => n + s[foe].length, 0)
+  const unseenJokers = Math.max(0, 22 - seenJokers) // 20 張牌組鬼 + 兩張開局鬼
+  const rate = unseenCards > 0 ? Math.min(1, unseenJokers / unseenCards) : 0
+  return { cards, jokers: cards * rate }
+}
+
+/**
+ * 核心牌:能跟別張正牌一起湊大牌的(同花順裡 ≥2 張正牌、對子 / 三條補鬼成鐵支)。
+ * 從最省鬼的組法開始分,分過的牌不重複用(例 ♦7 8 9 先分走,♦K 就落單)。
+ */
+function coreCards(reals: Card[]): Set<Card> {
+  const core = new Set<Card>()
+  let rs = reals
+  for (;;) {
+    const o = strongOptions(rs)
+      .filter((x) => x.cards.length >= 2)
+      .sort((a, b) => a.jokers - b.jokers || b.top - a.top)[0]
+    if (!o) break
+    for (const c of o.cards) core.add(c)
+    rs = rs.filter((c) => !o.cards.includes(c))
+  }
+  return core
+}
+
+/**
+ * 放掉這格要丟的那張:先從「落單的正牌」裡丟最小的(不拆同花順核心、不拆對子);
+ * 全都是核心牌時,丟拿掉後「還湊得出幾手大牌」掉最少、多花的鬼最少的那張(鬼牌算上之後會補到的)。
+ */
+function sacrificeCard(reals: Card[], jokers: number): Card {
+  const core = coreCards(reals)
+  const loose = reals.filter((c) => !core.has(c))
+  if (loose.length) return loose.reduce((b, c) => (c.rank < b.rank ? c : b), loose[0])
+  let best = reals[0]
+  let bestScore = -Infinity
+  for (const c of reals) {
+    const paired = reals.some((x) => x !== c && x.rank === c.rank)
+    const plan = strongPlan(
+      reals.filter((x) => x !== c),
+      jokers,
+    )
+    const score = plan.n * 100 - plan.jokersUsed * 8 - (paired ? 30 : 0) - c.rank
+    if (score > bestScore) {
+      bestScore = score
+      best = c
+    }
+  }
+  return best
+}
+
+/**
+ * 中間牌:正牌天然的成牌,或對子 / 三條補 1 張鬼。只在後期湊不出大牌時用。
+ * urgent(差一格就贏 / 最後一手):鬼全部可以補,單張也補(例 ♦10 + 2 鬼 = 三條,比送單張好)。
+ */
+function midPile(reals: Card[], jokers: Card[], urgent: boolean): Card[] | null {
+  const opts: Card[][] = candidatePiles(reals).filter((p) => evaluate(p).category >= CATEGORY.PAIR)
+  const k = Math.min(urgent ? jokers.length : 1, jokers.length)
+  for (const g of groupBy(reals, (c) => c.rank).values()) {
+    const add = Math.min(k, 4 - Math.min(4, g.length))
+    if (add > 0 && (urgent || g.length >= 2)) opts.push([...g.slice(0, 4), ...jokers.slice(0, add)])
+  }
+  if (!opts.length) return null
+  return opts.reduce((b, p) => (power(p) > power(b) ? p : b), opts[0])
+}
+
+const withJokers = (o: Strong, jokers: Card[]): Card[] => [...o.cards, ...jokers.slice(0, o.jokers)]
 
 function ghostPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): Card[] {
   const hand = state.hands[me]
   const reals = hand.filter((c) => !isJoker(c) && !isBlank(c))
   const jokers = hand.filter(isJoker)
   const blanks = hand.filter(isBlank)
-  const left = SLOT_COUNT - state.placementsDone[me]
+  const pd = state.placementsDone[me]
+  const left = SLOT_COUNT - pd // 含這一手
 
   // 手上沒有正牌:只剩鬼牌才出鬼(分散用,最後一手才全出);連鬼都沒有就墊空白
   if (!reals.length) {
@@ -167,19 +235,53 @@ function ghostPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): C
     return jokers.slice(0, Math.max(1, Math.min(5, n)))
   }
 
-  const budget = jokerBudget(state, me, rt, hand)
-  const cands = ghostCandidates(reals, jokers)
-  const within = cands.filter((p) => jokersIn(p) <= budget)
-  const pool = within.length ? within : cands.filter((p) => jokersIn(p) === 0)
-
-  // 失手(執行力沒發揮):直接出預算內最強的,不算成本
-  if (rng() >= rt.execution) return pool.reduce((b, p) => (power(p) > power(b) ? p : b), pool[0])
-
-  // CP 值:牌力 − 鬼牌成本 − 正牌成本。鬼牌越多(相對剩下手數)越便宜;
-  // 同樣大時鬼牌少的贏(§4.2),成本自然讓「正牌多、鬼牌少」的組法勝出。
   const J = jokers.length
-  const jokerCost = Math.max(0.25, Math.min(2, (1.2 * left) / (J + 1))) * (rt.main === 'attack' ? 0.8 : rt.main === 'hoard' ? 1.25 : 1)
-  const score = (p: Card[]) =>
-    power(p) - jokersIn(p) * jokerCost - p.filter((c) => !isJoker(c)).reduce((s, c) => s + realCost(c), 0)
-  return pool.reduce((b, p) => (score(p) > score(b) ? p : b), pool[0])
+  const foe = otherPlayer(me)
+  const opts = strongOptions(reals)
+
+  // 差一格就贏(誰都一樣)/ 最後一手:不省了,出最大的
+  if (left <= 1 || atMatchPoint(state, foe) || atMatchPoint(state, me)) {
+    const big = biggestStrong(opts, J)
+    if (big) return withJokers(big, jokers)
+    return midPile(reals, jokers, true) ?? [sacrificeCard(reals, J)]
+  }
+
+  // 一手最多花 3 張鬼;4 張以上(1 張大牌 + 4 鬼)太耗,只有鬼牌很多時才用
+  const future = futureDraws(state, me)
+  const roomy = J + future.jokers >= 4 + 2.5 * (left - 1)
+  const cap = Math.min(J, roomy || left <= 2 ? 5 : 3)
+
+  // 執行力失手:不算省鬼、也不放格子,直接出上限內最大的大牌(浪費一點鬼,但不會出怪牌)
+  if (rng() >= rt.execution) {
+    const big = biggestStrong(opts, cap)
+    if (big) return withJokers(big, jokers)
+  }
+
+  const pick = bestStrong(opts, cap)
+
+  // 還湊得出幾手大牌 → 要放掉幾格
+  const canMake = strongCount(reals, J) + future.cards / 4.5
+  const mustSac = Math.max(0, left - canMake)
+
+  let sac: boolean
+  if (!pick) sac = true
+  else if (rt.main === 'hoard') {
+    // 囤牌:百鬼節奏快 → 只放前面(先手前 2 手 / 後手前 1 手),之後就開始出同花順;落後 2 幣提早兌現
+    const hoardEnd = state.firstPicker === me ? 2 : 1
+    const behind = countCoins(state, foe) - countCoins(state, me) >= 2
+    sac = pd < hoardEnd && !behind
+  } else if (rt.main === 'attack') {
+    sac = false // 強攻:先出大牌,沒資源了才放(上面 !pick)
+  } else {
+    sac = mustSac > 0 && rng() < mustSac / left // 平衡:要放的格子平均分散
+  }
+
+  if (!sac && pick) return withJokers(pick, jokers)
+
+  // 後期沒鬼、湊不出大牌:正牌天然的成牌還能搶一格,比送一張好
+  if (!pick && left <= 3) {
+    const mid = midPile(reals, jokers, false)
+    if (mid) return mid
+  }
+  return [sacrificeCard(reals, J + Math.round(future.jokers))]
 }

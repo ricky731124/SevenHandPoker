@@ -13,26 +13,35 @@ export type LimitedMode = 'ghost' | 'blank' | 'mixed' | 'fire'
 
 export interface LimitedInfo {
   name: string
+  /** 牌桌右側方鈕上的字(一行一個元素) */
+  badge: string[]
   /** 規則卡(VS 畫面後跳出)的 2~3 行規則 */
   rules: string[]
 }
 
+const HIDDEN_RULE = '對手只看得到你出幾張，無法看到你實際出牌的位置。'
+const GHOST_TIE_RULE = '牌一樣大時，鬼牌用得少的贏；鬼牌一樣多，比正牌點數大小；正牌一樣大，再比花色大小。'
+
 export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   ghost: {
     name: '百鬼夜行',
-    rules: ['2~6 共 20 張全部變成鬼牌。', '牌一樣大時，鬼牌用得少的贏；鬼牌一樣多，比正牌。', '對手只看得到你出幾張。'],
+    badge: ['百鬼', '夜行'],
+    rules: ['點數 2~6（共 20 張）全部變成鬼牌。', GHOST_TIE_RULE, HIDDEN_RULE],
   },
   blank: {
     name: '空城計',
-    rules: ['2~6 共 20 張全部變成空白牌。', '空白牌比牌時不算，但會佔張數——真真假假，讓對手猜。', '對手只看得到你出幾張。'],
+    badge: ['空城計'],
+    rules: ['點數 2~6（共 20 張）全部變成空白牌。', '空白牌比牌時不算，但會佔張數——真真假假，讓對手猜。', HIDDEN_RULE],
   },
   mixed: {
     name: '撲朔迷離',
-    rules: ['2~6 裡 10 張變鬼牌、10 張變空白牌。', '牌一樣大時，鬼牌用得少的贏；鬼牌一樣多，比正牌。', '對手只看得到你出幾張。'],
+    badge: ['撲朔', '迷離'],
+    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', GHOST_TIE_RULE, HIDDEN_RULE],
   },
   fire: {
     name: '火力全開',
-    rules: ['帶 5 張特殊卡進場，整場可以用 3 張。', '每回合最多用 1 張，每張只能用一次。', '對手只看得到你出幾張。'],
+    badge: ['火力', '全開'],
+    rules: ['帶 5 張特殊卡進場，整場可以用 3 張。', '每回合最多用 1 張，每張只能用一次。', HIDDEN_RULE],
   },
 }
 
@@ -47,6 +56,17 @@ export const LIMITED_SCHEDULE: Record<number, LimitedMode> = {
   6: 'mixed',
 }
 
+/** 一週表(快速配對「?」用):星期一排到星期日。 */
+export const LIMITED_WEEK: { day: number; label: string }[] = [
+  { day: 1, label: '星期一' },
+  { day: 2, label: '星期二' },
+  { day: 3, label: '星期三' },
+  { day: 4, label: '星期四' },
+  { day: 5, label: '星期五' },
+  { day: 6, label: '星期六' },
+  { day: 0, label: '星期日' },
+]
+
 /**
  * 測試期固定玩法(spec §0):有設定時,不管星期幾都是這一種。四種都測完才改成 null 開星期輪替。
  * 步驟 1 = 百鬼夜行。
@@ -58,9 +78,11 @@ const TAIWAN_OFFSET_MS = 8 * 60 * 60 * 1000
 /** 某個時間點(ms,最好是伺服器時間)的限定房玩法。換日點 = 台灣 00:00。 */
 export function limitedModeAt(nowMs: number): LimitedMode {
   if (LIMITED_TEST_MODE) return LIMITED_TEST_MODE
-  const day = new Date(nowMs + TAIWAN_OFFSET_MS).getUTCDay()
-  return LIMITED_SCHEDULE[day]
+  return LIMITED_SCHEDULE[taiwanDay(nowMs)]
 }
+
+/** 台灣時間的星期(0 = 星期日)。 */
+export const taiwanDay = (nowMs: number): number => new Date(nowMs + TAIWAN_OFFSET_MS).getUTCDay()
 
 /** 這個玩法的比牌用決勝五步(鬼牌少的贏…)嗎?只有有一堆鬼牌的兩種。 */
 export const usesLimitedCompare = (m: LimitedMode | null | undefined): boolean => m === 'ghost' || m === 'mixed'

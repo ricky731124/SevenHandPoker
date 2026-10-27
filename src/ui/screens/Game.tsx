@@ -592,9 +592,10 @@ export function GameBoard() {
         </div>
       )}
 
-      {/* 限定房:牌桌上方常駐玩法標籤(§8.4);觀戰 / 回放也標,但只有對戰者點得開規則卡 */}
-      {engine.mode && <LimitedBadge mode={engine.mode} onClick={spec ? undefined : () => setRuleOpen(true)} />}
-      {engine.mode && !spec && <LimitedRuleModal mode={engine.mode} open={ruleOpen} onClose={() => setRuleOpen(false)} />}
+      {/* 限定房:右側「?」上方常駐玩法方鈕(§8.4),點了看規則卡。對戰者 + 直播觀戰都有;
+          回放不放(點回放前就知道是哪種玩法,右欄還有倍速鈕)。 */}
+      {engine.mode && !replay && <LimitedBadge mode={engine.mode} onClick={() => setRuleOpen(true)} />}
+      {engine.mode && !replay && <LimitedRuleModal mode={engine.mode} open={ruleOpen} onClose={() => setRuleOpen(false)} />}
 
       {timed && (
         <div className={`game__timer${secsLeft <= 10 && !isPaused ? ' game__timer--low' : ''}`}>

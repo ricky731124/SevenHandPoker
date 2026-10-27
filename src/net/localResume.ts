@@ -41,6 +41,7 @@ export function resumeLocalMatch(): boolean {
     timeLimit: snap.timeLimit,
     campaignSubId: snap.subId,
     casualBot: snap.mode === 'casual',
+    ...(snap.engine.mode ? { limited: snap.engine.mode } : {}), // 限定房重整後還是同一種玩法
   })
   return true
 }
