@@ -22,6 +22,7 @@ export interface LimitedInfo {
 }
 
 const HIDDEN_RULE = '對手只看得到你出幾張，無法看到你實際出牌的位置。'
+const JOKER_CAP_RULE = '每格最多放 2 張鬼牌。'
 
 /** 規則卡「比牌三步驟」的一個範例:左疊 vs 右疊(牌 id 用 cardId 格式,鬼 = 'J'),左邊贏。 */
 export interface TieStep {
@@ -41,7 +42,7 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   ghost: {
     name: '百鬼夜行',
     badge: ['百鬼', '夜行'],
-    rules: ['點數 2~6（共 20 張）全部變成鬼牌，每格最多放 2 張鬼牌。', HIDDEN_RULE],
+    rules: ['點數 2~6（共 20 張）全部變成鬼牌。', JOKER_CAP_RULE, HIDDEN_RULE],
     tieSteps: true,
   },
   blank: {
@@ -52,7 +53,7 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   mixed: {
     name: '撲朔迷離',
     badge: ['撲朔', '迷離'],
-    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌，每格最多放 2 張鬼牌。', HIDDEN_RULE],
+    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', JOKER_CAP_RULE, HIDDEN_RULE],
     tieSteps: true,
   },
   fire: {

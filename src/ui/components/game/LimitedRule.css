@@ -35,6 +35,11 @@
   grid-area: ok;
   align-self: end;
 }
+/* Modal 的全寬按鈕會扣 20~40px 寬、靠 align-self 置中;外面包一層 div 時要自己置中 */
+.limited-rule__ok {
+  display: flex;
+  justify-content: center;
+}
 .limited-rule__ties {
   color: var(--parch-text);
 }
@@ -161,26 +166,36 @@
   padding: 0;
   list-style: none;
   color: var(--parch-text);
+  font-family: var(--font-display);
   font-size: 19px;
   font-weight: 800;
 }
-/* 每列同一組欄寬(星期欄 = 「星期三、日」5 個字)→ 玩法名上下對齊 */
+/* 每列同一組欄寬(星期欄放得下「星期三、日」、不換行)→ 玩法名上下對齊。
+   框先留透明 3px,今天那列換金色時版面不會跳。 */
 .limited-week__row {
   display: grid;
-  grid-template-columns: 5em 1fr auto;
+  grid-template-columns: 5.6em 1fr auto;
   column-gap: 14px;
   align-items: center;
-  padding: 6px 8px 6px 14px;
+  padding: 4px 8px 4px 14px;
+  border: 3px solid transparent;
   border-radius: var(--r-md, 10px);
+  white-space: nowrap;
 }
+/* 今天那列:金框包住(同排行榜第一名 .lb-row--gold),不換底色 → 不跟「玩法介紹」的木色撞 */
+.limited-week__row--today {
+  border-color: #f6c945;
+  box-shadow: inset 0 0 0 2px #fff3c4, inset 0 0 12px rgba(255, 232, 154, 0.65), 0 0 14px rgba(246, 201, 69, 0.8);
+}
+/* 玩法介紹:橢圓木框 */
 .limited-week__intro {
-  padding: 5px 10px;
-  border-radius: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
   border: 2px solid var(--wood-edge);
   background: var(--wood-tex);
   color: var(--wood-text);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
   white-space: nowrap;
@@ -189,14 +204,6 @@
 }
 .limited-week__intro:active {
   transform: translateY(1px);
-}
-.limited-week__row--today .limited-week__intro {
-  border-color: var(--wood-text);
-}
-.limited-week__row--today {
-  background: var(--wood-tex);
-  color: var(--wood-text);
-  box-shadow: inset 0 0 0 2px var(--wood-edge);
 }
 .limited-week__note {
   margin: 0;

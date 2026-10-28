@@ -30,7 +30,7 @@ export function LimitedRuleModal({
 
   const info = LIMITED_INFO[mode]
   return (
-    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.tieSteps ? 640 : 380} panelClass="limited-rule">
+    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.tieSteps ? 660 : 380} panelClass="limited-rule">
       {/* 有範例的玩法分兩欄(左:範例、右:規則 + 知道了),手機橫向才不用往下捲 */}
       <div className={info.tieSteps ? 'limited-rule__split' : undefined}>
         <ul className="limited-rule__list">
@@ -126,15 +126,16 @@ export function LimitedBadge({ mode, onClick }: { mode: LimitedMode; onClick?: (
 }
 
 /**
- * 快速配對 / 建立房間「?」:限定房輪值表(§8.2)。同一種玩法的星期併一列、今天那列標亮;
- * 每列「玩法介紹」疊開那個玩法的規則卡(玩之前先看規則)。測試期固定玩法時多一行說明。
+ * 快速配對 / 建立房間「?」:限定房輪值表(§8.2)。同一種玩法的星期併一列、今天那列金框;
+ * 每列「玩法介紹」疊開那個玩法的規則卡(玩之前先看規則)。左上返回鍵關閉(沒有「知道了」)。
+ * 測試期固定玩法時多一行說明。
  */
 export function LimitedRotaModal({ open, onClose, today, testMode }: { open: boolean; onClose: () => void; today: number; testMode: LimitedMode | null }) {
   const [rule, setRule] = useState<LimitedMode | null>(null)
   const closeRule = useCallback(() => setRule(null), [])
   return (
     <>
-      <Modal open={open} onClose={onClose} title="限定房輪值表" width={400} panelClass="limited-week">
+      <Modal open={open} onClose={onClose} onBack={onClose} title="限定房輪值表" width={440} panelClass="limited-week">
         <ul className="limited-week__list">
           {LIMITED_ROTA.map(({ mode, days, label }) => (
             <li key={mode} className={days.includes(today) ? 'limited-week__row limited-week__row--today' : 'limited-week__row'}>
@@ -154,15 +155,6 @@ export function LimitedRotaModal({ open, onClose, today, testMode }: { open: boo
           ))}
         </ul>
         {testMode && <p className="limited-week__note">測試期間每天都是{LIMITED_INFO[testMode].name}</p>}
-        <Button
-          full
-          onClick={() => {
-            sfx.click()
-            onClose()
-          }}
-        >
-          知道了
-        </Button>
       </Modal>
       {rule && <LimitedRuleModal mode={rule} open onClose={closeRule} />}
     </>
