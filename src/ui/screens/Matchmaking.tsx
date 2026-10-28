@@ -14,14 +14,14 @@ import Button from '../components/Button'
 import { sfx } from '../../audio/sfx'
 import './Matchmaking.css'
 
-const SEARCH_SECS = 23
+const SEARCH_SECS = 18
 
 /** The "matching…" status line ticks through phases so the wait feels alive. A
  *  real human still connects instantly whenever one appears — this text is only
- *  flavour for the empty wait. 使用者定案:兩段文案(15/16–23 配對時序). */
+ *  flavour for the empty wait. 使用者定案:兩段文案(10/11–18 配對時序,2026-10-28 從 15/16–23 縮短). */
 function phaseText(elapsed: number): string {
-  if (elapsed < 16) return '請耐心等候…' // 0–15 秒(純等真人)
-  return '即將配對完成…' // 16–23 秒(邊等真人邊配人機)
+  if (elapsed < 11) return '請耐心等候…' // 0–10 秒(純等真人)
+  return '即將配對完成…' // 11–18 秒(邊等真人邊配人機)
 }
 
 /**

@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Card as TCard, Rank, Suit } from '../../../game/cards'
-import { LIMITED_INFO, LIMITED_SCHEDULE, LIMITED_WEEK, TIE_STEPS, TIE_STEPS_INTRO, type LimitedMode } from '../../../game/limited'
+import { LIMITED_INFO, LIMITED_ROTA, TIE_STEPS, TIE_STEPS_INTRO, type LimitedMode } from '../../../game/limited'
 import Card from '../Card'
 import Modal from '../Modal'
 import Button from '../Button'
@@ -31,7 +31,7 @@ export function LimitedRuleModal({
   const info = LIMITED_INFO[mode]
   return (
     <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.tieSteps ? 640 : 380} panelClass="limited-rule">
-      {/* 有範例的玩法分兩欄(左:規則 + 知道了、右:範例),手機橫向才不用往下捲 */}
+      {/* 有範例的玩法分兩欄(左:範例、右:規則 + 知道了),手機橫向才不用往下捲 */}
       <div className={info.tieSteps ? 'limited-rule__split' : undefined}>
         <ul className="limited-rule__list">
           {info.rules.map((r) => (
@@ -125,28 +125,46 @@ export function LimitedBadge({ mode, onClick }: { mode: LimitedMode; onClick?: (
   )
 }
 
-/** 快速配對「?」:限定房一週表(§8.2)。今天那列標亮;測試期固定玩法時多一行說明。 */
-export function LimitedWeekModal({ open, onClose, today, testMode }: { open: boolean; onClose: () => void; today: number; testMode: LimitedMode | null }) {
+/**
+ * 快速配對 / 建立房間「?」:限定房輪值表(§8.2)。同一種玩法的星期併一列、今天那列標亮;
+ * 每列「玩法介紹」疊開那個玩法的規則卡(玩之前先看規則)。測試期固定玩法時多一行說明。
+ */
+export function LimitedRotaModal({ open, onClose, today, testMode }: { open: boolean; onClose: () => void; today: number; testMode: LimitedMode | null }) {
+  const [rule, setRule] = useState<LimitedMode | null>(null)
+  const closeRule = useCallback(() => setRule(null), [])
   return (
-    <Modal open={open} onClose={onClose} title="限定房一週表" width={340} panelClass="limited-week">
-      <ul className="limited-week__list">
-        {LIMITED_WEEK.map(({ day, label }) => (
-          <li key={day} className={day === today ? 'limited-week__row limited-week__row--today' : 'limited-week__row'}>
-            <span>{label}</span>
-            <span>{LIMITED_INFO[LIMITED_SCHEDULE[day]].name}</span>
-          </li>
-        ))}
-      </ul>
-      {testMode && <p className="limited-week__note">測試期間每天都是{LIMITED_INFO[testMode].name}</p>}
-      <Button
-        full
-        onClick={() => {
-          sfx.click()
-          onClose()
-        }}
-      >
-        知道了
-      </Button>
-    </Modal>
+    <>
+      <Modal open={open} onClose={onClose} title="限定房輪值表" width={400} panelClass="limited-week">
+        <ul className="limited-week__list">
+          {LIMITED_ROTA.map(({ mode, days, label }) => (
+            <li key={mode} className={days.includes(today) ? 'limited-week__row limited-week__row--today' : 'limited-week__row'}>
+              <span>{label}</span>
+              <span>{LIMITED_INFO[mode].name}</span>
+              <button
+                type="button"
+                className="limited-week__intro"
+                onClick={() => {
+                  sfx.click()
+                  setRule(mode)
+                }}
+              >
+                玩法介紹
+              </button>
+            </li>
+          ))}
+        </ul>
+        {testMode && <p className="limited-week__note">測試期間每天都是{LIMITED_INFO[testMode].name}</p>}
+        <Button
+          full
+          onClick={() => {
+            sfx.click()
+            onClose()
+          }}
+        >
+          知道了
+        </Button>
+      </Modal>
+      {rule && <LimitedRuleModal mode={rule} open onClose={closeRule} />}
+    </>
   )
 }

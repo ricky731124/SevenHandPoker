@@ -86,6 +86,13 @@ export default function StickerProto() {
               border: '2px solid #d99a5a',
               boxShadow: '0 5px 14px rgba(0,0,0,.35)',
               maxWidth: '90vw',
+              // 貼圖多 → 最多露 4 排(也不超出畫面上緣),其餘上下滑。
+              maxHeight: 'min(234px, calc(var(--stage-h, 100vh) - clamp(76px, 0.24 * var(--stage-h, 100vh), 150px) - 60px))',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              overscrollBehavior: 'contain',
+              touchAction: 'pan-y',
+              scrollbarWidth: 'thin',
             }}
           >
             {owned.map((s) => (

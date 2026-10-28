@@ -59,7 +59,7 @@
 .lchat-wrap { position: relative; }
 
 .lchat-list {
-  height: min(46vh, 360px);
+  height: min(54vh, 420px); /* 2026-10-28 使用者:再大一些些(原 46vh / 360px),手機仍留上下邊 */
   overflow-y: auto;
   overscroll-behavior: contain; /* 訊息捲到頂/底不連動到彈窗或背後頁面 */
   padding: 4px 2px;

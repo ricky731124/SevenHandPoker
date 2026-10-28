@@ -69,7 +69,8 @@ function Pile({
         <motion.div
           key={c.id}
           className="pile__card"
-          style={{ left: i * off * 0.7, top: (stackUp ? -1 : 1) * i * off, zIndex: stackUp ? cards.length - i : i }}
+          // 疊牌偏移取整數 px:小數位置在圖層重畫時會差半像素、看起來抖
+          style={{ left: Math.round(i * off * 0.7), top: Math.round((stackUp ? -1 : 1) * i * off), zIndex: stackUp ? cards.length - i : i }}
           initial={skipEnter ? false : { y: -34, opacity: 0, rotate: -8 }}
           animate={{ y: 0, opacity: 1, rotate: 0 }}
           transition={{ delay: i * 0.04, type: 'spring', stiffness: 300, damping: 22 }}

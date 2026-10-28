@@ -15,13 +15,13 @@
   margin-top: 6px;
 }
 
-/* 有範例的玩法:左欄規則、右欄比牌三步驟;窄螢幕(直式)疊成一欄 */
+/* 有範例的玩法:左欄比牌三步驟、右欄規則 + 知道了(使用者習慣「知道了」在右邊);窄螢幕(直式)疊成一欄 */
 .limited-rule__split {
   display: grid;
-  grid-template-columns: 1fr 336px;
+  grid-template-columns: 336px 1fr;
   grid-template-areas:
-    'rules ties'
-    'ok ties';
+    'ties rules'
+    'ties ok';
   grid-template-rows: 1fr auto;
   column-gap: 14px;
 }
@@ -152,20 +152,46 @@
   transform: translateY(1px);
 }
 
-/* 快速配對「?」→ 一週表 */
+/* 快速配對 / 建立房間「?」→ 輪值表:星期 | 玩法(對齊成一欄)| 玩法介紹 */
 .limited-week__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
   color: var(--parch-text);
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 800;
 }
+/* 每列同一組欄寬(星期欄 = 「星期三、日」5 個字)→ 玩法名上下對齊 */
 .limited-week__row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 12px;
+  display: grid;
+  grid-template-columns: 5em 1fr auto;
+  column-gap: 14px;
+  align-items: center;
+  padding: 6px 8px 6px 14px;
   border-radius: var(--r-md, 10px);
+}
+.limited-week__intro {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 2px solid var(--wood-edge);
+  background: var(--wood-tex);
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+.limited-week__intro:active {
+  transform: translateY(1px);
+}
+.limited-week__row--today .limited-week__intro {
+  border-color: var(--wood-text);
 }
 .limited-week__row--today {
   background: var(--wood-tex);

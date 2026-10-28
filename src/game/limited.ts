@@ -81,16 +81,24 @@ export const LIMITED_SCHEDULE: Record<number, LimitedMode> = {
   6: 'mixed',
 }
 
-/** 一週表(快速配對「?」用):星期一排到星期日。 */
-export const LIMITED_WEEK: { day: number; label: string }[] = [
-  { day: 1, label: '星期一' },
-  { day: 2, label: '星期二' },
-  { day: 3, label: '星期三' },
-  { day: 4, label: '星期四' },
-  { day: 5, label: '星期五' },
-  { day: 6, label: '星期六' },
-  { day: 0, label: '星期日' },
-]
+const DAY_CHAR = ['日', '一', '二', '三', '四', '五', '六']
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] // 星期一排到星期日
+
+/**
+ * 輪值表(快速配對 / 建立房間「?」用,spec §8.2):同一種玩法的星期併成一列,
+ * 依該玩法第一次出現的星期排(例:{ mode: 'fire', days: [3, 0], label: '星期三、日' })。
+ */
+export const LIMITED_ROTA: { mode: LimitedMode; days: number[]; label: string }[] = (() => {
+  const rows: { mode: LimitedMode; days: number[]; label: string }[] = []
+  for (const d of WEEK_ORDER) {
+    const mode = LIMITED_SCHEDULE[d]
+    const row = rows.find((r) => r.mode === mode)
+    if (row) row.days.push(d)
+    else rows.push({ mode, days: [d], label: '' })
+  }
+  for (const r of rows) r.label = '星期' + r.days.map((d) => DAY_CHAR[d]).join('、')
+  return rows
+})()
 
 /**
  * 測試期固定玩法(spec §0):有設定時,不管星期幾都是這一種。四種都測完才改成 null 開星期輪替。

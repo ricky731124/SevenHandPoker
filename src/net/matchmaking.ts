@@ -17,10 +17,11 @@ import type { LimitedMode } from '../game/limited'
  * the claimed peer's entry; the peer sees it and joins.
  */
 
-/** Bot fallback fires at a RANDOM point in 16–23s (never before 16s), so pairing
+/** Bot fallback fires at a RANDOM point in 11–18s (never before 11s), so pairing
  *  doesn't always land at an obvious fixed time. Humans can still claim/insert any
- *  time before then (0–15s is effectively human-only; 16–23s is human-or-bot). */
-const botFallbackDelay = () => 16_000 + Math.floor(Math.random() * 7_000) // [16000, 22999]
+ *  time before then (0–10s is effectively human-only; 11–18s is human-or-bot).
+ *  2026-10-28 使用者:15 秒太久 → 改 10 / 11–18。 */
+const botFallbackDelay = () => 11_000 + Math.floor(Math.random() * 7_000) // [11000, 17999]
 const FREE_MATCH_TIME_LIMIT = 99 // fixed (使用者定案:自由匹配不選秒數)
 
 interface QueueEntry {
@@ -153,7 +154,7 @@ export function joinMatchmaking(
   // Re-scan whenever the queue changes (someone new joined / freed up).
   unsubList = onValue(listRef, () => void tryClaim(), () => {})
 
-  // 4) Bot fallback at a random 16–23s (human claim above still wins if one lands first).
+  // 4) Bot fallback at a random 11–18s (human claim above still wins if one lands first).
   timer = setTimeout(() => {
     if (done) return
     done = true

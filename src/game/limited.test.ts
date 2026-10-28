@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Card, Rank, Suit } from './cards'
 import { isJoker, isBlank, isStarterSpecial, makeDeck } from './cards'
 import { evaluate, compareLimited, CATEGORY } from './evaluate'
-import { LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
+import { LIMITED_ROTA, LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
 import { defaultLimitedBrain, limitedPick } from './limitedAI'
 import { aiPick, aiPlace } from './ai'
 import { buildFrames } from './replay'
@@ -59,6 +59,14 @@ describe('排程', () => {
   it('測試期固定玩法(步驟 1 = 百鬼夜行)', () => {
     expect(LIMITED_TEST_MODE).toBe('ghost')
     for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('ghost')
+  })
+  it('輪值表:同玩法的星期併一列(§8.2)', () => {
+    expect(LIMITED_ROTA.map((r) => [r.label, r.mode])).toEqual([
+      ['星期一、四', 'ghost'],
+      ['星期二、五', 'blank'],
+      ['星期三、日', 'fire'],
+      ['星期六', 'mixed'],
+    ])
   })
 })
 

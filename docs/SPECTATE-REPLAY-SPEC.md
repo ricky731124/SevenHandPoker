@@ -218,6 +218,7 @@ presence/{uid}/lastActive : <serverTimestamp>   # 改為「心跳時間戳」（
 - **全被佔滿（15 隻都在打）**：`leaseBot` 回 `null` → `Matchmaking.startBot` 每 3 秒重試、維持「尋找對手中…」，使用者可自行取消。**不做保底無名人機**（使用者定案）。
 
 ### 3.4 快速配對時序改造（15 / 16–23 秒）
+> **2026-10-28 使用者改：縮短成 10 / 11–18 秒**（「15 秒好久」）。0–10 秒純等真人、11–18 秒之間隨機配人機（`11000 + random*7000`）、`SEARCH_SECS=18`、phaseText 0–10「請耐心等候…」、11–18「即將配對完成…」。真人照樣可插隊。下面是當初 15 / 16–23 的紀錄。
 - 現況：`Matchmaking.tsx` 等 30 秒（`SEARCH_SECS=30`）→ `onTimeout` → `startBot()`。`matchmaking.ts` 的 `TIMEOUT_MS=30_000`。
 - 改為：
   - **0–15 秒**：純等真人（維持現有 `joinMatchmaking` claim 邏輯）。

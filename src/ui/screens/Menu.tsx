@@ -5,7 +5,7 @@ import { useCampaignStore } from '../../state/campaignStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import JoinConfirm from '../components/JoinConfirm'
-import Button, { Paw, IconRobot, IconDice, IconKey, IconGlobe } from '../components/Button'
+import Button, { Paw, IconRobot, IconDice, IconKey, IconGlobe, IconSpade, IconCards, IconHourglass } from '../components/Button'
 import Modal from '../components/Modal'
 import AccountButton from '../components/AccountButton'
 import LiveBoard from '../components/LiveBoard'
@@ -13,7 +13,7 @@ import LobbyChat from '../components/LobbyChat'
 import { sfx } from '../../audio/sfx'
 import { LIMITED_INFO, LIMITED_TEST_MODE } from '../../game/limited'
 import { limitedDayNow, limitedModeNow } from '../../net/limitedClock'
-import { LimitedWeekModal } from '../components/game/LimitedRule'
+import { LimitedRotaModal } from '../components/game/LimitedRule'
 import './Menu.css'
 
 type Opponent = 'ai' | 'friend'
@@ -26,7 +26,7 @@ export default function Menu() {
   const openMatchmaking = useAppStore((s) => s.openMatchmaking)
   const net = useNetStore()
   const [dialog, setDialog] = useState<null | 'start' | 'create' | 'join' | 'free'>(null)
-  const [weekOpen, setWeekOpen] = useState(false) // 快速配對「?」→ 限定房一週表
+  const [weekOpen, setWeekOpen] = useState(false) // 快速配對 / 建立房間「?」→ 限定房輪值表
 
   // Create-match config (#9): opponent · room type · per-turn time. Single-select
   // per group; pre-checked with sensible defaults (好友 · 特殊 · 99 秒).
@@ -68,6 +68,19 @@ export default function Menu() {
     sfx.unlock()
     setDialog('start')
   }
+
+  // 快速配對 / 建立房間 標題列右上角「?」→ 限定房輪值表(spec §8.1 / §8.2)
+  const rotaBtn = (
+    <button
+      type="button"
+      className="backbtn menu__qbtn"
+      onClick={() => { sfx.click(); setWeekOpen(true) }}
+      aria-label="限定房輪值表"
+      title="限定房輪值表"
+    >
+      ?
+    </button>
+  )
 
   return (
     <div className="menu">
@@ -131,22 +144,12 @@ export default function Menu() {
         onBack={() => setDialog('start')}
         title="快速配對"
         panelClass="menu-free menu-dialog"
-        titleAction={
-          <button
-            type="button"
-            className="backbtn menu__qbtn"
-            onClick={() => { sfx.click(); setWeekOpen(true) }}
-            aria-label="限定房一週表"
-            title="限定房一週表"
-          >
-            ?
-          </button>
-        }
+        titleAction={rotaBtn}
       >
         <p className="menu__hint">選擇房型,系統會線上為你配對對手,請耐心等待一下。</p>
         <Button
           full
-          icon={<IconGlobe />}
+          icon={<IconSpade />}
           onClick={() => {
             sfx.click()
             ensureAccount()
@@ -158,7 +161,7 @@ export default function Menu() {
         </Button>
         <Button
           full
-          icon={<IconGlobe />}
+          icon={<IconCards />}
           onClick={() => {
             sfx.click()
             ensureAccount()
@@ -170,7 +173,7 @@ export default function Menu() {
         </Button>
         <Button
           full
-          icon={<IconGlobe />}
+          icon={<IconHourglass />}
           onClick={() => {
             sfx.click()
             ensureAccount()
@@ -179,14 +182,14 @@ export default function Menu() {
           }}
         >
           <span className="menu__btn-label">
-            限定房配對<span className="menu__btn-sub">{todayName}</span>
+            限定房配對<span className="menu__btn-sub">・{todayName}</span>
           </span>
         </Button>
       </Modal>
-      <LimitedWeekModal open={weekOpen} onClose={() => setWeekOpen(false)} today={limitedDayNow()} testMode={LIMITED_TEST_MODE} />
+      <LimitedRotaModal open={weekOpen} onClose={() => setWeekOpen(false)} today={limitedDayNow()} testMode={LIMITED_TEST_MODE} />
 
       {/* Create-match config: opponent · room type · time (each required), confirm */}
-      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="建立房間" panelClass="menu-dialog">
+      <Modal open={dialog === 'create'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="建立房間" panelClass="menu-dialog" titleAction={rotaBtn}>
         <CheckGroup
           label="對手"
           value={opponent}

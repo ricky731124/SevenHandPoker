@@ -114,6 +114,34 @@ export function IconGlobe() {
     </svg>
   )
 }
+/** Monochrome spade (快速配對 · 一般房). Inherits the button's wood-brown color. */
+export function IconSpade() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2.6S3.4 9.2 3.4 14.4c0 2.9 2.2 4.2 3.9 3.3 1.1-.5 1.8-1.4 2.1-2.4.2 1.9-.4 3.8-1.6 5.3h8.4c-1.2-1.5-1.8-3.4-1.6-5.3.3 1 1 1.9 2.1 2.4 1.7.9 3.9-.4 3.9-3.3 0-5.2-8.6-11.8-8.6-11.8Z" />
+    </svg>
+  )
+}
+/** Monochrome two fanned cards (快速配對 · 特殊房). Inherits the button's wood-brown color. */
+export function IconCards() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+      <rect x="3.2" y="5.6" width="10.5" height="14.5" rx="1.8" transform="rotate(-12 8.4 12.8)" />
+      <rect x="10" y="3.8" width="10.5" height="14.5" rx="1.8" transform="rotate(10 15.2 11)" fill="currentColor" fillOpacity="0.18" />
+      <path d="M15.4 8.4l1.7 2.6-1.7 2.6-1.7-2.6z" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+/** Monochrome hourglass (快速配對 · 限定房). Inherits the button's wood-brown color. */
+export function IconHourglass() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 3.5h12M6 20.5h12" />
+      <path d="M7.5 3.5c0 4.2 4.5 5.6 4.5 8.5s-4.5 4.3-4.5 8.5M16.5 3.5c0 4.2-4.5 5.6-4.5 8.5s4.5 4.3 4.5 8.5" />
+      <path d="M9.2 18.6c.8-1.4 2-2 2.8-2s2 .6 2.8 2z" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
 /** Monochrome megaphone (公告). Inherits the button's wood-brown color. */
 export function IconMegaphone() {
   return (

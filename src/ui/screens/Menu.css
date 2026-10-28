@@ -156,14 +156,14 @@
   white-space: nowrap;
   pointer-events: none;
 }
-/* 快速配對:「限定房配對」後面空一格接今天的玩法(小字)。小字浮在右邊 → 「限定房配對」
-   四個字的位置跟上面兩顆按鈕對齊。 */
+/* 快速配對:「限定房配對」後面接「・今天的玩法」(小字,「・」同大小)。小字浮在右邊 →
+   「限定房配對」五個字的位置跟上面兩顆按鈕對齊。全形「・」左右自帶空白,不再另外空。 */
 .menu__btn-label {
   position: relative;
 }
 .menu__btn-sub {
   position: absolute;
-  left: calc(100% + 0.6em);
+  left: 100%;
   bottom: 0.15em;
   font-size: 0.68em;
   white-space: nowrap;
