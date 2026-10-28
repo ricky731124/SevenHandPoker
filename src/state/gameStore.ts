@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { cardFaceText, type Card } from '../game/cards'
+import { cardFaceText, isJoker, type Card } from '../game/cards'
 import { evaluate } from '../game/evaluate'
 import { randomSeed } from '../game/rng'
 import { sortHand, type SortDir, type SortMode } from '../game/sort'
@@ -29,7 +29,7 @@ import {
   type PlayerId,
 } from '../game/state'
 import type { Suit } from '../game/cards'
-import type { LimitedMode } from '../game/limited'
+import { jokerCapOf, type LimitedMode } from '../game/limited'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
 import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
@@ -1289,6 +1289,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sfx.select()
     } else {
       if (selected.length >= 5) return
+      // 限定房每格最多 2 張鬼牌(LIMITED-ROOM-SPEC §4.0):第 3 張選不起來
+      const cap = jokerCapOf(engine.mode)
+      if (cap !== null && engine.hands[me].some((c) => c.id === id && isJoker(c))) {
+        const picked = engine.hands[me].filter((c) => selected.includes(c.id) && isJoker(c)).length
+        if (picked >= cap) {
+          useToastStore.getState().show(`每格最多 ${cap} 張鬼牌`)
+          return
+        }
+      }
       set({ selected: [...selected, id] })
       sfx.select()
     }
@@ -1345,6 +1354,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { engine, me } = get()
     if (!engine) return
     const picker = engine.turn
+    // 限定房每格最多 2 張鬼牌:房主收到對手(舊版 / 作弊)超過上限的出牌就不收(§4.0)
+    const cap = jokerCapOf(engine.mode)
+    if (cap !== null && engine.hands[picker].filter((c) => ids.includes(c.id) && isJoker(c)).length > cap) {
+      console.warn('pick rejected: too many jokers')
+      return
+    }
     try {
       // If the opponent (not me) is picking, record which cards were pulled so
       // the UI can push them out at their real positions until I place them.

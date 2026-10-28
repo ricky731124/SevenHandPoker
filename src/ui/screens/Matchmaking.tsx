@@ -60,7 +60,7 @@ export default function Matchmaking() {
         setTimeout(() => void startBot(), 3000) // all busy → try again soon
         return
       }
-      const bot = rollCasualBot(special, unlocked, Math.random, persona ?? undefined)
+      const bot = rollCasualBot(special, unlocked, Math.random, persona ?? undefined, limited)
       useGameStore.getState().startCasualBotMatch({
         special,
         timeLimit: 99,

@@ -2,21 +2,23 @@
  * 限定房人機(LIMITED-ROOM-SPEC §11)。只在限定房被呼叫(ai.ts 依 state.mode 分派);
  * bossAI.ts 一行都不改 —— 這裡只「唯讀呼叫」它的 bossPlace / rollMain。
  *
- * 目前做了:百鬼夜行(§11.4)。空城計 / 撲朔迷離 / 火力全開之後一種一種加。
+ * 目前做了:百鬼夜行(§11.4)出牌 + 限定房放牌(§11.9,limitedPlace.ts)。空城計 / 撲朔迷離 / 火力全開之後一種一種加。
  *
  * 公平:限定房對手只看得到張數(推牌位置隨機),所以 boss 的「看破」一律當 0(§11.2)。
  */
 
 import type { Card } from './cards'
 import { isBlank, isJoker } from './cards'
-import { CATEGORY, evaluate } from './evaluate'
-import { candidatePiles, groupBy } from './aiCore'
+import { CATEGORY, compareLimited } from './evaluate'
+import { groupBy } from './aiCore'
 import { bossPlace, type BossProfile, type BossRuntime } from './bossAI'
-import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, ownsSlot, otherPlayer, type GameState, type PlayerId } from './state'
+import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
+import { hasPlaceTable, placeByTable, winsIfOwns } from './limitedPlace'
+import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, otherPlayer, type GameState, type PlayerId } from './state'
 
 type Rng = () => number
 
-/** 對戰電腦(沒有 boss 個性)在限定房用的預設個性:平衡、中等詐唬、中等執行力(§11.1)。 */
+/** 對戰電腦(沒有 boss 個性)在限定房用的預設個性:平衡、中等詐唬、中等執行力(§11.1;百鬼 0.5,§11.4a)。 */
 export const DEFAULT_LIMITED_PROFILE: BossProfile = {
   pickMain: { attack: 0, hoard: 0, balance: 100 },
   bluff: 50,
@@ -24,8 +26,8 @@ export const DEFAULT_LIMITED_PROFILE: BossProfile = {
   jokerTiming: 0,
   insight: 0,
 }
-export function defaultLimitedBrain(): BossRuntime {
-  return { profile: DEFAULT_LIMITED_PROFILE, main: 'balance', execution: 0.75 }
+export function defaultLimitedBrain(mode?: LimitedMode): BossRuntime {
+  return { profile: DEFAULT_LIMITED_PROFILE, main: 'balance', execution: (mode && LIMITED_EXECUTION[mode]?.vsComputer) || 0.75 }
 }
 
 /** 看破關掉的 boss(只讀張數)。不改原 profile,複製一份傳下去。 */
@@ -37,114 +39,44 @@ export function limitedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng
 }
 
 export function limitedPlace(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random): number {
-  // 百鬼夜行:原本的 boss 放牌,看破 = 0(§11.4)
+  // 有分布表的玩法走限定房放牌(§11.9);火力全開是一般牌組,照原本 boss 放牌(看破 = 0)
+  if (hasPlaceTable(state.mode)) return placeByTable(state, me, rt, rng)
   return bossPlace(state, me, noInsight(rt), rng)
 }
 
-// ---- 百鬼夜行(§11.4) ------------------------------------------------------
+// ---- 百鬼夜行(§11.4a,每格最多 2 鬼) ----------------------------------------
 //
-// 一人整局約 11 張鬼、7 手;同花順一手要 2~3 鬼 → 不可能每手都出大牌,一定要放掉幾格。
-// 所以每手只在兩件事裡選:
-//   出大牌 = 同花順(主)/ 鐵支(輔),用最多正牌、最少鬼牌湊;
-//   放掉   = 只出 1 張最不影響之後湊大牌的正牌(把鬼和核心牌留給後面)。
-// 葫蘆 / 順子 / 同花 / 三條 / 對子「中間牌」CP 值太低:又耗正牌又耗鬼還常輸,不主動出,
-// 只有後期沒鬼、湊不出大牌時才用正牌天然的成牌。
+// 每格最多 2 鬼後牌型重新變多元,不再只是「大牌 / 送 1 張」二選一。每手的分數 =
+//   這手的價值 + 看未來比重 × 留下來的牌之後還能湊出的價值 − 鬼牌浪費
+// 主策略只是「看未來比重」與幾條前期 / 後期的守則不同(§11.3)。
 
-/** 這格牌力(牌型 + 最大點數),跟 aiCore.pileStrength 同一把尺。 */
-function power(pile: Card[]): number {
-  const v = evaluate(pile)
-  return v.category + (v.rankSeq[0] ?? 0) / 15
+/**
+ * 這手的價值:大概代表「這疊拿下一格的機會」(初值,用模擬看各牌型實際拿下格子的比例調過)。
+ * 同花順、鐵支最高;葫蘆 / 同花常撞到鐵支;三條堪用;強對子(A/K + 鬼)拿來過渡;順子最差。
+ */
+// 2026-10-28 模擬(每格 2 鬼):拿下格子比例 同花順 85%、鐵支 55%、葫蘆 33%、三條 33%、對子 29%、
+// 同花 22%、兩對 9% → 葫蘆 / 同花 / 順子往下調(常撞到鐵支,又耗 5 張牌)。
+const CAT_VALUE: Record<number, number> = {
+  [CATEGORY.STRAIGHT_FLUSH]: 10,
+  [CATEGORY.FOUR_KIND]: 8.5,
+  [CATEGORY.FULL_HOUSE]: 5,
+  [CATEGORY.FLUSH]: 3.5,
+  [CATEGORY.THREE_KIND]: 4.5,
+  [CATEGORY.STRAIGHT]: 3,
+  [CATEGORY.TWO_PAIR]: 2.5,
+  [CATEGORY.PAIR]: 2,
+  [CATEGORY.HIGH_CARD]: 0.5,
+  [CATEGORY.EMPTY]: 0,
+}
+function catValue(cat: number, top: number): number {
+  const big = cat === CATEGORY.STRAIGHT_FLUSH || cat === CATEGORY.FOUR_KIND || cat === CATEGORY.PAIR
+  return CAT_VALUE[cat] + top / (big ? 14 : 28)
 }
 
-/** `who` 拿下格子 i 會不會直接贏(4 幣或湊成 3 連)?公開資訊。 */
-function winsIfOwns(state: GameState, who: PlayerId, i: number): boolean {
-  if (countCoins(state, who) + (ownsSlot(state.slots[i], who) ? 0 : 1) >= 4) return true
-  for (let s = 0; s <= SLOT_COUNT - 3; s++) {
-    let ok = true
-    for (let k = s; k < s + 3; k++) if (!(k === i || ownsSlot(state.slots[k], who))) ok = false
-    if (ok) return true
-  }
-  return false
-}
 /** 還沒有主的格子裡,有沒有一格 `who` 拿到就贏。 */
 function atMatchPoint(state: GameState, who: PlayerId): boolean {
   return state.slots.some((s, i) => s.owner === null && winsIfOwns(state, who, i))
 }
-
-/** 一個「大牌」組法:正牌 cards + 補 jokers 張鬼。 */
-interface Strong {
-  kind: 'sf' | 'quads'
-  cards: Card[]
-  jokers: number
-  /** 同花順的頭 / 鐵支的點數 */
-  top: number
-}
-
-/**
- * 所有同花順 / 鐵支組法(只列正牌部分,鬼牌另補)。
- *  - 同花順:每個花色、每個 5 格窗(正牌只有 7~A → 7-J、8-Q、9-K、10-A),窗裡同花色正牌全用上。
- *    只有 1 張正牌時一定要湊 10~A:1 張小牌 + 4 鬼(例 ♣7~J)比 5 鬼還小(§4.3 #12)。
- *  - 鐵支:同點數正牌(最多 4 張)+ 鬼補到 4 張。
- */
-function strongOptions(reals: Card[]): Strong[] {
-  const out: Strong[] = []
-  for (const suited of groupBy(reals, (c) => c.suit).values()) {
-    for (let top = 11; top <= 14; top++) {
-      const inWin = suited.filter((c) => c.rank <= top && c.rank > top - 5)
-      if (!inWin.length || (inWin.length === 1 && top < 14)) continue
-      out.push({ kind: 'sf', cards: inWin, jokers: 5 - inWin.length, top })
-    }
-  }
-  for (const g of groupBy(reals, (c) => c.rank).values()) {
-    const use = g.slice(0, 4)
-    out.push({ kind: 'quads', cards: use, jokers: 4 - use.length, top: g[0].rank })
-  }
-  return out
-}
-
-/**
- * 在可花的鬼牌內挑一個大牌(§11.4 使用者定案 2026-10-28):
- *  - 同花順:先比用的鬼少,再比頭大(♣9 10 J + 2 鬼 勝過 ♣10 J + 3 鬼)。
- *  - 同花順最多比鐵支多用 1 張鬼就選同花順;多 2 張以上才選鐵支。
- */
-function bestStrong(opts: Strong[], cap: number): Strong | null {
-  const ok = opts.filter((o) => o.jokers <= cap)
-  const by = (a: Strong, b: Strong) => a.jokers - b.jokers || b.top - a.top
-  const sf = ok.filter((o) => o.kind === 'sf').sort(by)[0]
-  const quads = ok.filter((o) => o.kind === 'quads').sort(by)[0]
-  if (sf && (!quads || sf.jokers <= quads.jokers + 1)) return sf
-  return quads ?? null
-}
-
-/** 不管省鬼、只求最大的大牌(差一格就贏 / 最後一手 / 執行力失手時用)。 */
-function biggestStrong(opts: Strong[], cap: number): Strong | null {
-  const rank = (o: Strong) => (o.kind === 'sf' ? 100 : 0) + o.top * 2 - o.jokers * 0.1
-  return opts.filter((o) => o.jokers <= cap).sort((a, b) => rank(b) - rank(a))[0] ?? null
-}
-
-/**
- * 這些正牌 + 鬼牌還湊得出幾手大牌(每次挑最省鬼的那手,湊完拿掉再算)。剩的鬼 4 張算一手鐵支。
- * jokersUsed = 湊這幾手正牌要花的鬼(越少代表手上的正牌越好用)。
- */
-function strongPlan(reals: Card[], jokers: number): { n: number; jokersUsed: number } {
-  let rs = reals
-  let j = jokers
-  let n = 0
-  let used = 0
-  for (;;) {
-    // 一樣省鬼就先用正牌少的(剩的正牌還能多湊一手)
-    const o = strongOptions(rs)
-      .filter((x) => x.jokers <= j)
-      .sort((a, b) => a.jokers - b.jokers || a.cards.length - b.cards.length)[0]
-    if (!o) break
-    n++
-    j -= o.jokers
-    used += o.jokers
-    rs = rs.filter((c) => !o.cards.includes(c))
-  }
-  return { n: n + Math.floor(j / 4), jokersUsed: used }
-}
-const strongCount = (reals: Card[], jokers: number) => strongPlan(reals, jokers).n
 
 /** 之後還會補幾張牌,以及其中大概幾張是鬼(只用公開資訊:牌堆 + 對手手牌 + 沒翻開的對手牌堆)。 */
 function futureDraws(state: GameState, me: PlayerId): { cards: number; jokers: number } {
@@ -161,127 +93,286 @@ function futureDraws(state: GameState, me: PlayerId): { cards: number; jokers: n
 }
 
 /**
- * 核心牌:能跟別張正牌一起湊大牌的(同花順裡 ≥2 張正牌、對子 / 三條補鬼成鐵支)。
- * 從最省鬼的組法開始分,分過的牌不重複用(例 ♦7 8 9 先分走,♦K 就落單)。
+ * 下一次補牌的幾種可能(從還沒看到的牌裡抽;只用公開資訊:牌組組成 − 自己手牌 / 牌堆 − 對手翻開的牌堆)。
+ * 強攻判斷「棄一格後下一手有沒有機會出大牌」用。
  */
-function coreCards(reals: Card[]): Set<Card> {
-  const core = new Set<Card>()
-  let rs = reals
-  for (;;) {
-    const o = strongOptions(rs)
-      .filter((x) => x.cards.length >= 2)
-      .sort((a, b) => a.jokers - b.jokers || b.top - a.top)[0]
-    if (!o) break
-    for (const c of o.cards) core.add(c)
-    rs = rs.filter((c) => !o.cards.includes(c))
+function sampleNextDraws(state: GameState, me: PlayerId, rng: Rng, times: number): Card[][] {
+  const k = DRAW_SCHEDULE[state.drawsDone[me]] ?? 0
+  if (!k) return [[]]
+  const foe = otherPlayer(me)
+  const seen = new Set([
+    ...state.hands[me],
+    ...state.slots.flatMap((s) => s[me]),
+    ...state.slots.filter((s) => s.owner !== null).flatMap((s) => s[foe]),
+  ].map((c) => c.id))
+  const unseen = makeLimitedDeck(state.seed, state.mode).filter((c) => !seen.has(c.id))
+  return Array.from({ length: times }, () => {
+    const pool = [...unseen]
+    const out: Card[] = []
+    for (let i = 0; i < k && pool.length; i++) out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0])
+    return out
+  })
+}
+/** 「有機會」= 模擬下一次補牌,至少這個比例湊得出鐵支 / 同花順。 */
+const BIG_NEXT_CHANCE = 0.4
+
+/** 過渡 / 棄一格的牌堆:只有 1 張正牌、最多 1 張鬼(§11.3)。 */
+const isTransition = (c: { reals: Card[]; jokers: number }) => c.reals.length === 1 && c.jokers <= 1
+/** 桌上自己已經過渡幾次(看牌堆算,重整 / 接手也一樣)。 */
+function transitionsDone(state: GameState, me: PlayerId): number {
+  return state.slots.filter((s) => {
+    const p = s[me]
+    const reals = p.filter((c) => !isJoker(c) && !isBlank(c)).length
+    return p.length > 0 && p.length <= 2 && reals === 1 && p.filter(isJoker).length <= 1
+  }).length
+}
+
+/** 同一點數的牌排一下:跟同花色別張牌「沒關係」的先用(把能湊同花順的留著)。 */
+function spareFirst(group: Card[], reals: Card[]): Card[] {
+  const ties = (c: Card) => reals.filter((x) => x !== c && x.suit === c.suit && Math.abs(x.rank - c.rank) <= 4).length
+  return [...group].sort((a, b) => ties(a) - ties(b))
+}
+
+const WINDOW_TOPS = [11, 12, 13, 14] // 正牌只有 7~A → 5 格窗 7-J、8-Q、9-K、10-A
+
+/** 一個組法:正牌 reals + 補 jokers 張鬼;組的時候就知道牌型(cat)和最大點數(top),不用再估值。 */
+interface Cand {
+  reals: Card[]
+  jokers: number
+  cat: number
+  top: number
+  value: number
+}
+
+const SAME_RANK_CAT = [CATEGORY.EMPTY, CATEGORY.HIGH_CARD, CATEGORY.PAIR, CATEGORY.THREE_KIND, CATEGORY.FOUR_KIND]
+
+/** 所有 ≤ cap 鬼的組法(同花順、鐵支、葫蘆、同花、順子、三條、兩對、對子、單張)。 */
+function candidates(reals: Card[], J: number, cap: number): Cand[] {
+  const maxJ = Math.min(cap, J)
+  const byKey = new Map<string, Cand>()
+  const add = (rs: Card[], j: number, cat: number, top: number) => {
+    if (j < 0 || j > maxJ || rs.length + j === 0 || rs.length + j > 5) return
+    const key = rs.map((c) => c.id).sort().join(',') + '|' + j
+    const value = catValue(cat, top)
+    const old = byKey.get(key)
+    if (!old || old.value < value) byKey.set(key, { reals: rs, jokers: j, cat, top, value })
   }
-  return core
+  const groups = [...groupBy(reals, (c) => c.rank).values()].map((g) => spareFirst(g, reals))
+  // 同點數:單張 / 對子 / 三條 / 鐵支(補鬼,鬼都變成同點數)
+  for (const g of groups) {
+    for (let t = 1; t <= Math.min(4, g.length); t++) {
+      for (let j = 0; j <= maxJ && t + j <= 4; j++) add(g.slice(0, t), j, SAME_RANK_CAT[t + j], g[0].rank)
+    }
+  }
+  // 每張單張都列(送哪張由「留下來的價值」決定)
+  for (const c of reals) add([c], 0, CATEGORY.HIGH_CARD, c.rank)
+  // 兩種點數:葫蘆(三條那組補鬼)、天然兩對(補鬼的兩對不如同樣鬼數的三條,不列)
+  for (const a of groups) {
+    for (const b of groups) {
+      if (a === b) continue
+      for (let ta = 1; ta <= Math.min(3, a.length); ta++) {
+        for (let tb = 1; tb <= Math.min(2, b.length); tb++) {
+          add([...a.slice(0, ta), ...b.slice(0, tb)], 3 - ta + (2 - tb), CATEGORY.FULL_HOUSE, a[0].rank)
+        }
+      }
+      if (a.length >= 2 && b.length >= 2 && a[0].rank > b[0].rank) add([...a.slice(0, 2), ...b.slice(0, 2)], 0, CATEGORY.TWO_PAIR, a[0].rank)
+    }
+  }
+  // 同花順(鬼補滿窗,頭 = 窗頂)/ 同花(鬼當 A、K…)
+  for (const suited of groupBy(reals, (c) => c.suit).values()) {
+    for (const top of WINDOW_TOPS) {
+      const inWin = suited.filter((c) => c.rank <= top && c.rank > top - 5)
+      add(inWin, 5 - inWin.length, CATEGORY.STRAIGHT_FLUSH, top)
+    }
+    const best = [...suited].sort((a, b) => b.rank - a.rank).slice(0, 5)
+    add(best, 5 - best.length, CATEGORY.FLUSH, best.length < 5 ? 14 : best[0].rank)
+  }
+  // 順子(每個點數挑一張閒的)
+  for (const top of WINDOW_TOPS) {
+    const rs: Card[] = []
+    for (const g of groups) if (g[0].rank <= top && g[0].rank > top - 5) rs.push(g[0])
+    add(rs, 5 - rs.length, CATEGORY.STRAIGHT, top)
+  }
+  return [...byKey.values()]
 }
 
 /**
- * 放掉這格要丟的那張:先從「落單的正牌」裡丟最小的(不拆同花順核心、不拆對子);
- * 全都是核心牌時,丟拿掉後「還湊得出幾手大牌」掉最少、多花的鬼最少的那張(鬼牌算上之後會補到的)。
+ * 留下來的牌之後還能湊出的價值(只看結構、不窮舉,很快):每次挑「這些牌 + 鬼」能湊出最大的一手,
+ * 拿掉再挑,最多挑 piles 手;湊不出東西的手算 0.5(送單張)。
  */
-function sacrificeCard(reals: Card[], jokers: number): Card {
-  const core = coreCards(reals)
-  const loose = reals.filter((c) => !core.has(c))
-  if (loose.length) return loose.reduce((b, c) => (c.rank < b.rank ? c : b), loose[0])
-  let best = reals[0]
-  let bestScore = -Infinity
-  for (const c of reals) {
-    const paired = reals.some((x) => x !== c && x.rank === c.rank)
-    const plan = strongPlan(
-      reals.filter((x) => x !== c),
-      jokers,
-    )
-    const score = plan.n * 100 - plan.jokersUsed * 8 - (paired ? 30 : 0) - c.rank
-    if (score > bestScore) {
-      bestScore = score
-      best = c
+function potential(reals: Card[], jokers: number, piles: number, cap: number): number {
+  let rs = reals
+  let j = jokers
+  let total = 0
+  for (let p = 0; p < piles; p++) {
+    const maxJ = Math.min(cap, Math.floor(j))
+    let best: { v: number; used: Card[]; j: number } | null = null
+    const take = (v: number, used: Card[], need: number) => {
+      if (need > maxJ) return
+      if (!best || v > best.v || (v === best.v && need < best.j)) best = { v, used, j: need }
+    }
+    const groups = [...groupBy(rs, (c) => c.rank).values()]
+    for (const suited of groupBy(rs, (c) => c.suit).values()) {
+      for (const top of WINDOW_TOPS) {
+        const inWin = suited.filter((c) => c.rank <= top && c.rank > top - 5)
+        if (inWin.length) take(10 + top / 14, inWin, 5 - inWin.length)
+      }
+    }
+    for (const g of groups) {
+      const r = g[0].rank
+      take(8.5 + r / 14, g.slice(0, 4), 4 - Math.min(4, g.length))
+      take(4.5 + r / 28, g.slice(0, 3), 3 - Math.min(3, g.length))
+      take(2 + r / 14, g.slice(0, 2), 2 - Math.min(2, g.length))
+    }
+    for (const a of groups) {
+      for (const b of groups) {
+        if (a !== b) take(5 + a[0].rank / 28, [...a.slice(0, 3), ...b.slice(0, 2)], 3 - Math.min(3, a.length) + (2 - Math.min(2, b.length)))
+      }
+    }
+    if (!rs.length && maxJ >= 2) take(3, [], 2) // 只剩鬼:兩張鬼 = 一對 A
+    const b = best as { v: number; used: Card[]; j: number } | null
+    if (!b) {
+      if (rs.length) {
+        total += 0.5
+        rs = rs.slice(1)
+      }
+      continue
+    }
+    total += b.v
+    j -= b.j
+    rs = rs.filter((c) => !b.used.includes(c))
+  }
+  return total
+}
+
+/** 手牌裡最大的一疊(≤ 5 張、≤ cap 鬼;張數多的踢腳贏,所以剩的牌也會塞進去)。最後一手用。 */
+function biggestPile(hand: Card[], cap: number): Card[] {
+  let best: Card[] = [hand[0]]
+  const rec = (start: number, cur: Card[], j: number) => {
+    if (cur.length && compareLimited(cur, best).cmp > 0) best = [...cur]
+    if (cur.length === 5) return
+    for (let i = start; i < hand.length; i++) {
+      const jk = isJoker(hand[i]) ? 1 : 0
+      if (j + jk <= cap) rec(i + 1, [...cur, hand[i]], j + jk)
     }
   }
+  rec(0, [], 0)
   return best
 }
 
-/**
- * 中間牌:正牌天然的成牌,或對子 / 三條補 1 張鬼。只在後期湊不出大牌時用。
- * urgent(差一格就贏 / 最後一手):鬼全部可以補,單張也補(例 ♦10 + 2 鬼 = 三條,比送單張好)。
- */
-function midPile(reals: Card[], jokers: Card[], urgent: boolean): Card[] | null {
-  const opts: Card[][] = candidatePiles(reals).filter((p) => evaluate(p).category >= CATEGORY.PAIR)
-  const k = Math.min(urgent ? jokers.length : 1, jokers.length)
-  for (const g of groupBy(reals, (c) => c.rank).values()) {
-    const add = Math.min(k, 4 - Math.min(4, g.length))
-    if (add > 0 && (urgent || g.length >= 2)) opts.push([...g.slice(0, 4), ...jokers.slice(0, add)])
-  }
-  if (!opts.length) return null
-  return opts.reduce((b, p) => (power(p) > power(b) ? p : b), opts[0])
-}
-
-const withJokers = (o: Strong, jokers: Card[]): Card[] => [...o.cards, ...jokers.slice(0, o.jokers)]
+/** 主策略的「看未來」比重(§11.3):強攻看眼前、平衡中等、囤牌最看未來。 */
+const FUTURE_WEIGHT: Record<BossRuntime['main'], number> = { attack: 0.55, balance: 0.8, hoard: 0.95 }
+/** 鬼牌浪費一張扣幾分(剩下手數 × 上限 裝不下的鬼)。 */
+const WASTE_COST = 1.2
 
 function ghostPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): Card[] {
   const hand = state.hands[me]
+  const cap = jokerCapOf(state.mode) ?? LIMITED_JOKER_CAP
   const reals = hand.filter((c) => !isJoker(c) && !isBlank(c))
   const jokers = hand.filter(isJoker)
   const blanks = hand.filter(isBlank)
   const pd = state.placementsDone[me]
   const left = SLOT_COUNT - pd // 含這一手
 
-  // 手上沒有正牌:只剩鬼牌才出鬼(分散用,最後一手才全出);連鬼都沒有就墊空白
+  // 最後一手:留牌沒用 → 出整副手牌裡最大的一疊(含踢腳)
+  if (left <= 1) return biggestPile(hand, cap)
+
+  // 手上沒有正牌:只剩鬼就出鬼(每格最多 cap 張),連鬼都沒有就墊空白
   if (!reals.length) {
     if (!jokers.length) return blanks.slice(0, 1)
-    const n = left <= 1 ? jokers.length : Math.ceil(jokers.length / left)
-    return jokers.slice(0, Math.max(1, Math.min(5, n)))
+    return jokers.slice(0, Math.min(cap, jokers.length))
   }
 
   const J = jokers.length
   const foe = otherPlayer(me)
-  const opts = strongOptions(reals)
+  const cands = candidates(reals, J, cap)
+  const pileOf = (c: Cand) => [...c.reals, ...jokers.slice(0, c.jokers)]
+  // 這手最大的:價值高的;一樣就鬼少的(§4.2 鬼少的贏)
+  const biggest = () => cands.reduce((b, c) => (c.value > b.value || (c.value === b.value && c.jokers < b.jokers) ? c : b), cands[0])
 
-  // 差一格就贏(誰都一樣)/ 最後一手:不省了,出最大的
-  if (left <= 1 || atMatchPoint(state, foe) || atMatchPoint(state, me)) {
-    const big = biggestStrong(opts, J)
-    if (big) return withJokers(big, jokers)
-    return midPile(reals, jokers, true) ?? [sacrificeCard(reals, J)]
-  }
+  // 差一格就贏(誰都一樣):不管打法,出這手最大的
+  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) return pileOf(biggest())
 
-  // 一手最多花 3 張鬼;4 張以上(1 張大牌 + 4 鬼)太耗,只有鬼牌很多時才用
+  // 執行力失手:只看這手、不看未來
+  if (rng() >= rt.execution) return pileOf(biggest())
+
   const future = futureDraws(state, me)
-  const roomy = J + future.jokers >= 4 + 2.5 * (left - 1)
-  const cap = Math.min(J, roomy || left <= 2 ? 5 : 3)
+  const after = left - 1
+  let w = FUTURE_WEIGHT[rt.main]
+  let pool = cands
+  const BIG = CAT_VALUE[CATEGORY.FOUR_KIND] // 鐵支 / 同花順才算大牌;三條以下在百鬼都是差牌
+  const prefer = (xs: Cand[]) => (xs.length ? xs : cands)
+  // 過渡 / 棄一格:「單張 + 1 鬼」,沒鬼才出純單張(§11.3)
+  const transitions = cands.filter((c) => isTransition(c) && c.jokers === Math.min(1, J))
+  const plays = prefer(cands.filter((c) => !isTransition(c)))
+  const done = transitionsDone(state, me)
 
-  // 執行力失手:不算省鬼、也不放格子,直接出上限內最大的大牌(浪費一點鬼,但不會出怪牌)
-  if (rng() >= rt.execution) {
-    const big = biggestStrong(opts, cap)
-    if (big) return withJokers(big, jokers)
-  }
-
-  const pick = bestStrong(opts, cap)
-
-  // 還湊得出幾手大牌 → 要放掉幾格
-  const canMake = strongCount(reals, J) + future.cards / 4.5
-  const mustSac = Math.max(0, left - canMake)
-
-  let sac: boolean
-  if (!pick) sac = true
-  else if (rt.main === 'hoard') {
-    // 囤牌:百鬼節奏快 → 只放前面(先手前 2 手 / 後手前 1 手),之後就開始出同花順;落後 2 幣提早兌現
-    const hoardEnd = state.firstPicker === me ? 2 : 1
-    const behind = countCoins(state, foe) - countCoins(state, me) >= 2
-    sac = pd < hoardEnd && !behind
+  if (pd >= SLOT_COUNT - 2) {
+    // 後期:不送 —— 還有別的出法就不出單張、也不出「單張 + 鬼」過渡
+    pool = plays
   } else if (rt.main === 'attack') {
-    sac = false // 強攻:先出大牌,沒資源了才放(上面 !pick)
-  } else {
-    sac = mustSac > 0 && rng() < mustSac / left // 平衡:要放的格子平均分散
+    // 強攻:有牌就出;前期湊得出三條以上就不出小牌。中期這手湊不出大牌(三條以下都算差)、而棄一格後
+    // 下一手有機會出鐵支 / 同花順 → 棄一格(整局最多 1 次)
+    const weak = !cands.some((c) => c.value >= BIG)
+    let drop: Cand[] = []
+    if (pd >= 2 && done < 1 && weak && transitions.length) {
+      const draws = sampleNextDraws(state, me, rng, 24)
+      const chance = (t: Cand) => {
+        const rest = reals.filter((x) => !t.reals.includes(x))
+        const hits = draws.filter((d) => {
+          const nj = Math.min(cap, J - t.jokers + d.filter(isJoker).length)
+          return potential([...rest, ...d.filter((c) => !isJoker(c) && !isBlank(c))], nj, 1, cap) >= BIG
+        }).length
+        return hits / draws.length
+      }
+      // 棄哪張:下一手出大牌機會最高的那種棄法(不拆三條 / 同花順核心)
+      const scored = transitions.map((t) => ({ t, p: chance(t) }))
+      const bestP = Math.max(...scored.map((s) => s.p))
+      if (bestP >= BIG_NEXT_CHANCE) drop = scored.filter((s) => s.p === bestP).map((s) => s.t)
+    }
+    if (drop.length) pool = drop
+    else if (pd < 2) pool = prefer(cands.filter((c) => c.value >= CAT_VALUE[CATEGORY.THREE_KIND]))
+    else pool = plays
+  } else if (rt.main === 'balance') {
+    // 平衡:有好牌就出、沒好牌就過渡(整局最多 2 次);好牌看比分(§11.3)
+    const mine = countCoins(state, me)
+    const theirs = countCoins(state, foe)
+    const good = (c: Cand) =>
+      mine < theirs
+        ? c.value >= CAT_VALUE[CATEGORY.THREE_KIND]
+        : mine === theirs
+          ? c.value >= BIG
+          : c.cat === CATEGORY.STRAIGHT_FLUSH || (c.cat === CATEGORY.FOUR_KIND && c.top >= 13)
+    const goods = cands.filter((c) => !isTransition(c) && good(c))
+    if (goods.length) pool = goods
+    else if (done < 2 && transitions.length) pool = transitions
+    else pool = plays
+  } else if (pd === 0) {
+    // 囤牌第 1 手:預設送「單張 + 1 鬼」,除非牌很好(1 鬼內就有鐵支 / 同花順)
+    const great = cands.some((c) => c.jokers <= 1 && c.value >= BIG)
+    if (!great && transitions.length) {
+      pool = transitions
+      w = 1.2
+    }
   }
+  // 手上有鬼就不出純單張(白送一格);真的只剩單張可出才出
+  const noBare = pool.filter((c) => !(c.reals.length === 1 && c.jokers === 0))
+  if (J > 0 && noBare.length) pool = noBare
 
-  if (!sac && pick) return withJokers(pick, jokers)
-
-  // 後期沒鬼、湊不出大牌:正牌天然的成牌還能搶一格,比送一張好
-  if (!pick && left <= 3) {
-    const mid = midPile(reals, jokers, false)
-    if (mid) return mid
+  const score = (c: Cand) => {
+    const restReals = reals.filter((x) => !c.reals.includes(x))
+    const restJ = J - c.jokers + future.jokers
+    const waste = Math.max(0, restJ - cap * after)
+    return c.value + w * potential(restReals, Math.min(restJ, cap * after), after, cap) - WASTE_COST * waste
   }
-  return [sacrificeCard(reals, J + Math.round(future.jokers))]
+  let pick = pool[0]
+  let top = -Infinity
+  for (const c of pool) {
+    const s = score(c)
+    if (s > top) {
+      top = s
+      pick = c
+    }
+  }
+  return pileOf(pick)
 }

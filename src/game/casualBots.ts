@@ -1,6 +1,7 @@
 import { CAMPAIGN } from './campaign'
 import { rollMain, type BossRuntime } from './bossAI'
 import { BOTS } from './bots'
+import { LIMITED_EXECUTION, type LimitedMode } from './limited'
 import type { SpecialCardId } from './specialCards'
 
 /**
@@ -54,9 +55,11 @@ export function rollCasualBot(
   unlocked: SpecialCardId[] = [],
   rng: () => number = Math.random,
   persona = pick(BOTS, rng), // §3.3 may pass a specific LEASED persona; else random
+  limited: LimitedMode | null = null, // 限定房:有自己執行力的玩法改用那組(LIMITED-ROOM-SPEC §11.4a)
 ): CasualBot {
   const stage = pick(CAMPAIGN, rng)
-  const boss: BossRuntime = { profile: stage.profile, main: rollMain(stage.profile, rng), execution: pick(EXECUTIONS, rng) }
+  const executions = (limited && LIMITED_EXECUTION[limited]?.casual) || EXECUTIONS
+  const boss: BossRuntime = { profile: stage.profile, main: rollMain(stage.profile, rng), execution: pick(executions, rng) }
   const aiLoadout = special ? pickSome(unlocked, 3, rng) : []
   return { botId: persona.id, name: persona.name, avatarId: persona.avatarId, boss, aiLoadout }
 }

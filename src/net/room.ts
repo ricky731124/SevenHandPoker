@@ -17,10 +17,11 @@ export type Role = 'host' | 'guest'
 export type RoomType = 'normal' | 'special' | 'limited'
 
 /**
- * 限定房擋舊版(LIMITED-ROOM-SPEC §12):新版加入任何房間都會寫這個版本號,RTDB 規則要求
- * 「限定房的 guest 一定要有」→ 手機上還在跑舊版的人用房號加入限定房會被規則擋下來。
+ * 限定房擋舊版(LIMITED-ROOM-SPEC §12):新版開房寫 hostVer、加入寫 guestVer,RTDB 規則要求
+ * 限定房兩邊都 ≥ 2 → 手機上還在跑舊版的人開不了、也加入不了限定房。
+ * 2 = 每格最多 2 張鬼牌(舊版不會擋第 3 張鬼)。
  */
-export const ROOM_CLIENT_VER = 1
+export const ROOM_CLIENT_VER = 2
 
 export interface PlayerPresence {
   connected: boolean
@@ -54,7 +55,8 @@ export interface Room {
   timeLimit?: number
   /** 限定房玩法(開房 / 進配對那一刻決定,之後不變)。只有 roomType === 'limited' 才有。 */
   limitedMode?: LimitedMode
-  /** 加入的 guest 是新版(見 ROOM_CLIENT_VER);限定房的規則靠它擋舊版。 */
+  /** 開房的 host / 加入的 guest 是新版(見 ROOM_CLIENT_VER);限定房的規則靠它擋舊版。 */
+  hostVer?: number
   guestVer?: number
   /** 房間來源:'match'=快速配對(系統配)、'friend'=開房找朋友;absent ⇒ 'friend'(舊房)。§6 回放配對方式用。 */
   origin?: 'match' | 'friend'
@@ -146,6 +148,7 @@ export async function createRoom(
         createdAt: serverTimestamp() as unknown as number,
         hostId: me,
         hostUid: hostUid ?? null,
+        hostVer: ROOM_CLIENT_VER,
         roomType,
         timeLimit,
         origin,

@@ -1,4 +1,8 @@
 /* 限定房規則卡 + 牌桌標籤(LIMITED-ROOM-SPEC §8.3 / §8.4) */
+/* 「限定房・百鬼夜行」8 個字,標題列兩側留給按鈕後只剩約 218px → 字縮一點才不會斷成兩行 */
+.limited-rule .modal__title {
+  font-size: 26px;
+}
 .limited-rule__list {
   margin: 0 0 14px;
   padding: 0 0 0 20px;
@@ -9,6 +13,104 @@
 }
 .limited-rule__list li + li {
   margin-top: 6px;
+}
+
+/* 有範例的玩法:左欄規則、右欄比牌三步驟;窄螢幕(直式)疊成一欄 */
+.limited-rule__split {
+  display: grid;
+  grid-template-columns: 1fr 336px;
+  grid-template-areas:
+    'rules ties'
+    'ok ties';
+  grid-template-rows: 1fr auto;
+  column-gap: 14px;
+}
+.limited-rule__split .limited-rule__list {
+  grid-area: rules;
+}
+.limited-rule__split .limited-rule__ties {
+  grid-area: ties;
+}
+.limited-rule__split .limited-rule__ok {
+  grid-area: ok;
+  align-self: end;
+}
+.limited-rule__ties {
+  color: var(--parch-text);
+}
+.limited-rule__ties-intro {
+  font-size: 15px;
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  .limited-rule__split {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'rules' 'ties' 'ok';
+    grid-template-rows: auto;
+  }
+  .limited-rule__split .limited-rule__ties {
+    margin-bottom: 12px;
+  }
+}
+
+/* 比牌三步驟 + 範例(§8.3):左疊 vs 右疊,左贏打勾 */
+.tie-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tie-step {
+  padding: 5px 8px 4px;
+  border-radius: 8px;
+  background: rgba(90, 47, 120, 0.08);
+}
+.tie-step__title {
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+.tie-step__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0 1px;
+}
+.tie-step__pile {
+  position: relative;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 6px;
+}
+.tie-step__pile--win {
+  box-shadow: 0 0 0 2px #2e9d4f;
+}
+.tie-step__card + .tie-step__card {
+  margin-left: -9px; /* 小牌疊一點(點數和大半個花色還看得到),5 張也排得下 */
+}
+.tie-step__check {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2e9d4f;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+.tie-step__vs {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.6;
+}
+.tie-step__note {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.75;
 }
 
 /* 右側控制群「內欄」,疊在「?」正上方:跟右四鈕同一套變數 → 手機/桌機等比。

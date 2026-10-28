@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Card, Rank, Suit } from './cards'
 import { isJoker, isBlank, isStarterSpecial, makeDeck } from './cards'
-import { evaluate, CATEGORY } from './evaluate'
-import { LIMITED_TEST_MODE, limitedModeAt, makeLimitedDeck } from './limited'
+import { evaluate, compareLimited, CATEGORY } from './evaluate'
+import { LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
 import { defaultLimitedBrain, limitedPick } from './limitedAI'
 import { aiPick, aiPlace } from './ai'
 import { buildFrames } from './replay'
 import { rollMain, type BossRuntime } from './bossAI'
 import { CAMPAIGN } from './campaign'
+import { rollCasualBot } from './casualBots'
 import { mulberry32 } from './rng'
 import { applyDraw, applyPick, applyPlace, createGame, otherPlayer, resolveShowdown, type GameState, type PlayerId } from './state'
 
@@ -132,110 +133,169 @@ const pickOf = (g: GameState, rt: BossRuntime) => {
   return g.hands.p2.filter((c) => ids.has(c.id))
 }
 
-describe('百鬼夜行人機:組牌守則(§11.4)', () => {
-  it('手上有正牌就不出 5 張全鬼', () => {
-    const g = pickState([C('C7'), C('D8'), ...[1, 2, 3, 4, 5, 6, 7].map(Jk)], 6) // 最後一手,全部可花
-    const p = pickOf(g, brain('attack'))
-    expect(p.some((c) => !isJoker(c))).toBe(true)
-  })
-  it('只剩鬼牌時才出鬼(分散用)', () => {
-    const g = pickState([1, 2, 3, 4, 5, 6].map(Jk), 2)
-    const p = pickOf(g, brain('balance'))
-    expect(p.every(isJoker)).toBe(true)
-    expect(p.length).toBeLessThan(5)
-  })
-  it('1 張小牌 + 4 鬼的同花順不出(比 5 鬼小,例 #12)', () => {
-    const g = pickState([C('C7'), C('D8'), ...[1, 2, 3, 4, 5].map(Jk)], 6)
-    const p = pickOf(g, brain('attack'))
-    if (evaluate(p).category === CATEGORY.STRAIGHT_FLUSH) expect(p.filter((c) => !isJoker(c)).length).toBeGreaterThan(1)
-  })
-  it('小牌跟同花色正牌一起可以進同花順(省鬼):♣7 8 9 + 2 鬼', () => {
-    const g = pickState([C('C7'), C('C8'), C('C9'), C('HQ'), C('DK'), ...[1, 2, 3, 4].map(Jk)], 3)
-    const p = pickOf(g, brain('attack'))
-    expect(evaluate(p).category).toBe(CATEGORY.STRAIGHT_FLUSH)
-    expect(p.filter(isJoker)).toHaveLength(2)
-  })
-  it('同花順最多比鐵支多 1 鬼就選同花順;多 2 鬼才選鐵支', () => {
-    // ♠K A + 3 鬼(同花順 3 鬼) vs ♦9 ♥9 ♣9 + 1 鬼(鐵支 1 鬼)→ 差 2 → 鐵支
-    const g1 = pickState([C('SK'), C('SA'), C('D9'), C('H9'), C('C9'), ...[1, 2, 3, 4, 5].map(Jk)], 3)
-    expect(evaluate(pickOf(g1, brain('attack'))).category).toBe(CATEGORY.FOUR_KIND)
-    // ♠K A + 3 鬼 vs ♦9 ♥9 + 2 鬼 → 差 1 → 同花順
-    const g2 = pickState([C('SK'), C('SA'), C('D9'), C('H9'), ...[1, 2, 3, 4, 5].map(Jk)], 3)
-    expect(evaluate(pickOf(g2, brain('attack'))).category).toBe(CATEGORY.STRAIGHT_FLUSH)
-  })
-  it('不出中間牌:要嘛大牌(同花順 / 鐵支),要嘛只送 1 張', () => {
+describe('百鬼夜行人機:每格最多 2 鬼(§11.4a)', () => {
+  const B: Card = { id: 'BLANK_p2', suit: 'C', rank: 2, kind: 'blank' }
+  const jk = (n: number) => Array.from({ length: n }, (_, i) => Jk(i + 1))
+  it('每一手都不超過 2 張鬼(三種打法、各種時期、失手也一樣)', () => {
     for (const main of ['attack', 'hoard', 'balance'] as const) {
-      for (let pd = 0; pd <= 4; pd++) {
-        const g = pickState([C('C7'), C('D7'), C('CJ'), C('SJ'), C('SQ'), C('HA'), C('DK'), ...[1, 2, 3, 4, 5, 6].map(Jk)], pd)
-        const p = pickOf(g, brain(main))
-        const cat = evaluate(p).category
-        expect(p.length === 1 || cat === CATEGORY.STRAIGHT_FLUSH || cat === CATEGORY.FOUR_KIND).toBe(true)
+      for (const ex of [1, 0]) {
+        for (let pd = 0; pd <= 6; pd++) {
+          const g = pickState([C('C7'), C('CJ'), C('SJ'), C('SQ'), C('HA'), C('DK'), ...jk(9)], pd)
+          expect(pickOf(g, brain(main, ex)).filter(isJoker).length).toBeLessThanOrEqual(2)
+        }
       }
     }
   })
-  it('送 1 張時不拆同花順核心:♣10 J 留著,送孤牌', () => {
-    const g = pickState([C('C10'), C('CJ'), C('D7'), C('D8'), C('D9'), C('DK'), ...[1, 2, 3, 4, 5].map(Jk)], 0)
-    const p = pickOf(g, brain('hoard'))
-    expect(p).toHaveLength(1)
-    expect(['C10', 'CJ']).not.toContain(p[0].id)
+  it('只剩鬼牌:一次最多出 2 張', () => {
+    const p = pickOf(pickState(jk(6), 2), brain('balance'))
+    expect(p.every(isJoker)).toBe(true)
+    expect(p.length).toBeLessThanOrEqual(2)
   })
-  it('最後一手湊不出大牌:♦10 + 2 鬼 三條,不送單張', () => {
-    const g = pickState([C('D10'), C('S8'), Jk(1), Jk(2)], 6)
-    expect(evaluate(pickOf(g, brain('balance'))).category).toBe(CATEGORY.THREE_KIND)
-  })
-  it('執行力失手也不在前期花 4 張鬼(♥K + 4 鬼)', () => {
-    const g = pickState([C('HK'), C('S9'), C('H7'), C('C7'), C('H8'), C('D8'), C('SQ'), ...[1, 2, 3, 4].map(Jk)], 0)
-    expect(pickOf(g, brain('balance', 0)).filter(isJoker).length).toBeLessThanOrEqual(3)
-  })
-  it('囤牌:先手前 2 手、後手前 1 手送 1 張,之後出大牌', () => {
-    const hand = [C('C9'), C('CJ'), C('CQ'), C('SK'), C('D8'), ...[1, 2, 3, 4, 5, 6].map(Jk)]
-    const g = pickState(hand, 1) // pickState 的先手是 p2(= 自己)
-    expect(pickOf(g, brain('hoard'))).toHaveLength(1)
-    expect(pickOf({ ...g, firstPicker: 'p1' }, brain('hoard')).length).toBeGreaterThan(1)
-    expect(pickOf(pickState(hand, 2), brain('hoard')).length).toBeGreaterThan(1)
-  })
-})
-
-describe('百鬼夜行人機:使用者 2026-10-28 五張截圖(驗收)', () => {
-  const B: Card = { id: 'BLANK_p2', suit: 'C', rank: 2, kind: 'blank' }
-  const jk = (n: number) => Array.from({ length: n }, (_, i) => Jk(i + 1))
-  const reals = (p: Card[]) => p.filter((c) => !isJoker(c)).map((c) => c.id).sort()
-  // 強攻 / 平衡(執行力 1)都要出下面這手;囤牌在早期可以送 1 張,但不准出中間牌
-  const cases: { name: string; hand: Card[]; pd: number; want: string[]; jokers: number }[] = [
-    { name: '圖一 ♣9 10 J + 2 鬼(不是 ♣10 J + 3 鬼)', hand: [B, C('D8'), C('C9'), C('C10'), C('CJ'), C('DQ'), ...jk(6)], pd: 3, want: ['C10', 'C9', 'CJ'], jokers: 2 },
-    { name: '圖二 ♣9 J Q + 2 鬼 同花順(不是 QQ + 2 鬼 鐵支)', hand: [B, C('D8'), C('C9'), C('CJ'), C('CQ'), C('HQ'), ...jk(7)], pd: 2, want: ['C9', 'CJ', 'CQ'], jokers: 2 },
-    { name: '圖三 ♣9 J Q + 2 鬼(不是 K + 鬼)', hand: [B, C('D8'), C('C9'), C('CJ'), C('CQ'), C('SK'), ...jk(6)], pd: 2, want: ['C9', 'CJ', 'CQ'], jokers: 2 },
-    { name: '圖四 ♠J Q + 3 鬼 同花大順(不是爛葫蘆)', hand: [B, C('C7'), C('D7'), C('CJ'), C('SJ'), C('SQ'), ...jk(6)], pd: 2, want: ['SJ', 'SQ'], jokers: 3 },
-    { name: '圖五 同花大順 + 3 鬼(不是爛順子)', hand: [B, C('S10'), C('DQ'), C('SQ'), C('DK'), C('HA'), ...jk(6)], pd: 2, want: [], jokers: 3 },
-  ]
-  for (const k of cases) {
-    it(k.name, () => {
-      for (const main of ['attack', 'balance', 'hoard'] as const) {
-        const p = pickOf(pickState(k.hand, k.pd), brain(main))
-        const cat = evaluate(p).category
-        if (main === 'hoard' && p.length === 1) continue
-        expect(cat).toBe(CATEGORY.STRAIGHT_FLUSH)
-        expect(p.filter(isJoker)).toHaveLength(k.jokers)
-        if (k.want.length) expect(reals(p)).toEqual([...k.want].sort())
-      }
-    })
-  }
-  it('強攻第一手最多 3 張鬼', () => {
-    const g = pickState([C('C7'), C('D9'), C('HJ'), ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(Jk)], 0)
-    expect(pickOf(g, brain('attack')).filter(isJoker).length).toBeLessThanOrEqual(3)
-  })
-  it('囤牌第一手手上有對子 → 不花鬼', () => {
-    const g = pickState([C('CK'), C('DK'), C('H8'), C('S9'), ...[1, 2, 3].map(Jk)], 0)
-    expect(pickOf(g, brain('hoard')).filter(isJoker)).toHaveLength(0)
-  })
-  it('同樣能湊到的牌型,優先正牌多、鬼牌少的組法(♣A♦A 不用鬼 > 鬼鬼)', () => {
-    const g = pickState([C('CA'), C('DA'), C('H8'), ...[1, 2].map(Jk)], 3)
+  it('最後一手出整副手牌最大的一疊(含踢腳):♦Q ♦10 ♦8 + 空白,不是單張 ♦8', () => {
+    const g = pickState([B, C('D10'), C('D8'), C('DQ')], 6)
     const p = pickOf(g, brain('balance'))
-    // 用了 A 就不會再拿鬼牌去湊同樣的對子 A
-    if (evaluate(p).category === CATEGORY.PAIR) expect(p.filter(isJoker)).toHaveLength(0)
+    expect(p).toHaveLength(4)
+  })
+  it('最後一手:♦10 + 2 鬼 = 三條(還塞 ♠8 當踢腳)', () => {
+    const p = pickOf(pickState([C('D10'), C('S8'), Jk(1), Jk(2)], 6), brain('attack'))
+    expect(evaluate(p).category).toBe(CATEGORY.THREE_KIND)
+    expect(p).toHaveLength(4)
+  })
+  it('圖一:♣9 10 J + 2 鬼 同花順', () => {
+    const p = pickOf(pickState([B, C('D8'), C('C9'), C('C10'), C('CJ'), C('DQ'), ...jk(6)], 3), brain('attack'))
+    expect(evaluate(p).category).toBe(CATEGORY.STRAIGHT_FLUSH)
+    expect(p.filter(isJoker)).toHaveLength(2)
+  })
+  it('圖二:♣9 J Q + 2 鬼 同花順勝過 QQ + 2 鬼 鐵支', () => {
+    const p = pickOf(pickState([B, C('D8'), C('C9'), C('CJ'), C('CQ'), C('HQ'), ...jk(7)], 2), brain('attack'))
+    expect(evaluate(p).category).toBe(CATEGORY.STRAIGHT_FLUSH)
+  })
+  it('強攻前期有牌就出:不送單張、不出對子過渡', () => {
+    for (const pd of [0, 1]) {
+      const p = pickOf(pickState([C('C7'), C('D7'), C('CJ'), C('SQ'), C('HA'), C('DK'), ...jk(4)], pd), brain('attack'))
+      expect(evaluate(p).category).toBeGreaterThanOrEqual(CATEGORY.THREE_KIND)
+    }
+  })
+  it('囤牌第 1 手預設送「單張 + 1 鬼」;牌很好(1 鬼內鐵支)才出', () => {
+    const p = pickOf(pickState([C('C7'), C('DJ'), C('SQ'), C('HA'), C('DK'), C('C9'), ...jk(5)], 0), brain('hoard'))
+    expect(p.filter((c) => !isJoker(c))).toHaveLength(1)
+    expect(p.filter(isJoker)).toHaveLength(1)
+    const good = pickOf(pickState([C('C7'), C('D7'), C('H7'), C('HA'), C('DK'), ...jk(5)], 0), brain('hoard'))
+    expect(evaluate(good).category).toBeGreaterThanOrEqual(CATEGORY.FOUR_KIND)
+  })
+  it('後期(第 6 手)不送:不出單張、也不出「單張 + 鬼」過渡', () => {
+    for (const main of ['attack', 'hoard', 'balance'] as const) {
+      const p = pickOf(pickState([C('C7'), C('DJ'), C('SQ'), C('HA'), Jk(1), Jk(2), Jk(3)], 5), brain(main))
+      expect(p.length).toBeGreaterThan(1)
+      const q = pickOf(pickState([C('C9'), C('D9'), C('HQ'), C('SK'), C('D7'), Jk(1)], 5), brain(main))
+      expect(q.filter((c) => !isJoker(c)).length).toBeGreaterThan(1)
+    }
+  })
+
+  // §11.3 強攻棄一格 / 平衡看比分
+  const own = (g: GameState, who: PlayerId, slots: number[]): GameState => ({
+    ...g,
+    slots: g.slots.map((s, i) => (slots.includes(i) ? { p1: [C('S8')], p2: [C('H8')], owner: who } : s)),
+  })
+  const withPile = (g: GameState, i: number, pile: Card[]): GameState => ({
+    ...g,
+    slots: g.slots.map((s, k) => (k === i ? { ...s, p2: pile } : s)),
+  })
+  const pickRng = (g: GameState, rt: BossRuntime) => {
+    const ids = new Set(limitedPick(g, 'p2', rt, mulberry32(42)))
+    return g.hands.p2.filter((c) => ids.has(c.id))
+  }
+  const trips9 = [C('C9'), C('D9'), C('H9'), C('SK'), C('D7')]
+  it('強攻中期:這手只有三條、棄一格後下一手有機會鐵支 → 棄一格(沒鬼出純單張,不拆三條)', () => {
+    const p = pickRng(pickState(trips9, 2), brain('attack'))
+    expect(p).toHaveLength(1)
+    expect(p[0].rank).not.toBe(9)
+  })
+  it('強攻:整局最多棄 1 次;前期不棄', () => {
+    const used = withPile(pickState(trips9, 2), 0, [C('SA'), Jk(9)])
+    expect(evaluate(pickRng(used, brain('attack'))).category).toBe(CATEGORY.THREE_KIND)
+    expect(evaluate(pickRng(pickState(trips9, 1), brain('attack'))).category).toBe(CATEGORY.THREE_KIND)
+  })
+  it('強攻中期有鐵支就出,不棄', () => {
+    const p = pickRng(pickState([...trips9, Jk(1)], 3), brain('attack'))
+    expect(evaluate(p).category).toBe(CATEGORY.FOUR_KIND)
+  })
+  const pair9 = [C('C9'), C('D9'), C('HQ'), C('SK'), C('D7'), Jk(1)] // 最好只有三條(99 + 鬼)
+  it('平衡看比分:落後三條就出、平手沒鐵支就過渡(單張 + 1 鬼)', () => {
+    const behind = own(pickState(pair9, 2), 'p1', [0])
+    expect(evaluate(pickOf(behind, brain('balance'))).category).toBe(CATEGORY.THREE_KIND)
+    const tied = pickOf(pickState(pair9, 2), brain('balance'))
+    expect(tied.filter((c) => !isJoker(c))).toHaveLength(1)
+    expect(tied.filter(isJoker)).toHaveLength(1)
+  })
+  it('平衡領先:只有同花順或 K / A 鐵支才算好牌;已過渡 2 次就不再過渡', () => {
+    const ahead = own(pickState([C('C9'), C('D9'), C('HQ'), C('SK'), C('D7'), Jk(1), Jk(2)], 2), 'p2', [0])
+    expect(pickOf(ahead, brain('balance')).filter((c) => !isJoker(c))).toHaveLength(1) // 99 鐵支不夠好 → 過渡
+    const aheadKK = own(pickState([C('CK'), C('DK'), C('HQ'), C('S9'), C('D7'), Jk(1), Jk(2)], 2), 'p2', [0])
+    expect(evaluate(pickOf(aheadKK, brain('balance'))).category).toBe(CATEGORY.FOUR_KIND)
+    const twice = withPile(withPile(pickState(pair9, 3), 0, [C('SA'), Jk(8)]), 1, [C('HA'), Jk(9)])
+    expect(pickOf(twice, brain('balance')).filter((c) => !isJoker(c)).length).toBeGreaterThan(1)
   })
 })
 
+describe('百鬼執行力 + 規則卡範例(§11.4a / §8.3)', () => {
+  it('百鬼快配人機 0.35 / 0.5 / 0.65、對戰電腦 0.5;一般快配照舊', () => {
+    const ghost = new Set(Array.from({ length: 60 }, (_, i) => rollCasualBot(false, [], mulberry32(i), undefined, 'ghost').boss.execution))
+    expect([...ghost].sort()).toEqual([0.35, 0.5, 0.65])
+    const normal = new Set(Array.from({ length: 60 }, (_, i) => rollCasualBot(false, [], mulberry32(i)).boss.execution))
+    expect([...normal].sort()).toEqual([0.6, 0.75, 0.9])
+    expect(defaultLimitedBrain('ghost').execution).toBe(0.5)
+    expect(defaultLimitedBrain('fire').execution).toBe(0.75)
+  })
+  it('三個範例照真的比牌規則:左邊贏,而且分在那一步', () => {
+    const toCard = (id: string, k: number): Card =>
+      id === 'J' ? { id: `JOKER_d${k + 30}`, suit: 'S', rank: 14, kind: 'joker' } : C(id)
+    const steps = ['jokers', 'rank', 'suit'] as const
+    TIE_STEPS.forEach((s, i) => {
+      const r = compareLimited(s.left.map(toCard), s.right.map((id, k) => toCard(id, k + 10)))
+      expect(r.cmp).toBeGreaterThan(0)
+      expect(r.by).toBe(steps[i])
+    })
+  })
+})
+
+describe('限定房放牌(§11.9,百鬼夜行分布表)', () => {
+  /** p1(真人)剛出 n 張,等 p2(電腦)放;mine[i] = 電腦在第 i 格已經有的牌。 */
+  function placeState(incoming: Card[], mine: Record<number, Card[]>, foeOwns: number[] = []): GameState {
+    const g = createGame(5, 'p1', 'p2', 'ghost')
+    const slots = g.slots.map((_, i) => ({
+      p1: foeOwns.includes(i) ? [C('S8')] : [],
+      p2: foeOwns.includes(i) ? [C('H7')] : (mine[i] ?? []),
+      owner: foeOwns.includes(i) ? ('p1' as const) : null,
+    }))
+    return { ...g, slots, pendingPick: { by: 'p1', cards: incoming }, phase: 'place' }
+  }
+  const quadsK = [C('SK'), C('HK'), Jk(1), Jk(2)]
+  const sf = [C('C9'), C('C10'), C('CJ'), Jk(3), Jk(4)]
+  const trips = [C('D9'), C('H9'), Jk(5)]
+  it('對手出 4 張(≈ 鐵支):不拿三條去接,用同花順接', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const g = placeState(quadsK, { 1: sf, 3: trips })
+      expect(aiPlace(g, 'p2', brain(main))).toBe(1)
+    }
+  })
+  it('對手出 5 張(多半同花順):不拿鐵支去撞', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const g = placeState([C('SQ'), C('SK'), C('SA'), Jk(1), Jk(2)], { 2: [C('DQ'), C('HQ'), Jk(3), Jk(4)], 4: [C('D7'), Jk(5)] })
+      expect(aiPlace(g, 'p2', brain(main))).not.toBe(2)
+    }
+  })
+  it('擋殺:對手拿了第 2 格就 3 連 → 不把它的大牌放進第 2 格等(之後它會挑我的爛牌去接)', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const g = placeState(quadsK, { 5: [C('D7'), Jk(5)] }, [0, 1])
+      expect(aiPlace(g, 'p2', brain(main))).not.toBe(2)
+    }
+  })
+  it('CP 值:對手出 4 張,同花順和 A 鐵支都贏 → 平衡用 A 鐵支接,同花順留著', () => {
+    const g = placeState(quadsK, { 2: sf, 5: [C('DA'), C('HA'), Jk(5), Jk(6)] })
+    expect(aiPlace(g, 'p2', brain('balance'))).toBe(5)
+  })
+})
 describe('百鬼夜行整場:人機出的每一手都合法、打得完', () => {
   it('120 場電腦對電腦(各種主策略 / 執行力)', () => {
     for (let seed = 1; seed <= 120; seed++) {
@@ -247,8 +307,11 @@ describe('百鬼夜行整場:人機出的每一手都合法、打得完', () => 
       let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', 'ghost')
       let steps = 0
       while (g.phase !== 'ended' && steps++ < 400) {
-        if (g.phase === 'pick') g = applyPick(g, g.turn, limitedPick(g, g.turn, rts[g.turn], rng))
-        else if (g.phase === 'place') {
+        if (g.phase === 'pick') {
+          const ids = limitedPick(g, g.turn, rts[g.turn], rng)
+          expect(g.hands[g.turn].filter((c) => ids.includes(c.id) && isJoker(c)).length).toBeLessThanOrEqual(2) // 每格最多 2 鬼
+          g = applyPick(g, g.turn, ids)
+        } else if (g.phase === 'place') {
           const placer = otherPlayer(g.pendingPick!.by)
           g = applyPlace(g, placer, aiPlace(g, placer, rts[placer]))
         } else if (g.phase === 'showdown') g = resolveShowdown(g)

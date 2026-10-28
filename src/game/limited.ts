@@ -17,16 +17,32 @@ export interface LimitedInfo {
   badge: string[]
   /** 規則卡(VS 畫面後跳出)的 2~3 行規則 */
   rules: string[]
+  /** 規則卡在第一行後面接「比牌三步驟 + 範例」(百鬼 / 撲朔迷離,spec §8.3) */
+  tieSteps?: boolean
 }
 
 const HIDDEN_RULE = '對手只看得到你出幾張，無法看到你實際出牌的位置。'
-const GHOST_TIE_RULE = '牌一樣大時，鬼牌用得少的贏；鬼牌一樣多，比正牌點數大小；正牌一樣大，再比花色大小。'
+
+/** 規則卡「比牌三步驟」的一個範例:左疊 vs 右疊(牌 id 用 cardId 格式,鬼 = 'J'),左邊贏。 */
+export interface TieStep {
+  title: string
+  left: string[]
+  right: string[]
+  note: string
+}
+export const TIE_STEPS_INTRO = '牌型和點數都一樣時：'
+export const TIE_STEPS: TieStep[] = [
+  { title: '① 鬼牌少的贏', left: ['CA', 'J'], right: ['J', 'J'], note: '都是一對 A，左邊鬼少' },
+  { title: '② 鬼一樣多，比正牌點數', left: ['SJ', 'SQ', 'SK', 'J', 'J'], right: ['H10', 'HJ', 'HQ', 'J', 'J'], note: '都是 10~A 同花順，K 比 Q 大' },
+  { title: '③ 正牌也一樣，比花色', left: ['DA', 'J'], right: ['CA', 'J'], note: '花色 ♠ > ♥ > ♦ > ♣' },
+]
 
 export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   ghost: {
     name: '百鬼夜行',
     badge: ['百鬼', '夜行'],
-    rules: ['點數 2~6（共 20 張）全部變成鬼牌。', GHOST_TIE_RULE, HIDDEN_RULE],
+    rules: ['點數 2~6（共 20 張）全部變成鬼牌，每格最多放 2 張鬼牌。', HIDDEN_RULE],
+    tieSteps: true,
   },
   blank: {
     name: '空城計',
@@ -36,13 +52,22 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   mixed: {
     name: '撲朔迷離',
     badge: ['撲朔', '迷離'],
-    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', GHOST_TIE_RULE, HIDDEN_RULE],
+    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌，每格最多放 2 張鬼牌。', HIDDEN_RULE],
+    tieSteps: true,
   },
   fire: {
     name: '火力全開',
     badge: ['火力', '全開'],
     rules: ['帶 5 張特殊卡進場，整場可以用 3 張。', '每回合最多用 1 張，每張只能用一次。', HIDDEN_RULE],
   },
+}
+
+/**
+ * 限定房人機執行力(spec §11.4a):有寫的玩法改用這組,沒寫的照一般快配(0.6 / 0.75 / 0.9、對戰電腦 0.75)。
+ * 百鬼新放牌後比一般房難 → 跟第一關鳥鳥一樣。其他玩法做到時看模擬勝率再定。
+ */
+export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; vsComputer: number }>> = {
+  ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */
@@ -86,6 +111,13 @@ export const taiwanDay = (nowMs: number): number => new Date(nowMs + TAIWAN_OFFS
 
 /** 這個玩法的比牌用決勝五步(鬼牌少的贏…)嗎?只有有一堆鬼牌的兩種。 */
 export const usesLimitedCompare = (m: LimitedMode | null | undefined): boolean => m === 'ghost' || m === 'mixed'
+
+/**
+ * 一格最多放幾張鬼牌(§4.0):鬼牌多的兩種玩法 = 2,其他 = 不限(null)。
+ * 引擎不檢查(舊回放照原棋譜重播);只在輸入端擋:玩家選牌、人機出牌、房主驗對手出牌。
+ */
+export const LIMITED_JOKER_CAP = 2
+export const jokerCapOf = (m: LimitedMode | null | undefined): number | null => (usesLimitedCompare(m) ? LIMITED_JOKER_CAP : null)
 
 /** 牌組有沒有變(2~6 換掉)。牌組變化日沒有特殊卡,當一般房處理。 */
 export const changesDeck = (m: LimitedMode | null | undefined): boolean => m === 'ghost' || m === 'blank' || m === 'mixed'

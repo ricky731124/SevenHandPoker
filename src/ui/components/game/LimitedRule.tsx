@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
-import { LIMITED_INFO, LIMITED_SCHEDULE, LIMITED_WEEK, type LimitedMode } from '../../../game/limited'
+import type { Card as TCard, Rank, Suit } from '../../../game/cards'
+import { LIMITED_INFO, LIMITED_SCHEDULE, LIMITED_WEEK, TIE_STEPS, TIE_STEPS_INTRO, type LimitedMode } from '../../../game/limited'
+import Card from '../Card'
 import Modal from '../Modal'
 import Button from '../Button'
 import { sfx } from '../../../audio/sfx'
@@ -28,22 +30,73 @@ export function LimitedRuleModal({
 
   const info = LIMITED_INFO[mode]
   return (
-    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={380} panelClass="limited-rule">
-      <ul className="limited-rule__list">
-        {info.rules.map((r) => (
-          <li key={r}>{r}</li>
-        ))}
-      </ul>
-      <Button
-        full
-        onClick={() => {
-          sfx.click()
-          onClose()
-        }}
-      >
-        知道了
-      </Button>
+    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.tieSteps ? 640 : 380} panelClass="limited-rule">
+      {/* 有範例的玩法分兩欄(左:規則 + 知道了、右:範例),手機橫向才不用往下捲 */}
+      <div className={info.tieSteps ? 'limited-rule__split' : undefined}>
+        <ul className="limited-rule__list">
+          {info.rules.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+        {info.tieSteps && (
+          <div className="limited-rule__ties">
+            <div className="limited-rule__ties-intro">{TIE_STEPS_INTRO}</div>
+            <TieSteps />
+          </div>
+        )}
+        <div className="limited-rule__ok">
+          <Button
+            full
+            onClick={() => {
+              sfx.click()
+              onClose()
+            }}
+          >
+            知道了
+          </Button>
+        </div>
+      </div>
     </Modal>
+  )
+}
+
+/** 範例牌 id → 牌('J' = 鬼牌,其他是 cardId 格式:花色 + 點數)。 */
+function exampleCard(id: string, k: number): TCard {
+  if (id === 'J') return { id: `ex-joker-${k}`, suit: 'S', rank: 14, kind: 'joker' }
+  const r = id.slice(1)
+  const rank = (r === 'A' ? 14 : r === 'K' ? 13 : r === 'Q' ? 12 : r === 'J' ? 11 : Number(r)) as Rank
+  return { id: `ex-${id}`, suit: id[0] as Suit, rank }
+}
+function ExamplePile({ ids, win }: { ids: string[]; win?: boolean }) {
+  return (
+    <span className={`tie-step__pile${win ? ' tie-step__pile--win' : ''}`}>
+      {ids.map((id, k) => (
+        <span key={k} className="tie-step__card">
+          <Card card={exampleCard(id, k)} w={30} />
+        </span>
+      ))}
+      {win && <span className="tie-step__check">✔</span>}
+    </span>
+  )
+}
+/** 規則卡「比牌三步驟 + 範例」(spec §8.3):每步一行標題(後接小字說明)+ 左疊 vs 右疊(左贏)。 */
+function TieSteps() {
+  return (
+    <div className="tie-steps">
+      {TIE_STEPS.map((s) => (
+        <div key={s.title} className="tie-step">
+          <div className="tie-step__title">
+            {s.title}
+            <span className="tie-step__note">{s.note}</span>
+          </div>
+          <div className="tie-step__row">
+            <ExamplePile ids={s.left} win />
+            <span className="tie-step__vs">vs</span>
+            <ExamplePile ids={s.right} />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
