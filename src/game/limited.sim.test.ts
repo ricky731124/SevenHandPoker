@@ -9,9 +9,10 @@
 import { describe, it } from 'vitest'
 import { bossPick, bossPlace, rollMain, type BossRuntime } from './bossAI'
 import { CAMPAIGN } from './campaign'
-import { defaultLimitedBrain, limitedPick, limitedPlace, type LimitedPickOpts } from './limitedAI'
-import { isBlank, isJoker } from './cards'
-import { CATEGORY_NAME_ZH, evaluate } from './evaluate'
+import { BLANK_TUNE, blankAssets, defaultLimitedBrain, limitedPick, limitedPlace, type LimitedPickOpts } from './limitedAI'
+import { PLACE_TUNE, winsIfOwns } from './limitedPlace'
+import { isBlank, isJoker, type Card } from './cards'
+import { CATEGORY, CATEGORY_NAME_ZH, compareHands, evaluate } from './evaluate'
 import type { LimitedMode } from './limited'
 import { mulberry32 } from './rng'
 import { applyDraw, applyPick, applyPlace, createGame, emptySlotsFor, otherPlayer, resolveShowdown, type GameState, type PlayerId } from './state'
@@ -104,21 +105,70 @@ describe.skipIf(!process.env.GEN)('分布表(GEN=1 才跑)', () => {
   }, 1_800_000)
 })
 
-// ---- 空城計(§11.5a)----------------------------------------------------------
-// BLANK=1 npx vitest run src/game/limited.sim.test.ts  → 牌型拿下格子比例 + 勝率表
-// BLANK_GEN=1 …                                        → 「電腦式墊法」/「不墊」兩張分布表
+// ---- 空城計(§11.5c)----------------------------------------------------------
+// BLANK=1 npx vitest run src/game/limited.sim.test.ts  → 執行力 × 勝率表(打玩家模型)+ 出牌樣態 + 拿下格子比例
 const blankBrain = (rt: BossRuntime, opts: LimitedPickOpts = {}): Brain => ({
   pick: (g, me, rng) => limitedPick(g, me, rt, rng, opts),
   place: (g, me, rng) => limitedPlace(g, me, rt, rng),
 })
-// 直覺玩家:不墊空白、每手出最大(執行力 0 → 永遠「失手」= 這手最大),放牌用原本 boss 放牌
+// 直覺玩家(第一版的基準):不墊空白、每手出最大,放牌用原本 boss 放牌
 const blankGreedy: Brain = {
-  pick: (g, me, rng) => limitedPick(g, me, greedyRt, rng, { noPad: true }),
+  pick: (g, me) => {
+    const reals = g.hands[me].filter((c) => !isBlank(c))
+    if (!reals.length) return [g.hands[me][0].id]
+    return biggestOf(reals).map((c) => c.id)
+  },
   place: (g, me, rng) => bossPlace(g, me, greedyRt, rng),
 }
+const biggestOf = (cards: Card[]): Card[] => {
+  let best: Card[] = [cards[0]]
+  const rec = (start: number, cur: Card[]) => {
+    if (cur.length && compareHands(cur, best) > 0) best = [...cur]
+    if (cur.length === 5) return
+    for (let i = start; i < cards.length; i++) rec(i + 1, [...cur, cards[i]])
+  }
+  rec(0, [])
+  return best
+}
 
-/** 一場空城計,每一疊出牌交給 onPile(張數、真牌數、牌型…);回傳 p1 贏沒。 */
-function playBlank(seed: number, a: Brain, b: Brain, onPile?: (cards: import('./cards').Card[], by: PlayerId, g: GameState) => void, onSlot?: (mine: import('./cards').Card[], won: boolean | null) => void): boolean {
+/**
+ * 玩家模型(§11.5c,照使用者的打法寫):拆資產;沒資產送全空白 1~3 張;三條照實或墊 1;強對照出;
+ * 弱對常墊 1 裝三條;兩對只在對子多到用不完時出(blankAssets 合併);大牌只在最後兩手;鐵支 50 / 30 / 20。
+ * 先出哪個資產隨機。放牌用同一套放牌(平衡、執行力 1),但只算空白、不算點數(真人不會每張都記)。
+ */
+const playerRt: BossRuntime = { ...defaultLimitedBrain('blank'), execution: 1 }
+const playerModel: Brain = {
+  pick: (g, me, rng) => {
+    const hand = g.hands[me]
+    const blanks = hand.filter(isBlank)
+    const left = 7 - g.placementsDone[me]
+    const foe = otherPlayer(me)
+    const point = g.slots.some((s, i) => s.owner === null && (winsIfOwns(g, me, i) || winsIfOwns(g, foe, i)))
+    if (left <= 2 || point) return limitedPick(g, me, playerRt, rng, { noPad: true })
+    const { assets } = blankAssets(g.seed, hand, left)
+    if (!assets.length) {
+      if (!blanks.length) return [lowest(hand).id]
+      return blanks.slice(0, 1 + Math.floor(rng() * 3)).map((c) => c.id)
+    }
+    const a = assets[Math.floor(rng() * assets.length)]
+    const v = evaluate(a.cards)
+    const top = v.rankSeq[0] ?? 0
+    const pad = v.category === CATEGORY.THREE_KIND ? (rng() < 0.5 ? 1 : 0) : v.category === CATEGORY.PAIR && top <= 10 ? (rng() < 0.5 ? 1 : 0) : 0
+    return [...a.cards, ...blanks.slice(0, pad)].map((c) => c.id)
+  },
+  place: (g, me, rng) => {
+    PLACE_TUNE.rankCount = false
+    try {
+      return limitedPlace(g, me, playerRt, rng)
+    } finally {
+      PLACE_TUNE.rankCount = true
+    }
+  },
+}
+const lowest = (hand: Card[]) => [...hand].sort((a, b) => a.rank - b.rank)[0]
+
+/** 一場空城計,每一疊出牌交給 onPile;回傳 p1 贏沒。 */
+function playBlank(seed: number, a: Brain, b: Brain, onPile?: (cards: Card[], by: PlayerId, g: GameState) => void, onSlot?: (mine: Card[], won: boolean | null, who: PlayerId) => void): boolean {
   const rng = mulberry32(seed)
   const brains: Record<PlayerId, Brain> = { p1: a, p2: b }
   let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', 'blank')
@@ -133,109 +183,103 @@ function playBlank(seed: number, a: Brain, b: Brain, onPile?: (cards: import('./
     } else if (g.phase === 'showdown') g = resolveShowdown(g)
     else if (g.phase === 'draw') g = applyDraw(g)
   }
-  if (onSlot) for (const s of g.slots) for (const who of ['p1', 'p2'] as const) if (s[who].length && s.owner !== null) onSlot(s[who], s.owner === 'both' ? null : s.owner === who)
+  if (onSlot) for (const s of g.slots) for (const who of ['p1', 'p2'] as const) if (s[who].length && s.owner !== null) onSlot(s[who], s.owner === 'both' ? null : s.owner === who, who)
   return g.winner === 'p1'
 }
 
-describe.skipIf(!process.env.BLANK_GEN)('空城計分布表(BLANK_GEN=1 才跑)', () => {
-  it('電腦式墊法 / 不墊', () => {
-    const G = Number(process.env.SIM_N ?? 3000)
-    for (const [name, opts] of [['PAD', {}], ['NOPAD', { noPad: true }]] as const) {
-      const tally: Map<string, number>[] = Array.from({ length: 6 }, () => new Map())
-      for (let i = 0; i < G; i++) {
-        const r = mulberry32(7_100_000 + i)
-        const a = blankBrain(casualRt(r), opts)
-        const b = blankBrain(casualRt(r), opts)
-        playBlank(8_100_000 + i, a, b, (cards) => {
-          const v = evaluate(cards)
-          const reals = cards.filter((c) => !isBlank(c)).length
-          const key = `${v.category},${v.rankSeq[0] ?? 0},${cards.filter(isJoker).length}`
-          const k2 = `${key},${reals}`
-          tally[cards.length].set(k2, (tally[cards.length].get(k2) ?? 0) + 1)
-        })
-      }
-      const mixN = tally.slice(1).map((m) => [...m.values()].reduce((s, n) => s + n, 0))
-      const all = mixN.reduce((s, n) => s + n, 0)
-      const lines = tally.slice(1).map((m) => {
-        const tot = [...m.values()].reduce((s, n) => s + n, 0)
-        const rows = [...m.entries()].filter(([, n]) => n / tot >= 0.003).sort((x, y) => y[1] - x[1])
-        const kept = rows.reduce((s, [, n]) => s + n, 0)
-        // [牌型, 最大點數, 鬼, 機率, 真牌數]
-        return '  [' + rows.map(([k, n]) => { const [c, t, j, re] = k.split(','); return `[${c},${t},${j},${(n / kept).toFixed(3)},${re}]` }).join(', ') + '],'
-      })
-      console.log(`\n${name}\n[\n${lines.join('\n')}\n]\nCOUNT_MIX ${JSON.stringify(mixN.map((n) => +(n / all).toFixed(3)))}`)
+/** 出牌分類(使用者的講法):全空白 / 高牌 / 弱對 / 強對 / 兩對 / 三條 / 鐵支 / 5 張大牌,加「墊 N」。 */
+function shapeOf(cards: Card[]): string {
+  const reals = cards.filter((c) => !isBlank(c))
+  if (!reals.length) return `全空白 ${cards.length} 張`
+  const v = evaluate(cards)
+  const top = v.rankSeq[0]
+  const pad = cards.length - reals.length
+  const name =
+    v.category === CATEGORY.HIGH_CARD ? `高牌${top >= 13 ? ' K/A' : top >= 10 ? ' 10~Q' : ' 7~9'}`
+    : v.category === CATEGORY.PAIR ? (top >= 11 ? '強對' : '弱對')
+    : v.category === CATEGORY.FOUR_KIND || v.category >= CATEGORY.STRAIGHT ? (reals.length >= 5 ? '5 張大牌' : CATEGORY_NAME_ZH[v.category])
+    : CATEGORY_NAME_ZH[v.category]
+  return `${name}${reals.some(isJoker) ? '(含鬼)' : ''}${pad ? ` 墊${pad}` : ''}`
+}
+
+const EXECS = [1, 0.75, 0.6, 0.5, 0.35]
+/** 同一個大腦但出牌不看棋盤(§11.5d 前的第二版),比較用。 */
+const boardOff = (b: Brain): Brain => ({
+  ...b,
+  pick: (g, me, rng) => {
+    BLANK_TUNE.board = false
+    try {
+      return b.pick(g, me, rng)
+    } finally {
+      BLANK_TUNE.board = true
     }
-  }, 1_800_000)
+  },
 })
+const withExec = (rng: Rng, ex: number, main?: BossRuntime['main']): BossRuntime => ({ ...casualRt(rng), execution: ex, ...(main ? { main } : {}) })
 
 describe.skipIf(!process.env.BLANK)('空城計模擬(BLANK=1 才跑)', () => {
-  it('各牌型拿下格子的比例(調價值表用)', () => {
-    const won = new Map<string, [number, number]>()
-    for (let i = 0; i < N; i++) {
-      const r = mulberry32(40_000 + i)
-      playBlank(400_000 + i, blankBrain(casualRt(r)), blankBrain(casualRt(r)), undefined, (mine, w) => {
-        const v = evaluate(mine)
-        const name = v.category < 0 ? '全空白' : CATEGORY_NAME_ZH[v.category]
-        const key = v.category <= 1 && v.category >= 0 ? `${name} ${v.rankSeq[0] >= 13 ? 'K/A' : v.rankSeq[0] >= 10 ? '10~Q' : '7~9'}` : name
-        const t = won.get(key) ?? [0, 0]
-        t[0] += w === null ? 0.5 : w ? 1 : 0
-        t[1]++
-        won.set(key, t)
-      })
-    }
-    const total = [...won.values()].reduce((s, [, n]) => s + n, 0)
-    console.log('\n| 牌型 | 拿下比例 | 佔所有牌堆 |\n|---|---|---|\n' + [...won.entries()].sort((a, b) => b[1][0] / b[1][1] - a[1][0] / a[1][1]).map(([k, [w, n]]) => `| ${k} | ${Math.round((w / n) * 100)}% | ${((n / total) * 100).toFixed(1)}% |`).join('\n'))
-  }, 1_800_000)
-
-  it(`勝率 × ${N} 場`, () => {
+  it(`勝率 × ${N} 場(對手 = 玩家模型)`, () => {
     const rows: [string, (r: Rng) => [Brain, Brain]][] = [
-      ['快配人機 vs 直覺玩家(不墊、每手最大)', (r) => [blankBrain(casualRt(r)), blankGreedy]],
-      ['對戰電腦(預設) vs 直覺玩家', () => [blankBrain(defaultLimitedBrain('blank')), blankGreedy]],
-      ['強攻 vs 直覺玩家', (r) => [blankBrain(withMain(r, 'attack')), blankGreedy]],
-      ['平衡 vs 直覺玩家', (r) => [blankBrain(withMain(r, 'balance')), blankGreedy]],
-      ['囤牌 vs 直覺玩家', (r) => [blankBrain(withMain(r, 'hoard')), blankGreedy]],
-      ['快配人機 vs 同個性原本邏輯', (r) => { const rt = casualRt(r); return [blankBrain(rt), original({ ...rt })] }],
-      ['快配人機 vs 隨機', (r) => [blankBrain(casualRt(r)), random]],
-      ['有墊 vs 不墊(同個性)', (r) => { const rt = casualRt(r); return [blankBrain(rt), blankBrain({ ...rt }, { noPad: true })] }],
-      ['送全空白(預設) vs 送格分數決定', (r) => { const rt = casualRt(r); return [blankBrain(rt), blankBrain({ ...rt }, { sacrifice: 'score' })] }],
-      ['送全空白(預設) vs 只送單張', (r) => { const rt = casualRt(r); return [blankBrain(rt), blankBrain({ ...rt }, { sacrifice: 'single' })] }],
-      ['快配人機 執行力 0.35/0.5/0.65 vs 直覺玩家', (r) => [blankBrain({ ...casualRt(r), execution: [0.35, 0.5, 0.65][Math.floor(r() * 3)] }), blankGreedy]],
-      ['對戰電腦 執行力 0.5 vs 直覺玩家', () => [blankBrain({ ...defaultLimitedBrain('blank'), execution: 0.5 }), blankGreedy]],
-      ['快配人機 執行力 0.2/0.35/0.5 vs 直覺玩家', (r) => [blankBrain({ ...casualRt(r), execution: [0.2, 0.35, 0.5][Math.floor(r() * 3)] }), blankGreedy]],
-      ['對戰電腦 執行力 0.35 vs 直覺玩家', () => [blankBrain({ ...defaultLimitedBrain('blank'), execution: 0.35 }), blankGreedy]],
-      ['直覺玩家 vs 直覺玩家(先後手基準)', () => [blankGreedy, blankGreedy]],
-      ['強攻 vs 平衡', (r) => [blankBrain(withMain(r, 'attack')), blankBrain(withMain(r, 'balance'))]],
-      ['強攻 vs 囤牌', (r) => [blankBrain(withMain(r, 'attack')), blankBrain(withMain(r, 'hoard'))]],
-      ['平衡 vs 囤牌', (r) => [blankBrain(withMain(r, 'balance')), blankBrain(withMain(r, 'hoard'))]],
+      ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`快配人機 執行力 ${ex} vs 玩家模型`, (r) => [blankBrain(withExec(r, ex)), playerModel]]),
+      ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`對戰電腦 執行力 ${ex} vs 玩家模型`, () => [blankBrain({ ...defaultLimitedBrain('blank'), execution: ex }), playerModel]]),
+      ['快配人機 0.35/0.5/0.65 隨機抽(現在線上) vs 玩家模型', (r) => [blankBrain(withExec(r, [0.35, 0.5, 0.65][Math.floor(r() * 3)])), playerModel]],
+      ...(['attack', 'balance', 'hoard'] as const).flatMap((m) =>
+        [1, 0.65, 0.5, 0.35, 0].map((ex): [string, (r: Rng) => [Brain, Brain]] => {
+          const name = m === 'attack' ? '強攻' : m === 'balance' ? '平衡' : '囤牌'
+          // ex = 0 這列代表線上快配:0.35 / 0.5 / 0.65 隨機抽
+          return ex
+            ? [`${name} 執行力 ${ex} vs 玩家模型`, (r) => [blankBrain(withExec(r, ex, m)), playerModel]]
+            : [`${name} 0.35/0.5/0.65 隨機抽 vs 玩家模型`, (r) => [blankBrain(withExec(r, [0.35, 0.5, 0.65][Math.floor(r() * 3)], m)), playerModel]]
+        }),
+      ),
+      ['不看棋盤(第二版) 執行力 1 vs 玩家模型', (r) => [boardOff(blankBrain(withExec(r, 1))), playerModel]],
+      ['快配人機 執行力 1 vs 直覺玩家(第一版基準)', (r) => [blankBrain(withExec(r, 1)), blankGreedy]],
+      ['玩家模型 vs 直覺玩家', () => [playerModel, blankGreedy]],
+      ['有墊 vs 不墊(同個性,執行力 1)', (r) => { const rt = withExec(r, 1); return [blankBrain(rt), blankBrain({ ...rt }, { noPad: true })] }],
+      ['玩家模型 vs 玩家模型(先後手基準)', () => [playerModel, playerModel]],
+      ['強攻 vs 平衡(執行力 1)', (r) => [blankBrain(withExec(r, 1, 'attack')), blankBrain(withExec(r, 1, 'balance'))]],
+      ['強攻 vs 囤牌(執行力 1)', (r) => [blankBrain(withExec(r, 1, 'attack')), blankBrain(withExec(r, 1, 'hoard'))]],
+      ['平衡 vs 囤牌(執行力 1)', (r) => [blankBrain(withExec(r, 1, 'balance')), blankBrain(withExec(r, 1, 'hoard'))]],
     ]
     const out: string[] = ['| 對局 | 前者勝率 |', '|---|---|']
+    // ROW=正規式 → 只跑名字符合的列
+    const only = process.env.ROW ? new RegExp(process.env.ROW) : null
     rows.forEach(([name, mk], k) => {
+      if (only && !only.test(name)) return
       let w = 0
       for (let i = 0; i < N; i++) {
         const [a, b] = mk(mulberry32(70_000 * (k + 1) + i))
-        if (play(910_000 * (k + 1) + i, a, b, 'blank')) w++
+        if (playBlank(910_000 * (k + 1) + i, a, b)) w++
       }
       out.push(`| ${name} | ${Math.round((w / N) * 100)}% |`)
     })
     console.log('\n' + out.join('\n'))
   }, 1_800_000)
 
-  it('出牌樣態(張數 / 真牌數 / 送格)', () => {
-    const t = Array.from({ length: 7 }, () => ({ n: 0, cards: 0, reals: 0, sac: 0, allBlank: 0 }))
-    for (let i = 0; i < N; i++) {
-      const r = mulberry32(80_000 + i)
-      playBlank(800_000 + i, blankBrain(casualRt(r)), blankGreedy, (cards, by, g) => {
-        if (by !== 'p1') return
-        const row = t[g.placementsDone.p1]
-        const reals = cards.filter((c) => !isBlank(c)).length
-        row.n++
-        row.cards += cards.length
-        row.reals += reals
-        if (reals <= 1 && !cards.some(isJoker)) row.sac++
-        if (reals === 0) row.allBlank++
-      })
+  it('出牌樣態 + 拿下格子比例(快配人機 vs 玩家模型)', () => {
+    for (const ex of [1, 0.5]) {
+      const shapes = new Map<string, [number, number, number]>() // 次數, 拿下, 有結果
+      let total = 0
+      for (let i = 0; i < N; i++) {
+        const r = mulberry32(80_000 + i)
+        playBlank(800_000 + i, blankBrain(withExec(r, ex)), playerModel, (cards, by) => {
+          if (by !== 'p1') return
+          const k = shapeOf(cards)
+          const t = shapes.get(k) ?? [0, 0, 0]
+          t[0]++
+          shapes.set(k, t)
+          total++
+        }, (mine, won, who) => {
+          if (who !== 'p1') return
+          const t = shapes.get(shapeOf(mine))
+          if (!t) return
+          t[1] += won === null ? 0.5 : won ? 1 : 0
+          t[2]++
+        })
+      }
+      const rows = [...shapes.entries()].sort((a, b) => b[1][0] - a[1][0]).filter(([, [n]]) => n / total >= 0.005)
+      console.log(`\n執行力 ${ex}:出牌樣態(佔所有手數 / 拿下格子)\n` + rows.map(([k, [n, w, d]]) => `${k}: ${((n / total) * 100).toFixed(1)}% / ${d ? Math.round((w / d) * 100) : '-'}%`).join('\n'))
     }
-    console.log('\n手 | 平均張數 | 平均真牌 | 送格% | 全空白%\n' + t.map((x, k) => `${k + 1} | ${(x.cards / x.n).toFixed(2)} | ${(x.reals / x.n).toFixed(2)} | ${Math.round((x.sac / x.n) * 100)} | ${Math.round((x.allBlank / x.n) * 100)}`).join('\n'))
   }, 1_800_000)
 })
 

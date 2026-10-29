@@ -307,7 +307,7 @@ describe('限定房放牌(§11.9,百鬼夜行分布表)', () => {
 })
 // ---- 空城計(§11.5a) ----
 
-describe('空城計人機(§11.5a)', () => {
+describe('空城計人機(§11.5c / 11.5d)', () => {
   const Bk = (n: number): Card => ({ id: `BLANK_d${n}`, suit: 'C', rank: 2, kind: 'blank' })
   const bk = (n: number) => Array.from({ length: n }, (_, i) => Bk(i + 1))
   /** p2 選牌的空城計局面(placed = 雙方已放幾手)。 */
@@ -348,19 +348,80 @@ describe('空城計人機(§11.5a)', () => {
       if (realsOf(p).length) expect(p.some(isBlank)).toBe(false)
     }
   })
-  it('強牌:真大裝大(墊到 5 張)或真大裝小(不墊),真牌都是三條', () => {
-    const hand = [C('C9'), C('D9'), C('H9'), C('SA'), ...bk(6)]
-    const big = pickWith(blankState(hand, 2), brain('attack'), 0.05) // rng 小 → 墊
-    expect(evaluate(big).category).toBe(CATEGORY.THREE_KIND)
-    expect(big).toHaveLength(5)
-    const small = pickWith(blankState(hand, 2), brain('attack'), 0.95) // rng 大 → 不墊
-    expect(evaluate(small).category).toBe(CATEGORY.THREE_KIND)
-    expect(small.some(isBlank)).toBe(false)
+  it('三條:真牌是三條,最多墊 2 張(不再墊到 5 張)', () => {
+    const hand = [C('C9'), C('D9'), C('H9'), C('SA'), C('DK'), ...bk(6)]
+    for (const r of [0.05, 0.5, 0.95]) {
+      const p = pickWith(blankState(hand, 2), brain('attack'), r)
+      expect(evaluate(p).category).toBe(CATEGORY.THREE_KIND)
+      expect(realsOf(p)).toHaveLength(3)
+      expect(p.filter(isBlank).length).toBeLessThanOrEqual(2)
+    }
+  })
+  it('強對子(J~A)最多墊 1 張;弱對子最多墊 2 張', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      for (const r of [0.05, 0.5, 0.95]) {
+        const strong = pickWith(blankState([C('CK'), C('DK'), C('S7'), C('H9'), ...bk(6)], 1), brain(main), r)
+        if (evaluate(strong).category === CATEGORY.PAIR && evaluate(strong).rankSeq[0] === 13) expect(strong.filter(isBlank).length).toBeLessThanOrEqual(1)
+        const weak = pickWith(blankState([C('C8'), C('D8'), C('SA'), C('HJ'), ...bk(6)], 1), brain(main), r)
+        if (realsOf(weak).length === 2) expect(weak.filter(isBlank).length).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+  it('沒有對子:送全空白,不出單張 / 單張 + 1~2 空白(使用者 10/30:Q + 空白、單出一張 Q 都沒價值;偶爾「單張 + 3 空白」裝大可以)', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      for (let pd = 0; pd <= 4; pd++) {
+        for (const r of [0.05, 0.5, 0.95]) {
+          const p = pickWith(blankState([C('SQ'), C('H9'), C('DK'), C('C7'), C('SJ'), ...bk(6)], pd), brain(main), r)
+          if (realsOf(p).length) {
+            expect(realsOf(p)).toHaveLength(1)
+            expect(p.filter(isBlank).length).toBeGreaterThanOrEqual(3)
+          }
+        }
+        expect(realsOf(pickWith(blankState([C('SQ'), C('H9'), C('DK'), C('C7'), C('SJ'), ...bk(6)], pd), brain(main), 0.5))).toHaveLength(0)
+      }
+    }
+  })
+  it('鬼不拿去配單張湊對子;有對子就把對子補成三條', () => {
+    const noPair = pickWith(blankState([C('SA'), C('H9'), C('DQ'), Jk(1), ...bk(6)], 1), brain('attack'), 0.5)
+    expect(noPair.some(isJoker)).toBe(false)
+    let played = 0
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      for (const pd of [1, 3, 4]) {
+        for (const r of [0.05, 0.5, 0.95]) {
+          const pair = pickWith(blankState([C('C8'), C('D8'), C('SA'), C('HJ'), Jk(1), ...bk(6)], pd), brain(main), r)
+          if (!pair.some((c) => c.rank === 8 && !isBlank(c) && !isJoker(c))) continue
+          played++
+          expect(evaluate(pair).category).toBe(CATEGORY.THREE_KIND)
+          expect(pair.some(isJoker)).toBe(true)
+        }
+      }
+    }
+    expect(played).toBeGreaterThan(0)
+  })
+  it('鐵支不墊空白', () => {
+    // seed 5 時 9 的鐵支是「留著」(quadsPlan);不管拆不拆都不會墊空白
+    for (const r of [0.05, 0.5, 0.95]) {
+      const p = pickWith(blankState([C('C9'), C('D9'), C('H9'), C('S9'), ...bk(6)], 1), brain('attack'), r)
+      if (evaluate(p).category === CATEGORY.FOUR_KIND) expect(p.some(isBlank)).toBe(false)
+    }
+  })
+  it('前五手不出 5 張真牌的大牌(葫蘆拆成三條 + 對子)', () => {
+    const hand = [C('C9'), C('D9'), C('H9'), C('SK'), C('HK'), ...bk(6)]
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      for (let pd = 0; pd <= 4; pd++) {
+        for (const r of [0.05, 0.5, 0.95]) expect(realsOf(pickWith(blankState(hand, pd), brain(main), r)).length).toBeLessThanOrEqual(3)
+      }
+    }
+  })
+  it('失手 = 照實出最划算的一手:最強的資產、不墊', () => {
+    const p = pickWith(blankState([C('C8'), C('D8'), C('HQ'), C('SQ'), C('CQ'), C('SA'), ...bk(6)], 1), brain('hoard', 0), 0.5)
+    expect(realsOf(p).map((c) => c.rank)).toEqual([12, 12, 12])
+    expect(p.some(isBlank)).toBe(false)
   })
   it('對手差一格就贏:真牌出最強的,空白照墊', () => {
     const g = blankState([C('C9'), C('D9'), C('H9'), C('S7'), C('HA'), ...bk(6)], 3)
     const slots = g.slots.map((s, i) => (i < 3 ? { p1: [C('SK')], p2: [C('C8')], owner: 'p1' as const } : s))
-    const p = pickWith({ ...g, slots }, brain('hoard'), 0.05)
+    const p = pickWith({ ...g, slots }, brain('hoard'), 0.95)
     expect(evaluate(p).category).toBe(CATEGORY.THREE_KIND)
     expect(p.some(isBlank)).toBe(true)
   })
@@ -375,7 +436,24 @@ describe('空城計人機(§11.5a)', () => {
   })
 })
 
-describe('空城計放牌(§11.5a,讀人 + 算牌)', () => {
+describe('空城計放牌(§11.5c,玩家模型表 + 讀人 + 算牌)', () => {
+  /** p1(真人)剛出 incoming,等 p2(電腦)放;mine[i] = 電腦在第 i 格已經有的牌。 */
+  function placeState(incoming: Card[], mine: Record<number, Card[]>): GameState {
+    const g = createGame(5, 'p1', 'p2', 'blank')
+    const slots = g.slots.map((_, i) => ({ p1: [] as Card[], p2: mine[i] ?? [], owner: null }))
+    return { ...g, slots, hands: { ...g.hands, p2: [] }, pendingPick: { by: 'p1', cards: incoming }, phase: 'place' }
+  }
+  const Bk = (n: number): Card => ({ id: `BLANK_d${n}`, suit: 'C', rank: 2, kind: 'blank' })
+  it('對手出 3 張(多半三條):不拿自己的「對子 + 空白」去撞,丟給自己全空白那格', () => {
+    const g = placeState([C('S7'), C('H7'), C('D7')], { 1: [C('CJ'), C('DJ'), Bk(1)], 3: [Bk(2), Bk(3), Bk(4)], 5: [C('SA'), C('HA'), C('DA')] })
+    for (const main of ['attack', 'balance', 'hoard'] as const) expect(aiPlace(g, 'p2', brain(main))).not.toBe(1)
+  })
+  it('算點數:A 都看光了(鬼也看到了),對手 2 張就不會是一對 A', () => {
+    const g = placeState([C('S8'), C('H8')], { 1: [C('CK'), C('DK')], 5: [C('SA'), C('HA')] })
+    const seenA = { ...g, hands: { ...g.hands, p2: [C('DA'), C('CA'), Jk(1), { id: 'JOKER_p1', suit: 'S', rank: 14, kind: 'joker' } as Card] } }
+    // 一對 K 在這時是對 2 張最強的牌之一 → 至少有一種打法拿去接
+    expect(['attack', 'balance', 'hoard'].map((m) => aiPlace(seenA, 'p2', brain(m as BossRuntime['main'])))).toContain(1)
+  })
   it('120 場電腦對電腦:合法、打得完', () => {
     for (let seed = 1; seed <= 120; seed++) {
       const rng = mulberry32(seed)

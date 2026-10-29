@@ -80,8 +80,8 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
  */
 export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; vsComputer: number }>> = {
   ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
-  // 空城計(2026-10-29 模擬 vs 不墊、每手出最大的直覺玩家):原本 0.6/0.75/0.9 → 61%、電腦 0.75 → 67%;
-  // 這組 → 53% / 54%,跟一般房差不多。先暫定,使用者實測再調。
+  // 空城計(2026-10-30 第二版 + 看棋盤,模擬 vs 照使用者打法寫的玩家模型):執行力 1 → 快配 56%、電腦 64%;
+  // 這組 → 55% / 54%(目標 50~55%)。使用者實測再調。
   blank: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
 }
 

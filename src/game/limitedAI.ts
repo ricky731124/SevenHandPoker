@@ -13,7 +13,8 @@ import { CATEGORY, compareHands, compareLimited, evaluate } from './evaluate'
 import { groupBy } from './aiCore'
 import { bossPlace, type BossProfile, type BossRuntime } from './bossAI'
 import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
-import { hasPlaceTable, placeByTable, winsIfOwns } from './limitedPlace'
+import { mulberry32 } from './rng'
+import { blankBoardScores, blankStrength, hasPlaceTable, placeByTable, winsIfOwns } from './limitedPlace'
 import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, otherPlayer, type GameState, type PlayerId } from './state'
 
 type Rng = () => number
@@ -35,13 +36,8 @@ const noInsight = (rt: BossRuntime): BossRuntime => ({ ...rt, profile: { ...rt.p
 
 /** 模擬 / 產分布表用的開關(遊戲裡不傳)。 */
 export interface LimitedPickOpts {
-  /** 空城計:不墊空白(「不墊」分布表、直覺玩家基準) */
+  /** 空城計:不墊空白(模擬比較用) */
   noPad?: boolean
-  /**
-   * 空城計送格用哪種:全空白(預設;手上沒空白才送單張)/ 最小單張 / 兩種都列由分數決定。
-   * 2026-10-29 模擬:只送全空白 vs 分數決定 55%(單張 7~9 拿下格子 0%、10~Q 9%,混小真牌幾乎偷不到)。
-   */
-  sacrifice?: 'score' | 'blank' | 'single'
 }
 
 export function limitedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random, opts: LimitedPickOpts = {}): string[] {
@@ -400,40 +396,102 @@ function ghostPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): C
   return pileOf(pick)
 }
 
-// ---- 空城計(§11.5a) ----------------------------------------------------------
+// ---- 空城計(§11.5c 第二版) ----------------------------------------------------
 //
-// 真牌只有 7~A、一人約 16 張分 7 手 → 真牌是稀缺資源;空白不用急著出,只拿來墊張數詐唬。
-// 兩層:① 真牌出哪幾張(跟百鬼同一套:這手價值 + 看未來,價值表換空城計的)② 墊幾張空白。
+// 真牌只有 7~A、一人約 16 張分 7 手 → 真牌是稀缺資源,要講 CP 值:三條最划算、對子堪用、
+// 鐵支 / 5 張大牌除非不得已都算浪費(撞到一張空白就虧大)。空白只拿來送格和墊張數詐唬。
+// 手牌先拆成「資產」(三條 / 對子 / 鐵支),沒資產就送全空白;墊空白看這手的強弱。
+
+/** 強對子 = J~A;弱對子 = 7~10(§11.5c)。 */
+const STRONG_PAIR = 11
 
 /**
- * 空城計各牌型的價值 = 拿下一格的比例 × 10(2026-10-29 模擬 300 場):同花順 100%、鐵支 91%、葫蘆 89%、
- * 兩對 88%、三條 78%、同花 71%、順子 68%、對子 7~9 51% / 10~Q 58% / K、A 71%、
- * 單張 K、A 31% / 10~Q 7% / 7~9 1%、全空白 0%。
+ * 空城計各牌型的價值(排序 / 合併 / 最後兩手比較用):跟比牌大小同順序,三條以下照 CP 拉開;
+ * 單張只有 K / A 有一點用,全空白 0。
  */
-const BLANK_CAT_VALUE: Record<number, number> = {
-  [CATEGORY.STRAIGHT_FLUSH]: 10,
-  [CATEGORY.FOUR_KIND]: 9.1,
-  [CATEGORY.FULL_HOUSE]: 8.9,
-  [CATEGORY.FLUSH]: 7.1,
-  [CATEGORY.STRAIGHT]: 6.8,
-  [CATEGORY.THREE_KIND]: 7.8,
-  [CATEGORY.TWO_PAIR]: 8.8,
-  [CATEGORY.PAIR]: 5.1,
-  [CATEGORY.HIGH_CARD]: 0,
-  [CATEGORY.EMPTY]: 0,
+const blankValue: ValueFn = (cat, top) => {
+  switch (cat) {
+    case CATEGORY.STRAIGHT_FLUSH:
+      return 10
+    case CATEGORY.FOUR_KIND:
+      return 9.5 + (top - 7) * 0.03
+    case CATEGORY.FULL_HOUSE:
+      return 9.3
+    case CATEGORY.FLUSH:
+      return 9.1
+    case CATEGORY.STRAIGHT:
+      return 8.9
+    case CATEGORY.THREE_KIND:
+      return 8 + (top - 7) * 0.1
+    case CATEGORY.TWO_PAIR:
+      return 7 + (top - 7) * 0.05
+    case CATEGORY.PAIR:
+      return top >= STRONG_PAIR ? 5 + (top - STRONG_PAIR) * 0.4 : 3 + (top - 7) * 0.4
+    case CATEGORY.HIGH_CARD:
+      return top >= 13 ? 1 + (top - 13) * 0.5 : 0.1 * Math.max(0, top - 6)
+    default:
+      return 0
+  }
 }
-/** 單張幾乎只有 K、A 拿得到格子 */
-const BLANK_HIGH = [0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 2.5, 3.5] // 7~A
-const blankValue: ValueFn = (cat, top) =>
-  cat === CATEGORY.EMPTY
-    ? 0
-    : cat === CATEGORY.HIGH_CARD
-      ? BLANK_HIGH[Math.max(0, top - 7)]
-      : BLANK_CAT_VALUE[cat] + ((top - 7) / 7) * (cat === CATEGORY.PAIR ? 2 : 0.5)
 
-/** 送格:最多 1 張真牌、不帶鬼(最小單張 + 空白,或全空白)。 */
-const isSacrifice = (c: { reals: Card[]; jokers: number }) => c.reals.length <= 1 && c.jokers === 0
-/** 桌上自己已經送了幾格(看牌堆算)。 */
+/** 一個資產:這疊牌(含補上的鬼)與它的牌型。 */
+export interface BlankAsset {
+  cards: Card[]
+  cat: number
+  top: number
+  value: number
+}
+const assetOf = (cards: Card[]): BlankAsset => {
+  const v = evaluate(cards)
+  const top = v.rankSeq[0] ?? 0
+  return { cards, cat: v.category, top, value: blankValue(v.category, top) }
+}
+
+/** 鐵支怎麼處理(使用者習慣:留 50% / 拆三條 30% / 拆兩個對子 20%);同一局同一組只決定一次(用 seed)。 */
+function quadsPlan(seed: number, rank: number): 'keep' | 'trips' | 'pairs' {
+  const r = mulberry32((seed ^ Math.imul(rank, 0x9e3779b1)) >>> 0)()
+  return r < 0.5 ? 'keep' : r < 0.8 ? 'trips' : 'pairs'
+}
+
+/**
+ * 手牌拆成資產(§11.5c 第 1 點):三條 / 對子 / 鐵支;鬼補最弱的對子成三條,沒對子就留著;
+ * 資產比剩下的手數多(真牌多到用不完)→ 最弱的兩個併起來(兩對、葫蘆)。
+ */
+export function blankAssets(seed: number, hand: Card[], handsLeft: number): { assets: BlankAsset[]; singles: Card[]; spare: Card[] } {
+  const reals = hand.filter((c) => !isJoker(c) && !isBlank(c))
+  const spare = hand.filter(isJoker)
+  let assets: BlankAsset[] = []
+  const singles: Card[] = []
+  for (const g of groupBy(reals, (c) => c.rank).values()) {
+    if (g.length >= 4) {
+      const plan = quadsPlan(seed, g[0].rank)
+      if (plan === 'keep') assets.push(assetOf(g.slice(0, 4)))
+      else if (plan === 'trips') {
+        assets.push(assetOf(g.slice(0, 3)))
+        singles.push(g[3])
+      } else assets.push(assetOf(g.slice(0, 2)), assetOf(g.slice(2, 4)))
+    } else if (g.length >= 2) assets.push(assetOf(g))
+    else singles.push(g[0])
+  }
+  while (spare.length) {
+    const pairs = assets.filter((a) => a.cat === CATEGORY.PAIR)
+    if (!pairs.length) break
+    const to = pairs.reduce((b, a) => (T.jokerTo === 'weakest' ? a.value < b.value : a.value > b.value) ? a : b)
+    assets = assets.map((a) => (a === to ? assetOf([...a.cards, spare.shift()!]) : a))
+  }
+  // 真牌多到用不完:最弱的兩個(≤ 3 張的)併起來,超過 5 張的挑最大的 5 張、其餘變單張
+  while (assets.length > handsLeft) {
+    const small = assets.filter((a) => a.cards.length <= 3).sort((a, b) => a.value - b.value)
+    if (small.length < 2) break
+    const cards = [...small[0].cards, ...small[1].cards]
+    const keep = cards.length > 5 ? biggestPile(cards, 5, compareHands) : cards
+    singles.push(...cards.filter((c) => !keep.includes(c)))
+    assets = [...assets.filter((a) => a !== small[0] && a !== small[1]), assetOf(keep)]
+  }
+  return { assets, singles: singles.sort((a, b) => a.rank - b.rank), spare }
+}
+
+/** 送格:全空白(或「最小落單單張 + 空白」裝大)。桌上自己已經送了幾格(看牌堆算)。 */
 function sacrificesDone(state: GameState, me: PlayerId): number {
   return state.slots.filter((s) => {
     const p = s[me]
@@ -441,19 +499,61 @@ function sacrificesDone(state: GameState, me: PlayerId): number {
   }).length
 }
 
-/** 詐唬比例(§11.3):強牌墊滿(真大裝大)的機率、弱牌墊到 4~5 張(小牌裝大)的機率。 */
-const P_BIG_PAD: Record<BossRuntime['main'], number> = { attack: 0.62, balance: 0.5, hoard: 0.5 }
-const pSmallBig = (main: BossRuntime['main'], pd: number) => (main === 'attack' ? 0.3 : main === 'balance' ? 0.5 : pd < 2 ? 0.75 : 0.5)
+/**
+ * 空城計可調參數(§11.5c;2026-10-30 模擬 BLANK=1 調過:先出弱的資產 −4%、不墊 −3%、三條 / 弱對多墊 +2%,
+ * 強對子墊不墊差不到 1% → 照使用者直覺少墊)。集中在這裡,模擬可以暫時改來比較。
+ *  - order:主策略先出強的 / 中間 / 弱的資產
+ *  - realsPerAsset:之後補牌大概能湊出幾個資產 =(之後補到的真牌 + 落單單張 × 0.5)÷ 這個數
+ *  - sacNeed:差額 ≥ 這個數才先送格(強攻 Infinity = 有資產就出)
+ *  - maxSac:整局最多送幾格(7 格要拿 4 格)
+ *  - jokerTo:鬼補最弱 / 最強的對子
+ *  - pad*:墊空白機率表 [不墊, 墊 1, 墊 2];sacCount:全空白送格 1~5 張的機率
+ *  - bigBluff:送格改用「最小落單單張 + 3~4 空白」裝大的機率;stylePad:三條墊空白機率再乘這個
+ */
+export const BLANK_TUNE = {
+  order: { attack: 'strong', balance: 'strong', hoard: 'mid' } as Record<BossRuntime['main'], 'strong' | 'mid' | 'weak'>,
+  realsPerAsset: 2.5,
+  sacNeed: { attack: Infinity, balance: 1, hoard: 0.5 } as Record<BossRuntime['main'], number>,
+  maxSac: 3,
+  jokerTo: 'weakest' as 'weakest' | 'strongest',
+  padTrips: [0.3, 0.5, 0.2],
+  padTwoPair: [0.8, 0.2],
+  padStrongPair: [0.85, 0.15],
+  padWeakPair: [0.3, 0.7],
+  sacCount: [0.35, 0.3, 0.25, 0.07, 0.03],
+  bigBluff: { attack: 0.08, balance: 0.1, hoard: 0.15 } as Record<BossRuntime['main'], number>,
+  stylePad: { attack: 1.3, balance: 1, hoard: 0.9 } as Record<BossRuntime['main'], number>,
+  // 看棋盤(§11.5d)
+  board: true,
+  /** 看未來比重(強攻低、囤牌高;2026-10-30 模擬:×0.6 → −4%、×1.4 → +1%) */
+  gamma: { attack: 0.98, balance: 1.19, hoard: 1.4 } as Record<BossRuntime['main'], number>,
+  /** 模擬對手放牌抽幾次 */
+  samples: 12,
+  /** 每用一張空白扣的分(空白也是之後詐唬的本錢) */
+  blankCost: 0.03,
+  /** 分數加一點隨機,不要每次同一個局面都出一樣的 */
+  noise: 0.05,
+  /** 送格那手之後大概拿下格子的機率(算「這格送掉」的價值) */
+  sacWin: 0.04,
+}
+const T = BLANK_TUNE
+
+/** 這手怎麼出(第一層);honest = 照實出、不墊(失手)。 */
+type BlankPlan = { core: Card[]; kind: 'asset' | 'sacrifice' | 'bluff' | 'last' | 'board'; honest?: boolean }
 
 function blankPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, opts: LimitedPickOpts): Card[] {
   const hand = state.hands[me]
   const blanks = hand.filter(isBlank)
-  const core = blankCore(state, me, rt, rng, opts)
-  return padBlanks(state, me, core, blanks, rt, rng, opts)
+  const plan = blankPlan(state, me, rt, rng)
+  if (!plan.core.length && !blanks.length) return [lowestReal(hand)] // 只剩真牌時才會走到(理論上不會)
+  if (plan.honest || opts.noPad) return plan.core.filter((c) => !isBlank(c)).length ? plan.core.filter((c) => !isBlank(c)) : blanks.slice(0, 1)
+  if (plan.kind === 'board') return plan.core // 看棋盤已經連空白一起挑好
+  return padBlanks(state, me, plan, blanks, rt, rng)
 }
+const lowestReal = (hand: Card[]): Card => [...hand].sort((a, b) => (isBlank(a) ? 1 : 0) - (isBlank(b) ? 1 : 0) || a.rank - b.rank)[0]
 
-/** 第一層:真牌(含鬼)出哪幾張;回傳空陣列 = 全空白送格。 */
-function blankCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, opts: LimitedPickOpts): Card[] {
+/** 第一層:真牌(含鬼)出哪幾張;core 空 = 全空白送格。 */
+function blankPlan(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): BlankPlan {
   const hand = state.hands[me]
   const reals = hand.filter((c) => !isJoker(c) && !isBlank(c))
   const jokers = hand.filter(isJoker)
@@ -462,88 +562,150 @@ function blankCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, op
   const pd = state.placementsDone[me]
   const left = SLOT_COUNT - pd
   const foe = otherPlayer(me)
+  const nonBlank = [...reals, ...jokers]
 
   // 最後一手:真牌全部塞進最大的一疊(張數多的踢腳贏)
-  if (left <= 1) return reals.length || J ? biggestPile([...reals, ...jokers], 5, compareHands) : []
-  // 沒有真牌:有鬼出鬼(單張鬼 = A),沒有就全空白
-  if (!reals.length) return J ? jokers.slice(0, 1) : []
+  if (left <= 1) return { core: nonBlank.length ? biggestPile(nonBlank, 5, compareHands) : [], kind: 'last' }
+  if (!nonBlank.length) return { core: [], kind: 'sacrifice' }
 
-  const cands = candidates(reals, J, J, blankValue)
-  if (hasBlank && opts.sacrifice !== 'single') cands.push({ reals: [], jokers: 0, cat: CATEGORY.EMPTY, top: 0, value: 0 })
+  const cands = (rs: Card[], j: number) => candidates(rs, j, j, blankValue)
   const pileOf = (c: Cand) => [...c.reals, ...jokers.slice(0, c.jokers)]
-  const nonSac = cands.filter((c) => !isSacrifice(c))
-  const biggest = () => cands.reduce((b, c) => (c.value > b.value || (c.value === b.value && c.jokers < b.jokers) ? c : b), cands[0])
-
-  // 差一格就贏(誰都一樣)/ 執行力失手:真牌出這手最大的(空白照墊,第二層處理)
-  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) return pileOf(biggest())
-  if (rng() >= rt.execution) return pileOf(biggest())
-
-  const sacMode = opts.sacrifice ?? 'blank'
-  const allSacs = cands.filter(isSacrifice)
-  const blankSacs = allSacs.filter((c) => c.reals.length === 0)
-  const sacs = sacMode === 'blank' && blankSacs.length ? blankSacs : allSacs
-  const plays = nonSac.length ? nonSac : cands
-  const done = sacrificesDone(state, me)
-  const strong = (c: Cand) => c.cat >= CATEGORY.THREE_KIND
-  let w = FUTURE_WEIGHT[rt.main]
-  let pool = cands
-
-  if (pd >= SLOT_COUNT - 2) {
-    pool = plays // 後期不送
-  } else if (rt.main === 'attack') {
-    pool = plays // 強攻:有牌就出
-  } else if (rt.main === 'balance') {
-    // 平衡:有好牌就出、沒好牌就送(最多 2 次);好牌看比分
-    const mine = countCoins(state, me)
-    const theirs = countCoins(state, foe)
-    const good = (c: Cand) => (mine < theirs ? c.cat >= CATEGORY.PAIR : mine === theirs ? strong(c) || (c.cat === CATEGORY.PAIR && c.top >= 12) : strong(c))
-    const goods = nonSac.filter(good)
-    if (goods.length) pool = goods
-    else if (done < 2 && sacs.length) pool = sacs
-    else pool = plays
-  } else {
-    // 囤牌:第 1 手沒強牌就送;之後看分數(最多送 3 格)
-    if (pd === 0 && !cands.some(strong) && sacs.length) {
-      pool = sacs
-      w = 1.2
-    } else if (done >= 3) pool = plays
-    else pool = [...nonSac, ...sacs]
+  const biggest = (cs: Cand[]) => cs.reduce((b, c) => (c.value > b.value ? c : b), cs[0])
+  const { assets, singles } = blankAssets(state.seed, hand, left)
+  const sacrifice = (): BlankPlan => {
+    if (!hasBlank) return { core: [singles[0] ?? lowestReal(nonBlank)], kind: 'sacrifice' }
+    // 偶爾「最小的落單單張 + 空白」裝大(§11.5c 第 3 點);只用沒用的單張
+    if (singles.length && rng() < T.bigBluff[rt.main]) return { core: [singles[0]], kind: 'bluff' }
+    return { core: [], kind: 'sacrifice' }
   }
-  if (!pool.length) pool = cands
 
-  const after = left - 1
-  const score = (c: Cand) => c.value + w * potential(reals.filter((x) => !c.reals.includes(x)), J - c.jokers, after, J, blankValue)
-  let pick = pool[0]
-  let top = -Infinity
-  for (const c of pool) {
-    const s = score(c)
-    if (s > top) {
-      top = s
-      pick = c
+  // 差一格就分勝負(誰都一樣):真牌出最強的(大牌也可以),空白照墊
+  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) return { core: pileOf(biggest(cands(reals, J))), kind: 'asset' }
+
+  // 執行力失手:照實出最划算的一手 —— 最強的資產,不墊、不看以後;沒資產就 1 張空白
+  if (rng() >= rt.execution) {
+    if (!assets.length) return { core: hasBlank ? [] : [singles[0] ?? lowestReal(nonBlank)], kind: 'sacrifice', honest: true }
+    return { core: assets.reduce((b, a) => (a.value > b.value ? a : b)).cards, kind: 'asset', honest: true }
+  }
+
+  // 最後兩手:大牌可以出 —— 窮舉這手 + 下一手最大的組合,總價值最高的(空白送格也算一種)
+  if (left === 2) {
+    const all = cands(reals, J)
+    if (hasBlank) all.push({ reals: [], jokers: 0, cat: CATEGORY.EMPTY, top: 0, value: 0 })
+    const total = (c: Cand) => {
+      const rest = cands(reals.filter((x) => !c.reals.includes(x)), J - c.jokers)
+      return c.value + (rest.length ? biggest(rest).value : 0)
     }
+    let pick = all[0]
+    let top = -Infinity
+    for (const c of all) {
+      const s = total(c)
+      if (s > top || (s === top && c.reals.length + c.jokers < pick.reals.length + pick.jokers)) {
+        top = s
+        pick = c
+      }
+    }
+    return pick.reals.length + pick.jokers ? { core: pileOf(pick), kind: 'asset' } : sacrifice()
   }
-  return pileOf(pick)
+
+  if (T.board) return boardPlan(state, me, rt, rng, assets, singles, left)
+  if (!assets.length) return sacrifice()
+
+  // 夠不夠出滿剩下的手數:不夠的差額 = 要送幾格;什麼時候送看主策略
+  const futureReals = futureOf(state, me, (c) => !isBlank(c), 34).hits
+  const need = left - assets.length - (futureReals + singles.length * 0.5) / T.realsPerAsset
+  const done = sacrificesDone(state, me)
+  const canSac = done < T.maxSac
+  const strong = assets.some((a) => a.cat >= CATEGORY.THREE_KIND)
+  // 平衡:領先 / 平手又沒三條以上才送;囤牌:前五手差額夠就送;強攻:有資產就出
+  let sac = canSac && need >= T.sacNeed[rt.main] && pd < SLOT_COUNT - 2
+  if (rt.main === 'balance') sac &&= countCoins(state, me) >= countCoins(state, foe) && !strong
+  if (sac) return sacrifice()
+
+  const sorted = [...assets].sort((a, b) => b.value - a.value)
+  const order = T.order[rt.main]
+  const pick = order === 'strong' ? sorted[0] : order === 'weak' ? sorted[sorted.length - 1] : sorted[Math.floor((sorted.length - 1) / 2)]
+  return { core: pick.cards, kind: 'asset' }
 }
 
 /**
- * 第二層:墊幾張空白(§11.5a)。強牌 → 真大裝大(墊到 5)/ 真大裝小(不墊);對子 → 隨機 0~2;
- * 弱牌 / 全空白 → 小牌裝大(墊到 4~5)/ 照實(0~1)。空白有預算:一次最多花平均配額的 2 倍。
+ * 看棋盤(§11.5d):每個候選(資產 × 墊 0~2、送格 1~3 張全空白、單張 + 3 空白裝大)
+ * → 模擬對手會把它放哪格、這手期望多少 + 看未來 × 剩下資產之後的價值 − 空白成本,挑最高的。
  */
-function padBlanks(state: GameState, me: PlayerId, core: Card[], blanks: Card[], rt: BossRuntime, rng: Rng, opts: LimitedPickOpts): Card[] {
-  if (!blanks.length) return core
-  if (opts.noPad) return core.length ? core : blanks.slice(0, 1)
+function boardPlan(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, assets: BlankAsset[], singles: Card[], left: number): BlankPlan {
+  const hand = state.hands[me]
+  const blanks = hand.filter(isBlank)
+  const quota = (blanks.length + futureOf(state, me, isBlank, 22).hits) / left
+  const budget = Math.min(blanks.length, Math.max(1, Math.ceil(quota * 2)))
+  const opts: { pile: Card[]; used: BlankAsset | null; spent: number }[] = []
+  for (const a of assets) {
+    // 鐵支 / 5 張大牌不墊;強對子最多墊 1(使用者 10/30)
+    const strongPair = a.cat === CATEGORY.PAIR && a.top >= STRONG_PAIR
+    const maxPad = a.cards.length >= 4 ? 0 : Math.min(budget, strongPair ? 1 : 2, 5 - a.cards.length)
+    for (let p = 0; p <= maxPad; p++) opts.push({ pile: [...a.cards, ...blanks.slice(0, p)], used: a, spent: p })
+  }
+  if (blanks.length && (sacrificesDone(state, me) < T.maxSac || !assets.length)) {
+    for (let k = 1; k <= Math.min(3, budget); k++) opts.push({ pile: blanks.slice(0, k), used: null, spent: k })
+    // 裝大(單張 + 3 空白)只偶爾列進候選(使用者:可保留,但不要常出)\n    if (singles.length && budget >= 3 && rng() < T.bigBluff[rt.main]) opts.push({ pile: [singles[0], ...blanks.slice(0, 3)], used: null, spent: 3 })
+  }
+  if (!opts.length) return { core: [singles[0] ?? lowestReal(hand)], kind: 'sacrifice' }
+
+  // 之後補牌大概會多出幾個資產 → 現有資產只要撐剩下的格子
+  const futureAssets = futureOf(state, me, (c) => !isBlank(c), 34).hits / T.realsPerAsset
+  const slotsForRest = Math.max(0, Math.round(left - 1 - futureAssets))
+  const wp = new Map(assets.map((a) => [a, blankStrength(a.cards)]))
+  const future = (used: BlankAsset | null) =>
+    assets
+      .filter((a) => a !== used)
+      .map((a) => wp.get(a)!)
+      .sort((x, y) => y - x)
+      .slice(0, slotsForRest)
+      .reduce((s, p) => s + 2 * (p - T.sacWin), 0)
+  const now = blankBoardScores(state, me, opts.map((o) => o.pile), T.samples, rng)
+  let best = 0
+  let top = -Infinity
+  opts.forEach((o, k) => {
+    const s = now[k] + T.gamma[rt.main] * future(o.used) - T.blankCost * o.spent + rng() * T.noise
+    if (s > top) {
+      top = s
+      best = k
+    }
+  })
+  return { core: opts[best].pile, kind: 'board' }
+}
+/** 照機率表抽墊幾張;k 放大「有墊」的機率(boss 詐唬個性 / 主策略)。 */
+function rollPad(table: number[], k: number, rng: Rng): number {
+  const p = table.map((x, i) => (i ? x * k : 0))
+  p[0] = Math.max(0, 1 - p.slice(1).reduce((s, x) => s + x, 0))
+  let u = rng() * p.reduce((s, x) => s + x, 0)
+  for (let i = 0; i < p.length; i++) if ((u -= p[i]) < 0) return i
+  return 0
+}
+
+/**
+ * 第二層:墊幾張空白(§11.5c 第 5 點)。三條 / 對子照機率表,鐵支和 5 張大牌不墊;
+ * 送格出 1~5 張全空白;空白有預算:一次最多花平均配額的 2 倍(最後一手不限)。
+ */
+function padBlanks(state: GameState, me: PlayerId, plan: BlankPlan, blanks: Card[], rt: BossRuntime, rng: Rng): Card[] {
+  const core = plan.core
   const pd = state.placementsDone[me]
   const left = SLOT_COUNT - pd
   const room = 5 - core.length
   const quota = (blanks.length + futureOf(state, me, isBlank, 22).hits) / left
   const maxSpend = Math.min(blanks.length, room, left <= 1 ? 5 : Math.max(1, Math.ceil(quota * 2)))
-  const cat = core.length ? evaluate(core).category : CATEGORY.EMPTY
   const bluffK = 0.7 + (0.6 * rt.profile.bluff) / 100 // boss 詐唬個性高的多墊一點
   let want: number
-  if (cat >= CATEGORY.THREE_KIND) want = rng() < P_BIG_PAD[rt.main] ? room : 0
-  else if (cat >= CATEGORY.PAIR) want = Math.floor(rng() * 3)
-  else if (rng() < Math.min(0.9, pSmallBig(rt.main, pd) * bluffK)) want = (rng() < 0.5 ? 4 : 5) - core.length
-  else want = rng() < 0.5 ? 0 : 1
+  if (plan.kind === 'bluff') want = rng() < 0.5 ? 3 : 4
+  else if (!core.length) want = 1 + rollPad(T.sacCount, 1, rng)
+  else {
+    const v = evaluate(core)
+    const cat = v.category
+    const top = v.rankSeq[0] ?? 0
+    if (cat === CATEGORY.THREE_KIND) want = rollPad(T.padTrips, bluffK * T.stylePad[rt.main], rng)
+    else if (cat === CATEGORY.TWO_PAIR) want = rollPad(T.padTwoPair, bluffK, rng)
+    else if (cat === CATEGORY.PAIR) want = rollPad(top >= STRONG_PAIR ? T.padStrongPair : T.padWeakPair, bluffK, rng)
+    else want = 0
+  }
   const spend = Math.max(core.length ? 0 : 1, Math.min(want, maxSpend))
   return [...core, ...blanks.slice(0, spend)]
 }
