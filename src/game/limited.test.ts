@@ -253,7 +253,10 @@ describe('百鬼執行力 + 規則卡範例(§11.4a / §8.3)', () => {
     const normal = new Set(Array.from({ length: 60 }, (_, i) => rollCasualBot(false, [], mulberry32(i)).boss.execution))
     expect([...normal].sort()).toEqual([0.6, 0.75, 0.9])
     expect(defaultLimitedBrain('ghost').execution).toBe(0.5)
-    expect(defaultLimitedBrain('blank').execution).toBe(0.5)
+    // 空城計:跟主線第二關一樣(2026-10-30)
+    const blank = new Set(Array.from({ length: 60 }, (_, i) => rollCasualBot(false, [], mulberry32(i), undefined, 'blank').boss.execution))
+    expect([...blank].sort()).toEqual([0.5, 0.65, 0.8])
+    expect(defaultLimitedBrain('blank').execution).toBe(0.65)
     expect(defaultLimitedBrain('fire').execution).toBe(0.75)
   })
   it('三個範例照真的比牌規則:左邊贏,而且分在那一步', () => {
@@ -424,6 +427,34 @@ describe('空城計人機(§11.5c / 11.5d)', () => {
     const p = pickWith({ ...g, slots }, brain('hoard'), 0.95)
     expect(evaluate(p).category).toBe(CATEGORY.THREE_KIND)
     expect(p.some(isBlank)).toBe(true)
+  })
+  it('差一格就贏、最大是兩對:改出最大的一對(最後一手除外)', () => {
+    const g = blankState([C('CK'), C('DK'), C('S7'), C('H7'), C('HA'), ...bk(6)], 3)
+    const slots = g.slots.map((s, i) => (i < 3 ? { p1: [C('SK')], p2: [C('C8')], owner: 'p1' as const } : s))
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const p = pickWith({ ...g, slots }, brain(main), 0.95)
+      expect(realsOf(p).map((c) => c.rank)).toEqual([13, 13])
+    }
+    const last = pickWith(blankState([C('CK'), C('DK'), C('S7'), C('H7'), ...bk(3)], 6), brain('balance'), 0.95)
+    expect(evaluate(last).category).toBe(CATEGORY.TWO_PAIR)
+  })
+  it('最好只有弱對子、又有順子:大機率直接出順子(7 8 8 9 10 J)', () => {
+    const hand = [C('C7'), C('C8'), C('D8'), C('S9'), C('H10'), C('DJ'), ...bk(3)]
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const p = pickWith(blankState(hand, 2), brain(main), 0.05)
+      expect(evaluate(p).category).toBe(CATEGORY.STRAIGHT)
+      expect(p).toHaveLength(5)
+    }
+    // 有強對子以上就不走這條
+    const strong = pickWith(blankState([C('C7'), C('C8'), C('DQ'), C('SQ'), C('S9'), C('H10'), C('DJ'), ...bk(3)], 2), brain('attack'), 0.05)
+    expect(realsOf(strong).length).toBeLessThan(5)
+  })
+  it('前兩手偶爾先送 2~3 張全空白(強攻也會),空白至少留 1 張', () => {
+    for (const main of ['attack', 'balance', 'hoard'] as const) {
+      const p = pickWith(blankState([C('C9'), C('D9'), C('H9'), C('SK'), ...bk(3)], 0), brain(main), 0.05)
+      expect(realsOf(p)).toHaveLength(0)
+      expect(p).toHaveLength(2)
+    }
   })
   it('最後一手:真牌全部塞進去', () => {
     const p = pickWith(blankState([C('C9'), C('D9'), C('SA'), C('HK'), ...bk(5)], 6), brain('balance'), 0.95)

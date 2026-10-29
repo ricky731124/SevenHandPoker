@@ -523,6 +523,10 @@ export const BLANK_TUNE = {
   sacCount: [0.35, 0.3, 0.25, 0.07, 0.03],
   bigBluff: { attack: 0.08, balance: 0.1, hoard: 0.15 } as Record<BossRuntime['main'], number>,
   stylePad: { attack: 1.3, balance: 1, hoard: 0.9 } as Record<BossRuntime['main'], number>,
+  /** 前 hands 手、還沒送過格時,每手有 p 的機率先送 2~3 張全空白(§11.5e) */
+  earlySac: { hands: 2, p: { attack: 0.25, balance: 0.2, hoard: 0.2 } as Record<BossRuntime['main'], number> },
+  /** 最好的資產只是弱對子 / 沒有,又湊得出順子以上時,直接出那手的機率(§11.5e) */
+  smallBig: { attack: 0.75, balance: 0.65, hoard: 0.55 } as Record<BossRuntime['main'], number>,
   // 看棋盤(§11.5d)
   board: true,
   /** 看未來比重(強攻低、囤牌高;2026-10-30 模擬:×0.6 → −4%、×1.4 → +1%) */
@@ -580,7 +584,13 @@ function blankPlan(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): B
   }
 
   // 差一格就分勝負(誰都一樣):真牌出最強的(大牌也可以),空白照墊
-  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) return { core: pileOf(biggest(cands(reals, J))), kind: 'asset' }
+  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) {
+    const all = cands(reals, J)
+    let pick = biggest(all)
+    // 最大是兩對 → 改出最大的一對(使用者 10/30:4 張容易被三條撞、被詐唬棄掉,之後就無力了)
+    if (pick.cat === CATEGORY.TWO_PAIR) pick = biggest(all.filter((c) => c.cat === CATEGORY.PAIR))
+    return { core: pileOf(pick), kind: 'asset' }
+  }
 
   // 執行力失手:照實出最划算的一手 —— 最強的資產,不墊、不看以後;沒資產就 1 張空白
   if (rng() >= rt.execution) {
@@ -606,6 +616,18 @@ function blankPlan(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): B
       }
     }
     return pick.reals.length + pick.jokers ? { core: pileOf(pick), kind: 'asset' } : sacrifice()
+  }
+
+  // 前期偶爾先送 2~3 張全空白,把真牌留到後面(使用者 10/30:強攻也不是第一手就攻,加點輪替)
+  const blanks = hand.filter(isBlank)
+  if (pd < T.earlySac.hands && blanks.length >= 3 && !sacrificesDone(state, me) && rng() < T.earlySac.p[rt.main]) {
+    return { core: blanks.slice(0, Math.min(blanks.length - 1, rng() < 0.5 ? 2 : 3)), kind: 'board' }
+  }
+  // 最好的資產只是弱對子(或沒有),手上又湊得出順子以上 → 大機率直接出,確保拿一格(使用者 10/30:7 8 8 9 10 J)
+  const bestAsset = assets.reduce((m, a) => Math.max(m, a.value), 0)
+  if (bestAsset < blankValue(CATEGORY.PAIR, STRONG_PAIR)) {
+    const big = cands(reals, J).filter((c) => c.cat >= CATEGORY.STRAIGHT && c.reals.length + c.jokers === 5)
+    if (big.length && rng() < T.smallBig[rt.main]) return { core: pileOf(big.reduce((b, c) => (c.value < b.value ? c : b))), kind: 'board' }
   }
 
   if (T.board) return boardPlan(state, me, rt, rng, assets, singles, left)
@@ -646,7 +668,8 @@ function boardPlan(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, as
   }
   if (blanks.length && (sacrificesDone(state, me) < T.maxSac || !assets.length)) {
     for (let k = 1; k <= Math.min(3, budget); k++) opts.push({ pile: blanks.slice(0, k), used: null, spent: k })
-    // 裝大(單張 + 3 空白)只偶爾列進候選(使用者:可保留,但不要常出)\n    if (singles.length && budget >= 3 && rng() < T.bigBluff[rt.main]) opts.push({ pile: [singles[0], ...blanks.slice(0, 3)], used: null, spent: 3 })
+    // 裝大(單張 + 3 空白)只偶爾列進候選(使用者:可保留,但不要常出)
+    if (singles.length && budget >= 3 && rng() < T.bigBluff[rt.main]) opts.push({ pile: [singles[0], ...blanks.slice(0, 3)], used: null, spent: 3 })
   }
   if (!opts.length) return { core: [singles[0] ?? lowestReal(hand)], kind: 'sacrifice' }
 

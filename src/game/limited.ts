@@ -80,9 +80,8 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
  */
 export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; vsComputer: number }>> = {
   ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
-  // 空城計(2026-10-30 第二版 + 看棋盤,模擬 vs 照使用者打法寫的玩家模型):執行力 1 → 快配 56%、電腦 64%;
-  // 這組 → 55% / 54%(目標 50~55%)。使用者實測再調。
-  blank: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
+  // 空城計:使用者實測 8 戰 8 勝(2026-10-30)→ 調成跟主線第二關一樣
+  blank: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */

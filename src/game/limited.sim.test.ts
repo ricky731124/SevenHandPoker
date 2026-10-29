@@ -202,7 +202,7 @@ function shapeOf(cards: Card[]): string {
   return `${name}${reals.some(isJoker) ? '(含鬼)' : ''}${pad ? ` 墊${pad}` : ''}`
 }
 
-const EXECS = [1, 0.75, 0.6, 0.5, 0.35]
+const EXECS = [1, 0.8, 0.65, 0.5, 0.35]
 /** 同一個大腦但出牌不看棋盤(§11.5d 前的第二版),比較用。 */
 const boardOff = (b: Brain): Brain => ({
   ...b,
@@ -222,14 +222,14 @@ describe.skipIf(!process.env.BLANK)('空城計模擬(BLANK=1 才跑)', () => {
     const rows: [string, (r: Rng) => [Brain, Brain]][] = [
       ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`快配人機 執行力 ${ex} vs 玩家模型`, (r) => [blankBrain(withExec(r, ex)), playerModel]]),
       ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`對戰電腦 執行力 ${ex} vs 玩家模型`, () => [blankBrain({ ...defaultLimitedBrain('blank'), execution: ex }), playerModel]]),
-      ['快配人機 0.35/0.5/0.65 隨機抽(現在線上) vs 玩家模型', (r) => [blankBrain(withExec(r, [0.35, 0.5, 0.65][Math.floor(r() * 3)])), playerModel]],
+      ['快配人機 0.5/0.65/0.8 隨機抽(現在線上) vs 玩家模型', (r) => [blankBrain(withExec(r, [0.5, 0.65, 0.8][Math.floor(r() * 3)])), playerModel]],
       ...(['attack', 'balance', 'hoard'] as const).flatMap((m) =>
-        [1, 0.65, 0.5, 0.35, 0].map((ex): [string, (r: Rng) => [Brain, Brain]] => {
+        [1, 0.8, 0.65, 0.5, 0].map((ex): [string, (r: Rng) => [Brain, Brain]] => {
           const name = m === 'attack' ? '強攻' : m === 'balance' ? '平衡' : '囤牌'
-          // ex = 0 這列代表線上快配:0.35 / 0.5 / 0.65 隨機抽
+          // ex = 0 這列代表線上快配:0.5 / 0.65 / 0.8 隨機抽
           return ex
             ? [`${name} 執行力 ${ex} vs 玩家模型`, (r) => [blankBrain(withExec(r, ex, m)), playerModel]]
-            : [`${name} 0.35/0.5/0.65 隨機抽 vs 玩家模型`, (r) => [blankBrain(withExec(r, [0.35, 0.5, 0.65][Math.floor(r() * 3)], m)), playerModel]]
+            : [`${name} 0.5/0.65/0.8 隨機抽 vs 玩家模型`, (r) => [blankBrain(withExec(r, [0.5, 0.65, 0.8][Math.floor(r() * 3)], m)), playerModel]]
         }),
       ),
       ['不看棋盤(第二版) 執行力 1 vs 玩家模型', (r) => [boardOff(blankBrain(withExec(r, 1))), playerModel]],
