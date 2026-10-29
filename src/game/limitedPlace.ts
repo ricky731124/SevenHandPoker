@@ -7,7 +7,7 @@
  */
 
 import type { Card } from './cards'
-import { isJoker } from './cards'
+import { isBlank, isJoker } from './cards'
 import { evaluate } from './evaluate'
 import type { BossRuntime } from './bossAI'
 import type { LimitedMode } from './limited'
@@ -15,8 +15,8 @@ import { SLOT_COUNT, countCoins, emptySlotsFor, otherPlayer, ownsSlot, type Game
 
 type Rng = () => number
 
-/** 一種可能:[牌型 CATEGORY, 最大點數, 用幾張鬼, 機率]。 */
-type Entry = readonly [number, number, number, number]
+/** 一種可能:[牌型 CATEGORY, 最大點數, 用幾張鬼, 機率, 真牌張數(空城計才有,算牌用)]。 */
+type Entry = readonly [number, number, number, number, number?]
 
 /**
  * 百鬼夜行(每格 2 鬼):對手出 N 張時的分布,index = 張數 − 1。
@@ -33,13 +33,40 @@ const GHOST_TABLE: readonly (readonly Entry[])[] = [
 /** 各張數出現的比例(1~5 張),拿來混成「隨便一疊」的分布(估一疊牌多強)。 */
 const GHOST_COUNT_MIX = [0.02, 0.07, 0.22, 0.42, 0.27]
 
+/**
+ * 空城計(§11.5a):兩張表,index = 張數 − 1。`BLANK_GEN=1 npx vitest run src/game/limited.sim.test.ts` 產生
+ * (快配人機互打 3000 場)。PAD = 電腦式墊法;NOPAD = 同樣出牌但不墊空白(張數 = 真牌數)。
+ */
+// 2026-10-29(空城計第一版出牌):1 張 = 單張(全空白 4%);2 張 = 單張 + 1 空白 43%、對子 57%;
+// 5 張 = 順子 / 三條墊空白 / 兩對墊空白 / 單張墊到 5 張都有 —— 張數幾乎猜不出來。
+const BLANK_PAD_TABLE: readonly (readonly Entry[])[] = [
+  [[0,14,0,0.354,1], [0,13,0,0.275,1], [0,12,0,0.171,1], [0,11,0,0.071,1], [0,10,0,0.049,1], [-1,0,0,0.044,0], [0,9,0,0.020,1], [0,8,0,0.010,1], [0,7,0,0.005,1]],
+  [[0,14,0,0.155,1], [0,13,0,0.119,1], [1,14,1,0.075,2], [0,12,0,0.075,1], [1,12,0,0.059,2], [1,7,0,0.057,2], [1,11,0,0.056,2], [1,13,0,0.056,2], [1,9,0,0.054,2], [1,8,0,0.053,2], [1,10,0,0.047,2], [1,14,0,0.042,2], [1,13,1,0.039,2], [0,11,0,0.037,1], [0,10,0,0.023,1], [1,12,1,0.022,2], [0,9,0,0.010,1], [1,11,1,0.010,2], [0,8,0,0.006,1], [1,10,1,0.005,2]],
+  [[1,14,1,0.099,2], [1,12,0,0.076,2], [1,11,0,0.067,2], [1,13,0,0.064,2], [1,7,0,0.063,2], [1,14,0,0.062,2], [1,8,0,0.062,2], [1,9,0,0.062,2], [1,10,0,0.057,2], [1,13,1,0.054,2], [3,7,0,0.029,3], [3,8,0,0.027,3], [1,12,1,0.026,2], [3,10,0,0.025,3], [3,9,0,0.023,3], [3,11,0,0.022,3], [3,12,0,0.018,3], [0,14,0,0.015,1], [3,13,0,0.011,3], [3,10,1,0.010,3], [3,9,1,0.010,3], [0,13,0,0.010,1], [3,8,1,0.010,3], [3,12,1,0.009,3], [3,7,1,0.009,3], [3,11,1,0.008,3], [1,11,1,0.008,2], [3,14,0,0.007,3], [1,10,1,0.007,2], [0,12,0,0.007,3], [3,13,1,0.006,3], [0,12,0,0.006,1], [0,14,0,0.006,3], [0,13,0,0.005,3], [3,14,1,0.005,3], [0,14,0,0.004,2], [0,11,0,0.004,3], [1,9,1,0.004,2], [0,12,0,0.004,2]],
+  [[0,14,0,0.095,1], [0,13,0,0.074,1], [1,14,1,0.071,2], [1,12,0,0.056,2], [1,13,0,0.051,2], [1,11,0,0.050,2], [0,12,0,0.046,1], [1,14,0,0.046,2], [1,8,0,0.046,2], [1,9,0,0.046,2], [1,7,0,0.044,2], [1,10,0,0.043,2], [1,13,1,0.041,2], [2,11,0,0.032,4], [2,12,0,0.027,4], [1,12,1,0.026,2], [2,13,0,0.026,4], [2,10,0,0.025,4], [2,9,0,0.021,4], [2,14,0,0.019,4], [0,11,0,0.017,1], [0,10,0,0.012,1], [2,8,0,0.010,4], [0,14,0,0.009,4], [1,11,1,0.008,2], [-1,0,0,0.008,0], [0,13,0,0.008,4], [0,13,0,0.008,3], [0,14,0,0.007,3], [0,12,0,0.006,4], [1,10,1,0.006,2], [0,11,0,0.005,3], [0,9,0,0.005,1], [0,12,0,0.004,3], [0,10,0,0.004,3]],
+  [[0,14,0,0.064,1], [4,11,0,0.055,5], [0,13,0,0.055,1], [2,11,0,0.051,4], [2,10,0,0.046,4], [4,12,0,0.041,5], [2,13,0,0.040,4], [2,12,0,0.039,4], [2,9,0,0.035,4], [0,12,0,0.033,1], [4,13,0,0.031,5], [2,14,0,0.028,4], [3,7,0,0.024,3], [4,14,0,0.022,5], [3,9,0,0.022,3], [3,8,0,0.020,3], [2,8,0,0.019,4], [3,10,0,0.018,3], [3,11,0,0.017,3], [6,14,1,0.015,5], [0,11,0,0.014,1], [3,12,0,0.013,3], [6,13,1,0.012,5], [6,11,0,0.011,5], [6,12,1,0.010,5], [0,10,0,0.009,1], [3,9,1,0.009,3], [4,14,1,0.009,5], [3,13,0,0.009,3], [0,14,0,0.009,5], [3,7,1,0.008,3], [3,10,1,0.008,3], [3,14,0,0.008,3], [3,8,1,0.008,3], [6,10,0,0.008,5], [0,14,0,0.008,4], [3,11,1,0.008,3], [6,9,0,0.008,5], [6,11,1,0.007,5], [6,12,0,0.007,5], [1,7,0,0.007,5], [3,12,1,0.007,3], [6,13,0,0.007,5], [6,10,1,0.006,5], [0,13,0,0.006,5], [0,13,0,0.006,4], [3,13,1,0.006,3], [1,8,0,0.005,5], [4,12,1,0.005,5], [1,9,0,0.005,5], [1,10,0,0.005,5], [6,8,0,0.005,5], [4,11,1,0.005,5], [0,12,0,0.005,4], [5,14,0,0.005,5], [1,11,0,0.005,5], [3,14,1,0.004,3], [4,13,1,0.004,5], [1,7,0,0.004,4], [8,13,1,0.004,5], [1,9,0,0.004,4], [1,8,0,0.004,4], [6,14,0,0.004,5], [1,10,0,0.004,4], [1,12,0,0.004,5], [0,9,0,0.003,1], [8,12,1,0.003,5], [8,14,1,0.003,5], [6,9,1,0.003,5]],
+]
+const BLANK_NOPAD_TABLE: readonly (readonly Entry[])[] = [
+  [[0,14,0,0.369,1], [0,13,0,0.280,1], [0,12,0,0.166,1], [0,11,0,0.074,1], [0,10,0,0.050,1], [0,9,0,0.022,1], [-1,0,0,0.022,0], [0,8,0,0.010,1], [0,7,0,0.006,1]],
+  [[1,14,1,0.136,2], [1,12,0,0.098,2], [1,7,0,0.092,2], [1,13,0,0.089,2], [1,11,0,0.088,2], [1,9,0,0.088,2], [1,8,0,0.086,2], [1,14,0,0.081,2], [1,10,0,0.076,2], [1,13,1,0.075,2], [1,12,1,0.042,2], [1,11,1,0.015,2], [1,10,1,0.011,2], [1,9,1,0.005,2], [0,12,0,0.004,2], [0,13,0,0.004,2], [0,9,0,0.003,2], [0,14,0,0.003,2], [1,8,1,0.003,2]],
+  [[3,7,0,0.105,3], [3,8,0,0.093,3], [3,9,0,0.086,3], [3,10,0,0.083,3], [3,11,0,0.077,3], [3,12,0,0.064,3], [3,9,1,0.041,3], [3,13,0,0.040,3], [3,7,1,0.039,3], [3,8,1,0.037,3], [3,10,1,0.037,3], [3,11,1,0.036,3], [3,12,1,0.032,3], [3,14,0,0.031,3], [0,13,0,0.027,3], [3,13,1,0.026,3], [0,12,0,0.025,3], [0,14,0,0.024,3], [3,14,1,0.022,3], [0,11,0,0.021,3], [0,10,0,0.017,3], [1,8,0,0.008,3], [1,7,0,0.008,3], [0,9,0,0.006,3], [1,9,0,0.005,3], [1,11,0,0.004,3], [1,12,0,0.004,3], [1,10,0,0.003,3]],
+  [[2,11,0,0.159,4], [2,13,0,0.140,4], [2,12,0,0.140,4], [2,10,0,0.132,4], [2,9,0,0.103,4], [2,14,0,0.097,4], [2,8,0,0.047,4], [0,13,0,0.022,4], [0,14,0,0.020,4], [0,12,0,0.018,4], [0,11,0,0.013,4], [1,7,0,0.012,4], [1,9,0,0.011,4], [1,8,0,0.011,4], [1,10,0,0.009,4], [7,13,1,0.008,4], [7,7,1,0.008,4], [7,14,1,0.007,4], [7,9,1,0.007,4], [7,8,1,0.006,4], [7,10,1,0.005,4], [7,12,1,0.005,4], [1,12,0,0.005,4], [1,11,0,0.005,4], [7,11,1,0.005,4], [7,9,0,0.004,4], [7,7,0,0.003,4]],
+  [[4,11,0,0.147,5], [4,12,0,0.111,5], [4,13,0,0.088,5], [4,14,0,0.063,5], [6,14,1,0.040,5], [6,13,1,0.033,5], [6,11,0,0.031,5], [6,10,0,0.027,5], [4,14,1,0.027,5], [6,12,1,0.026,5], [6,12,0,0.023,5], [6,10,1,0.020,5], [6,9,0,0.020,5], [0,14,0,0.020,5], [1,7,0,0.019,5], [6,11,1,0.019,5], [6,8,0,0.018,5], [6,13,0,0.018,5], [4,12,1,0.017,5], [0,13,0,0.016,5], [4,11,1,0.014,5], [4,13,1,0.014,5], [1,8,0,0.013,5], [1,10,0,0.013,5], [1,9,0,0.013,5], [6,14,0,0.012,5], [5,14,0,0.012,5], [8,13,1,0.011,5], [1,11,0,0.010,5], [8,14,1,0.009,5], [8,12,1,0.009,5], [0,12,0,0.009,5], [8,11,1,0.009,5], [1,12,0,0.009,5], [6,9,1,0.008,5], [6,7,0,0.006,5], [5,14,1,0.006,5], [5,13,0,0.006,5], [1,13,0,0.005,5], [1,14,0,0.005,5], [8,11,0,0.005,5], [5,12,0,0.004,5], [6,8,1,0.004,5], [2,9,0,0.004,5], [2,13,0,0.003,5], [2,12,0,0.003,5]],
+]
+const BLANK_COUNT_MIX: readonly number[] = [0.088, 0.218, 0.185, 0.241, 0.268]
+
 interface ModeTable {
   byCount: readonly (readonly Entry[])[]
   countMix: readonly number[]
+  /** 空城計:「不墊」表(張數 = 真牌數),跟 byCount(電腦式墊法)照讀人比例混(§11.5a) */
+  noPad?: readonly (readonly Entry[])[]
+  /** 比牌第三步「鬼少的贏」(百鬼 / 撲朔迷離);空城計照一般房,一樣大就當五五波 */
+  jokerTie: boolean
 }
-/** 有表的玩法才走這裡;空城計 / 撲朔迷離做到時各補一張(§11.5 / §11.6)。 */
+/** 有表的玩法才走這裡;撲朔迷離做到時補一張(§11.6)。 */
 const TABLES: Partial<Record<LimitedMode, ModeTable>> = {
-  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX },
+  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX, jokerTie: true },
+  blank: { byCount: BLANK_PAD_TABLE, countMix: BLANK_COUNT_MIX, noPad: BLANK_NOPAD_TABLE, jokerTie: false },
 }
 export const hasPlaceTable = (mode: LimitedMode | undefined): boolean => !!mode && !!TABLES[mode]
 
@@ -52,18 +79,18 @@ const keyOf = (pile: Card[]): Key => {
   const v = evaluate(pile)
   return { cat: v.category, top: v.rankSeq[0] ?? 0, j: pile.filter(isJoker).length }
 }
-/** 牌型 → 點數 → 鬼少的贏(§4.2 前三步);再往下要看正牌點數 / 花色,當五五波。 */
-function cmpKey(a: Key, b: Key): number {
+/** 牌型 → 點數 → 鬼少的贏(§4.2 前三步,空城計沒有第三步);再往下要看正牌點數 / 花色,當五五波。 */
+function cmpKey(a: Key, b: Key, jokerTie: boolean): number {
   if (a.cat !== b.cat) return a.cat - b.cat
   if (a.top !== b.top) return a.top - b.top
-  return b.j - a.j
+  return jokerTie ? b.j - a.j : 0
 }
 /** `mine` 對上分布裡的一疊:贏 / 輸的機率(分不出來的各算一半)。 */
-function vsDist(mine: Key, dist: readonly Entry[]): { win: number; lose: number } {
+function vsDist(mine: Key, dist: readonly Entry[], jokerTie = true): { win: number; lose: number } {
   let win = 0
   let lose = 0
   for (const [cat, top, j, p] of dist) {
-    const c = cmpKey(mine, { cat, top, j })
+    const c = cmpKey(mine, { cat, top, j }, jokerTie)
     if (c > 0) win += p
     else if (c < 0) lose += p
     else {
@@ -81,10 +108,39 @@ function mixOf(t: ModeTable): Entry[] {
 const mixCache = new Map<ModeTable, Entry[]>()
 const mix = (t: ModeTable) => mixCache.get(t) ?? mixCache.set(t, mixOf(t)).get(t)!
 /** 一疊牌的強弱:贏「隨便一疊」的機率。 */
-const strength = (k: Key, t: ModeTable) => vsDist(k, mix(t)).win
+const strength = (k: Key, t: ModeTable) => vsDist(k, mix(t), t.jokerTie).win
 /** 對手出 N 張的平均強弱。 */
 function distStrength(dist: readonly Entry[], t: ModeTable): number {
   return dist.reduce((s, [cat, top, j, p]) => s + p * strength({ cat, top, j }, t), 0)
+}
+
+/**
+ * 空城計:對手這疊(N 張)的分布(§11.5a)。
+ *  - 讀人:「電腦式墊法」表和「不墊」表照比例混,比例 =(1 + 翻開過有墊空白的牌堆)÷(2 + 翻開過的牌堆)。
+ *  - 算牌:全場 22 張空白,扣掉看得到的,剩下的才可能在這疊裡 → 真牌至少 N − 還沒看到的空白。
+ */
+function blankDist(state: GameState, me: PlayerId, t: ModeTable, n: number): Entry[] {
+  const foe = otherPlayer(me)
+  const shown = state.slots.filter((s) => s.owner !== null && s[foe].length > 0).map((s) => s[foe])
+  const padRate = (1 + shown.filter((p) => p.some(isBlank)).length) / (2 + shown.length)
+  const seen = [...state.hands[me], ...state.slots.flatMap((s) => s[me]), ...shown.flat()]
+  const unseenBlanks = Math.max(0, 22 - seen.filter(isBlank).length)
+  const minReals = n - unseenBlanks
+  const merged = new Map<string, [number, number, number, number, number]>()
+  const addAll = (dist: readonly Entry[] | undefined, w: number) => {
+    for (const [cat, top, j, p, reals = n] of dist ?? []) {
+      if (reals < minReals) continue
+      const k = `${cat},${top},${j},${reals}`
+      const old = merged.get(k)
+      merged.set(k, [cat, top, j, (old?.[3] ?? 0) + p * w, reals])
+    }
+  }
+  addAll(t.byCount[n - 1], padRate)
+  addAll(t.noPad?.[n - 1], 1 - padRate)
+  const out = [...merged.values()]
+  const tot = out.reduce((s, e) => s + e[3], 0)
+  if (!tot) return [...t.byCount[n - 1]]
+  return out.map(([c, top, j, p, r]) => [c, top, j, p / tot, r])
 }
 
 /** `who` 拿下格子 i 會不會直接贏(4 幣或湊成 3 連)?公開資訊。 */
@@ -117,7 +173,7 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
   const empties = emptySlotsFor(state, foe)
   if (empties.length <= 1) return empties[0] ?? 0
   const n = Math.min(5, Math.max(1, state.pendingPick!.cards.length))
-  const dist = t.byCount[n - 1]
+  const dist = t.noPad ? blankDist(state, me, t, n) : t.byCount[n - 1]
 
   // 執行力失手:不看打法和位置,只挑勝率最高的格子(沒有可以對決的格子就放中間)
   if (rng() >= rt.execution) {
@@ -126,7 +182,7 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
     for (const i of empties) {
       const mine = state.slots[i][me]
       if (!mine.length) continue
-      const { win, lose } = vsDist(keyOf(mine), dist)
+      const { win, lose } = vsDist(keyOf(mine), dist, t.jokerTie)
       if (win - lose > top) {
         top = win - lose
         best = i
@@ -148,7 +204,7 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
     if (mine.length) {
       // 現在就對決:贏的價值 − 輸的代價 − 這疊本來留著的價值
       const k = keyOf(mine)
-      const { win, lose } = vsDist(k, dist)
+      const { win, lose } = vsDist(k, dist, t.jokerTie)
       const keep = 2 * strength(k, t) - 1
       score = win * value(me, i) - lose * value(foe, i) * w.loss - w.keep * keep
     } else {

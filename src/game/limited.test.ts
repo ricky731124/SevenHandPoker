@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Card, Rank, Suit } from './cards'
 import { isJoker, isBlank, isStarterSpecial, makeDeck } from './cards'
-import { evaluate, compareLimited, CATEGORY } from './evaluate'
-import { LIMITED_ROTA, LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
+import { evaluate, compareHands, compareLimited, CATEGORY } from './evaluate'
+import { BLANK_EXAMPLES, LIMITED_ROTA, LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
 import { defaultLimitedBrain, limitedPick } from './limitedAI'
 import { aiPick, aiPlace } from './ai'
 import { buildFrames } from './replay'
@@ -56,9 +56,9 @@ describe('牌組', () => {
 })
 
 describe('排程', () => {
-  it('測試期固定玩法(步驟 1 = 百鬼夜行)', () => {
-    expect(LIMITED_TEST_MODE).toBe('ghost')
-    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('ghost')
+  it('測試期固定玩法(步驟 2 = 空城計)', () => {
+    expect(LIMITED_TEST_MODE).toBe('blank')
+    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('blank')
   })
   it('輪值表:同玩法的星期併一列(§8.2)', () => {
     expect(LIMITED_ROTA.map((r) => [r.label, r.mode])).toEqual([
@@ -253,6 +253,7 @@ describe('百鬼執行力 + 規則卡範例(§11.4a / §8.3)', () => {
     const normal = new Set(Array.from({ length: 60 }, (_, i) => rollCasualBot(false, [], mulberry32(i)).boss.execution))
     expect([...normal].sort()).toEqual([0.6, 0.75, 0.9])
     expect(defaultLimitedBrain('ghost').execution).toBe(0.5)
+    expect(defaultLimitedBrain('blank').execution).toBe(0.5)
     expect(defaultLimitedBrain('fire').execution).toBe(0.75)
   })
   it('三個範例照真的比牌規則:左邊贏,而且分在那一步', () => {
@@ -304,6 +305,104 @@ describe('限定房放牌(§11.9,百鬼夜行分布表)', () => {
     expect(aiPlace(g, 'p2', brain('balance'))).toBe(5)
   })
 })
+// ---- 空城計(§11.5a) ----
+
+describe('空城計人機(§11.5a)', () => {
+  const Bk = (n: number): Card => ({ id: `BLANK_d${n}`, suit: 'C', rank: 2, kind: 'blank' })
+  const bk = (n: number) => Array.from({ length: n }, (_, i) => Bk(i + 1))
+  /** p2 選牌的空城計局面(placed = 雙方已放幾手)。 */
+  function blankState(hand: Card[], placed = 0): GameState {
+    const g = createGame(5, 'p2', 'p2', 'blank')
+    return { ...g, hands: { ...g.hands, p2: hand }, placementsDone: { p1: placed, p2: placed }, turn: 'p2', phase: 'pick' }
+  }
+  const pickWith = (g: GameState, rt: BossRuntime, r: number, opts = {}) => {
+    const ids = new Set(limitedPick(g, 'p2', rt, () => r, opts))
+    return g.hands.p2.filter((c) => ids.has(c.id))
+  }
+  const realsOf = (p: Card[]) => p.filter((c) => !isBlank(c))
+
+  it('規則卡範例照一般房比牌:三個都是右邊贏', () => {
+    const toCard = (id: string, k: number): Card => (id === 'B' ? Bk(40 + k) : C(id))
+    for (const s of BLANK_EXAMPLES) {
+      expect(s.winner).toBe('right')
+      expect(compareHands(s.left.map(toCard), s.right.map((id, k) => toCard(id, k + 10)))).toBeLessThan(0)
+    }
+  })
+  it('每一手 1~5 張、都是手上的牌(三種打法、各種時期、失手也一樣)', () => {
+    const hand = [C('C7'), C('D7'), C('CJ'), C('SQ'), C('HA'), C('DK'), C('S9'), ...bk(8)]
+    for (const main of ['attack', 'hoard', 'balance'] as const) {
+      for (const ex of [1, 0]) {
+        for (let pd = 0; pd <= 6; pd++) {
+          for (const r of [0.05, 0.5, 0.95]) {
+            const p = pickWith(blankState(hand, pd), brain(main, ex), r)
+            expect(p.length).toBeGreaterThanOrEqual(1)
+            expect(p.length).toBeLessThanOrEqual(5)
+          }
+        }
+      }
+    }
+  })
+  it('不墊模式:除了全空白送格,一張空白都不出', () => {
+    for (let pd = 0; pd <= 6; pd++) {
+      const p = pickWith(blankState([C('C7'), C('D7'), C('HA'), C('DK'), ...bk(6)], pd), brain('attack', 0), 0.5, { noPad: true })
+      if (realsOf(p).length) expect(p.some(isBlank)).toBe(false)
+    }
+  })
+  it('強牌:真大裝大(墊到 5 張)或真大裝小(不墊),真牌都是三條', () => {
+    const hand = [C('C9'), C('D9'), C('H9'), C('SA'), ...bk(6)]
+    const big = pickWith(blankState(hand, 2), brain('attack'), 0.05) // rng 小 → 墊
+    expect(evaluate(big).category).toBe(CATEGORY.THREE_KIND)
+    expect(big).toHaveLength(5)
+    const small = pickWith(blankState(hand, 2), brain('attack'), 0.95) // rng 大 → 不墊
+    expect(evaluate(small).category).toBe(CATEGORY.THREE_KIND)
+    expect(small.some(isBlank)).toBe(false)
+  })
+  it('對手差一格就贏:真牌出最強的,空白照墊', () => {
+    const g = blankState([C('C9'), C('D9'), C('H9'), C('S7'), C('HA'), ...bk(6)], 3)
+    const slots = g.slots.map((s, i) => (i < 3 ? { p1: [C('SK')], p2: [C('C8')], owner: 'p1' as const } : s))
+    const p = pickWith({ ...g, slots }, brain('hoard'), 0.05)
+    expect(evaluate(p).category).toBe(CATEGORY.THREE_KIND)
+    expect(p.some(isBlank)).toBe(true)
+  })
+  it('最後一手:真牌全部塞進去', () => {
+    const p = pickWith(blankState([C('C9'), C('D9'), C('SA'), C('HK'), ...bk(5)], 6), brain('balance'), 0.95)
+    expect(realsOf(p)).toHaveLength(4)
+  })
+  it('空白預算:之後補不到空白時,前期一手不會把空白全花光', () => {
+    const g = blankState([C('C7'), C('HK'), ...bk(3)], 0)
+    const p = pickWith({ ...g, drawsDone: { p1: 6, p2: 6 } }, brain('hoard'), 0.05)
+    expect(p.filter(isBlank).length).toBeLessThan(3)
+  })
+})
+
+describe('空城計放牌(§11.5a,讀人 + 算牌)', () => {
+  it('120 場電腦對電腦:合法、打得完', () => {
+    for (let seed = 1; seed <= 120; seed++) {
+      const rng = mulberry32(seed)
+      const rts: Record<PlayerId, BossRuntime> = {
+        p1: { profile: CAMPAIGN[seed % CAMPAIGN.length].profile, main: rollMain(CAMPAIGN[seed % CAMPAIGN.length].profile, rng), execution: [0.6, 0.75, 0.9][seed % 3] },
+        p2: defaultLimitedBrain('blank'),
+      }
+      let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', 'blank')
+      let steps = 0
+      while (g.phase !== 'ended' && steps++ < 400) {
+        if (g.phase === 'pick') {
+          const ids = limitedPick(g, g.turn, rts[g.turn], rng)
+          expect(ids.length).toBeGreaterThanOrEqual(1)
+          expect(ids.length).toBeLessThanOrEqual(5)
+          g = applyPick(g, g.turn, ids)
+        } else if (g.phase === 'place') {
+          const placer = otherPlayer(g.pendingPick!.by)
+          g = applyPlace(g, placer, aiPlace(g, placer, rts[placer]))
+        } else if (g.phase === 'showdown') g = resolveShowdown(g)
+        else if (g.phase === 'draw') g = applyDraw(g)
+      }
+      expect(g.phase).toBe('ended')
+      expect(g.winner).not.toBeNull()
+    }
+  })
+})
+
 describe('百鬼夜行整場:人機出的每一手都合法、打得完', () => {
   it('120 場電腦對電腦(各種主策略 / 執行力)', () => {
     for (let seed = 1; seed <= 120; seed++) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Card as TCard, Rank, Suit } from '../../../game/cards'
-import { LIMITED_INFO, LIMITED_ROTA, TIE_STEPS, TIE_STEPS_INTRO, type LimitedMode } from '../../../game/limited'
+import { LIMITED_INFO, LIMITED_ROTA, type LimitedMode, type TieStep } from '../../../game/limited'
 import Card from '../Card'
 import Modal from '../Modal'
 import Button from '../Button'
@@ -30,18 +30,18 @@ export function LimitedRuleModal({
 
   const info = LIMITED_INFO[mode]
   return (
-    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.tieSteps ? 660 : 380} panelClass="limited-rule">
+    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.examples ? 680 : 380} panelClass="limited-rule">
       {/* 有範例的玩法分兩欄(左:範例、右:規則 + 知道了),手機橫向才不用往下捲 */}
-      <div className={info.tieSteps ? 'limited-rule__split' : undefined}>
+      <div className={info.examples ? 'limited-rule__split' : undefined}>
         <ul className="limited-rule__list">
           {info.rules.map((r) => (
             <li key={r}>{r}</li>
           ))}
         </ul>
-        {info.tieSteps && (
+        {info.examples && (
           <div className="limited-rule__ties">
-            <div className="limited-rule__ties-intro">{TIE_STEPS_INTRO}</div>
-            <TieSteps />
+            <div className="limited-rule__ties-intro">{info.examples.intro}</div>
+            <TieSteps steps={info.examples.steps} />
           </div>
         )}
         <div className="limited-rule__ok">
@@ -60,9 +60,10 @@ export function LimitedRuleModal({
   )
 }
 
-/** 範例牌 id → 牌('J' = 鬼牌,其他是 cardId 格式:花色 + 點數)。 */
+/** 範例牌 id → 牌('J' = 鬼牌、'B' = 空白,其他是 cardId 格式:花色 + 點數)。 */
 function exampleCard(id: string, k: number): TCard {
   if (id === 'J') return { id: `ex-joker-${k}`, suit: 'S', rank: 14, kind: 'joker' }
+  if (id === 'B') return { id: `ex-blank-${k}`, suit: 'C', rank: 2, kind: 'blank' }
   const r = id.slice(1)
   const rank = (r === 'A' ? 14 : r === 'K' ? 13 : r === 'Q' ? 12 : r === 'J' ? 11 : Number(r)) as Rank
   return { id: `ex-${id}`, suit: id[0] as Suit, rank }
@@ -79,20 +80,20 @@ function ExamplePile({ ids, win }: { ids: string[]; win?: boolean }) {
     </span>
   )
 }
-/** 規則卡「比牌三步驟 + 範例」(spec §8.3):每步一行標題(後接小字說明)+ 左疊 vs 右疊(左贏)。 */
-function TieSteps() {
+/** 規則卡範例(spec §8.3):每個一行標題(後接小字說明)+ 左疊 vs 右疊,贏的那邊打勾。 */
+function TieSteps({ steps }: { steps: TieStep[] }) {
   return (
     <div className="tie-steps">
-      {TIE_STEPS.map((s) => (
+      {steps.map((s) => (
         <div key={s.title} className="tie-step">
           <div className="tie-step__title">
             {s.title}
             <span className="tie-step__note">{s.note}</span>
           </div>
           <div className="tie-step__row">
-            <ExamplePile ids={s.left} win />
+            <ExamplePile ids={s.left} win={s.winner !== 'right'} />
             <span className="tie-step__vs">vs</span>
-            <ExamplePile ids={s.right} />
+            <ExamplePile ids={s.right} win={s.winner === 'right'} />
           </div>
         </div>
       ))}
@@ -106,7 +107,7 @@ export function LimitedBadge({ mode, onClick }: { mode: LimitedMode; onClick?: (
   return (
     <button
       type="button"
-      className={`limited-badge${info.badge.length > 1 ? '' : ' limited-badge--one'}`}
+      className={`limited-badge limited-badge--${mode}${info.badge.length > 1 ? '' : ' limited-badge--one'}`}
       onClick={
         onClick
           ? () => {

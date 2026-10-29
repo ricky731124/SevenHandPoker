@@ -17,19 +17,23 @@ export interface LimitedInfo {
   badge: string[]
   /** 規則卡(VS 畫面後跳出)的 2~3 行規則 */
   rules: string[]
-  /** 規則卡在第一行後面接「比牌三步驟 + 範例」(百鬼 / 撲朔迷離,spec §8.3) */
-  tieSteps?: boolean
+  /** 規則卡右欄的範例(百鬼 / 撲朔迷離:比牌三步驟;空城計:空白牌容易誤會的地方,spec §8.3) */
+  examples?: { intro: string; steps: TieStep[] }
 }
 
 const HIDDEN_RULE = '對手只看得到你出幾張，無法看到你實際出牌的位置。'
 const JOKER_CAP_RULE = '每格最多放 2 張鬼牌。'
 
-/** 規則卡「比牌三步驟」的一個範例:左疊 vs 右疊(牌 id 用 cardId 格式,鬼 = 'J'),左邊贏。 */
+/**
+ * 規則卡的一個範例:左疊 vs 右疊(牌 id 用 cardId 格式,鬼 = 'J'、空白 = 'B'),
+ * winner 那邊打勾(預設左邊)。
+ */
 export interface TieStep {
   title: string
   left: string[]
   right: string[]
   note: string
+  winner?: 'left' | 'right'
 }
 export const TIE_STEPS_INTRO = '牌型和點數都一樣時：'
 export const TIE_STEPS: TieStep[] = [
@@ -37,24 +41,31 @@ export const TIE_STEPS: TieStep[] = [
   { title: '② 鬼一樣多，比正牌點數', left: ['SJ', 'SQ', 'SK', 'J', 'J'], right: ['H10', 'HJ', 'HQ', 'J', 'J'], note: '都是 10~A 同花順，K 比 Q 大' },
   { title: '③ 正牌也一樣，比花色', left: ['DA', 'J'], right: ['CA', 'J'], note: '花色 ♠ > ♥ > ♦ > ♣' },
 ]
+/** 空城計:空白牌容易誤會的地方(spec §8.3),三個都是右邊贏。 */
+export const BLANK_EXAMPLES: TieStep[] = [
+  { title: '① 空白不算牌', left: ['SA', 'B', 'B', 'B', 'B'], right: ['CK', 'DK'], note: '5 張也可能只是單張 A', winner: 'right' },
+  { title: '② 空白也不算踢腳', left: ['CA', 'DA', 'B', 'B', 'B'], right: ['HA', 'SA', 'C7'], note: '一樣一對 A，7 當踢腳', winner: 'right' },
+  { title: '③ 全空白輸給任何牌', left: ['B', 'B', 'B', 'B', 'B'], right: ['C7'], note: '全空白對全空白才平手', winner: 'right' },
+]
 
 export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   ghost: {
     name: '百鬼夜行',
     badge: ['百鬼', '夜行'],
     rules: ['點數 2~6（共 20 張）全部變成鬼牌。', JOKER_CAP_RULE, HIDDEN_RULE],
-    tieSteps: true,
+    examples: { intro: TIE_STEPS_INTRO, steps: TIE_STEPS },
   },
   blank: {
     name: '空城計',
     badge: ['空城計'],
     rules: ['點數 2~6（共 20 張）全部變成空白牌。', '空白牌比牌時不算，但會佔張數——真真假假，讓對手猜。', HIDDEN_RULE],
+    examples: { intro: '空白牌容易誤會的地方：', steps: BLANK_EXAMPLES },
   },
   mixed: {
     name: '撲朔迷離',
     badge: ['撲朔', '迷離'],
     rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', JOKER_CAP_RULE, HIDDEN_RULE],
-    tieSteps: true,
+    examples: { intro: TIE_STEPS_INTRO, steps: TIE_STEPS },
   },
   fire: {
     name: '火力全開',
@@ -69,6 +80,9 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
  */
 export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; vsComputer: number }>> = {
   ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
+  // 空城計(2026-10-29 模擬 vs 不墊、每手出最大的直覺玩家):原本 0.6/0.75/0.9 → 61%、電腦 0.75 → 67%;
+  // 這組 → 53% / 54%,跟一般房差不多。先暫定,使用者實測再調。
+  blank: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */
@@ -103,9 +117,9 @@ export const LIMITED_ROTA: { mode: LimitedMode; days: number[]; label: string }[
 
 /**
  * 測試期固定玩法(spec §0):有設定時,不管星期幾都是這一種。四種都測完才改成 null 開星期輪替。
- * 步驟 1 = 百鬼夜行。
+ * 步驟 1 = 百鬼夜行;步驟 2 = 空城計(2026-10-29 使用者定:直接切,百鬼暫時下架)。
  */
-export const LIMITED_TEST_MODE: LimitedMode | null = 'ghost'
+export const LIMITED_TEST_MODE: LimitedMode | null = 'blank'
 
 const TAIWAN_OFFSET_MS = 8 * 60 * 60 * 1000
 
