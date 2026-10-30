@@ -64,7 +64,7 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   mixed: {
     name: '撲朔迷離',
     badge: ['撲朔', '迷離'],
-    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', JOKER_CAP_RULE, HIDDEN_RULE],
+    rules: ['點數 2~6（共 20 張）裡 10 張變鬼牌、10 張變空白牌。', JOKER_CAP_RULE, '空白牌比牌時不算，但會佔張數。', HIDDEN_RULE],
     examples: { intro: TIE_STEPS_INTRO, steps: TIE_STEPS },
   },
   fire: {
@@ -82,6 +82,8 @@ export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; 
   ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
   // 空城計:使用者實測 8 戰 8 勝(2026-10-30)→ 調成跟主線第二關一樣
   blank: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
+  // 撲朔迷離:先用空城計這組,模擬後再調(§11.6a)
+  mixed: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */
@@ -116,9 +118,10 @@ export const LIMITED_ROTA: { mode: LimitedMode; days: number[]; label: string }[
 
 /**
  * 測試期固定玩法(spec §0):有設定時,不管星期幾都是這一種。四種都測完才改成 null 開星期輪替。
- * 步驟 1 = 百鬼夜行;步驟 2 = 空城計(2026-10-29 使用者定:直接切,百鬼暫時下架)。
+ * 步驟 1 = 百鬼夜行;步驟 2 = 空城計(2026-10-29 使用者定:直接切,百鬼暫時下架);
+ * 步驟 3 = 撲朔迷離(2026-10-30 使用者手機測)。
  */
-export const LIMITED_TEST_MODE: LimitedMode | null = 'blank'
+export const LIMITED_TEST_MODE: LimitedMode | null = 'mixed'
 
 const TAIWAN_OFFSET_MS = 8 * 60 * 60 * 1000
 

@@ -8,7 +8,7 @@
 
 import type { Card } from './cards'
 import { isBlank, isJoker } from './cards'
-import { CATEGORY, compareHands, evaluate } from './evaluate'
+import { CATEGORY, compareHands, compareLimitedWith, evaluate, type HandValue } from './evaluate'
 import type { BossRuntime } from './bossAI'
 import type { LimitedMode } from './limited'
 import { SLOT_COUNT, countCoins, emptySlotsFor, otherPlayer, ownsSlot, type GameState, type PlayerId } from './state'
@@ -46,7 +46,8 @@ const RANKS_TOP: [number, number][] = [[11, 0.25], [12, 0.25], [13, 0.25], [14, 
 const RANKS_TWO_PAIR: [number, number][] = [8, 9, 10, 11, 12, 13, 14].map((r) => [r, 1 / 7])
 const NONE: [number, number][] = [[0, 1]]
 const E = CATEGORY.EMPTY
-type Way = [cat: number, p: number, reals: number, ranks: [number, number][]]
+/** 一種寫法:[牌型, 機率, 真牌數(含鬼), 點數分布, 用幾張鬼(撲朔迷離才有)]。 */
+type Way = [cat: number, p: number, reals: number, ranks: [number, number][], j?: number]
 const BLANK_PLAYER_WAYS: Way[][] = [
   // 1 張:全空白 4 成、單張 6 成(多半 K / A)
   [[E, 0.4, 0, NONE], [0, 0.6, 1, RANKS_HIGH]],
@@ -63,24 +64,53 @@ const BLANK_PLAYER_WAYS: Way[][] = [
     [3, 0.1, 3, RANKS_ALL], [2, 0.1, 4, RANKS_TWO_PAIR],
   ],
 ]
-const BLANK_PLAYER_TABLE: readonly (readonly Entry[])[] = BLANK_PLAYER_WAYS.map((ways) =>
-  ways.flatMap(([cat, p, reals, ranks]) => ranks.map(([top, q]) => [cat, top, 0, p * q, reals] as const)),
-)
+const flatten = (ways: Way[][]): readonly (readonly Entry[])[] =>
+  ways.map((w) => w.flatMap(([cat, p, reals, ranks, j = 0]) => ranks.map(([top, q]) => [cat, top, j, p * q, reals] as const)))
+const BLANK_PLAYER_TABLE = flatten(BLANK_PLAYER_WAYS)
 /** 各張數出現的比例(估一疊牌多強用;玩家模型大概的出牌張數)。 */
 const BLANK_COUNT_MIX: readonly number[] = [0.15, 0.3, 0.3, 0.15, 0.1]
+
+/**
+ * 撲朔迷離(§11.6a):手寫的「玩家模型」分布表(使用者 10/30 定),真牌數含鬼、另記用幾張鬼。
+ * 鬼數:三條 天然 40% / 對子 + 1 鬼 60%;鐵支 三條 + 1 鬼 / 對子 + 2 鬼 各半;同花順 2 鬼 70% / 1 鬼 30%;葫蘆 天然 40% / 兩對 + 1 鬼 60%。
+ */
+const MIXED_PLAYER_WAYS: Way[][] = [
+  // 1 張:空白 80%、單張 20%
+  [[E, 0.8, 0, NONE], [0, 0.2, 1, RANKS_HIGH]],
+  // 2 張:強一對 40%、弱一對 30%、2 空白 30%
+  [[1, 0.4, 2, RANKS_STRONG], [1, 0.3, 2, RANKS_WEAK], [E, 0.3, 0, NONE]],
+  // 3 張:三條 50%、對子 + 空白 10%、3 空白 40%
+  [[3, 0.2, 3, RANKS_ALL, 0], [3, 0.3, 3, RANKS_ALL, 1], [1, 0.1, 2, RANKS_ALL], [E, 0.4, 0, NONE]],
+  // 4 張:鐵支 60%、三條 + 空白 15%、兩對 15%、4 空白 10%
+  [[7, 0.3, 4, RANKS_ALL, 1], [7, 0.3, 4, RANKS_ALL, 2], [3, 0.06, 3, RANKS_ALL, 0], [3, 0.09, 3, RANKS_ALL, 1], [2, 0.15, 4, RANKS_TWO_PAIR], [E, 0.1, 0, NONE]],
+  // 5 張:同花順 50%、葫蘆 30%、鐵支 + 空白 10%、其他 10%
+  [
+    [8, 0.35, 5, RANKS_TOP, 2], [8, 0.15, 5, RANKS_TOP, 1], [6, 0.12, 5, RANKS_ALL, 0], [6, 0.18, 5, RANKS_ALL, 1],
+    [7, 0.05, 4, RANKS_ALL, 1], [7, 0.05, 4, RANKS_ALL, 2],
+    [3, 0.03, 3, RANKS_ALL, 1], [1, 0.03, 2, RANKS_ALL], [4, 0.01, 5, RANKS_TOP], [5, 0.01, 5, RANKS_TOP], [E, 0.02, 0, NONE],
+  ],
+]
+const MIXED_PLAYER_TABLE = flatten(MIXED_PLAYER_WAYS)
+const MIXED_COUNT_MIX: readonly number[] = [0.15, 0.2, 0.25, 0.25, 0.15]
 
 interface ModeTable {
   byCount: readonly (readonly Entry[])[]
   countMix: readonly number[]
-  /** 空城計:張數不可靠 → 讀人 + 算牌重新配比(§11.5c) */
+  /** 空城計 / 撲朔迷離:張數不可靠 → 讀人 + 算牌重新配比(§11.5c / §11.6a) */
   readBluff?: boolean
   /** 比牌第三步「鬼少的贏」(百鬼 / 撲朔迷離);空城計照一般房,一樣大就當五五波 */
   jokerTie: boolean
+  /** 全場幾張空白 / 鬼(含開局那張),算牌用 */
+  blanks: number
+  jokers: number
+  /** 撲朔迷離:算牌用「對手手上大概有幾張」的機率打折;空城計是一刀切(空白不夠就不可能) */
+  holdOdds?: boolean
 }
-/** 有表的玩法才走這裡;撲朔迷離做到時補一張(§11.6)。 */
+/** 有表的玩法才走這裡。 */
 const TABLES: Partial<Record<LimitedMode, ModeTable>> = {
-  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX, jokerTie: true },
-  blank: { byCount: BLANK_PLAYER_TABLE, countMix: BLANK_COUNT_MIX, readBluff: true, jokerTie: false },
+  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX, jokerTie: true, blanks: 2, jokers: 22 },
+  blank: { byCount: BLANK_PLAYER_TABLE, countMix: BLANK_COUNT_MIX, readBluff: true, jokerTie: false, blanks: 22, jokers: 2 },
+  mixed: { byCount: MIXED_PLAYER_TABLE, countMix: MIXED_COUNT_MIX, readBluff: true, jokerTie: true, blanks: 12, jokers: 12, holdOdds: true },
 }
 export const hasPlaceTable = (mode: LimitedMode | undefined): boolean => !!mode && !!TABLES[mode]
 
@@ -144,12 +174,11 @@ const choose = (n: number, k: number): number => (k < 0 || k > n ? 0 : k === 0 ?
  * 算牌(點數):每個點數還沒看到幾張(全場各 4 張,2 張鬼可以補)→ 這疊是「某牌型 + 某點數」的機會
  * 照「還湊得出的組合數 ÷ 四張都在時的組合數」打折;湊不出來的 = 0(例:A 看到 3 張、鬼也都看到了 → 不會是 A 三條)。
  */
-function rankOdds(seen: Card[]): (cat: number, top: number) => number {
+function rankOdds(seen: Card[], wild: number): (cat: number, top: number) => number {
   if (!PLACE_TUNE.rankCount) return () => 1
   const unseen = new Map<number, number>()
   for (let r = 7; r <= 14; r++) unseen.set(r, 4)
   for (const c of seen) if (!isBlank(c) && !isJoker(c)) unseen.set(c.rank, (unseen.get(c.rank) ?? 0) - 1)
-  const wild = Math.max(0, 2 - seen.filter(isJoker).length)
   const of = (r: number, k: number) => choose(Math.min(4, Math.max(0, unseen.get(r) ?? 0) + wild), k) / choose(4, k)
   return (cat, top) => {
     switch (cat) {
@@ -178,11 +207,28 @@ function rankOdds(seen: Card[]): (cat: number, top: number) => number {
 /** 一個張數的表裡「有墊空白」(真牌數 < 張數)的比例。 */
 const paddedShare = (dist: readonly Entry[], n: number) => dist.reduce((s, [, , , p, reals = n]) => s + (reals < n ? p : 0), 0)
 
+/** 超幾何:S 張裡有 U 張某種牌,拿 H 張,至少 k 張是那種的機率。 */
+const atLeastCache = new Map<number, number>()
+function atLeast(S: number, U: number, H: number, k: number): number {
+  if (k <= 0) return 1
+  if (H <= 0 || U <= 0 || S <= 0) return 0
+  const h = Math.min(H, S)
+  const id = ((S * 64 + U) * 64 + h) * 8 + k
+  const hit = atLeastCache.get(id)
+  if (hit !== undefined) return hit
+  let p = 0
+  for (let x = k; x <= Math.min(U, h); x++) p += (choose(U, x) * choose(S - U, h - x)) / choose(S, h)
+  p = Math.min(1, p)
+  atLeastCache.set(id, p)
+  return p
+}
+
 /**
- * 空城計:對手這疊(N 張)的分布(§11.5c)。
+ * 空城計 / 撲朔迷離:對手這疊(N 張)的分布(§11.5c / §11.6a)。
  *  - 讀人:翻開過的對手牌堆裡有墊空白的比例,跟表的預設比例加權(預設佔 PLACE_TUNE.readPrior 疊),
  *    再把這個張數的表「有墊 / 沒墊」兩邊照比例重新配。
- *  - 算牌:全場 22 張空白,扣掉看得到的,剩下的才可能在這疊裡 → 真牌至少 N − 還沒看到的空白;
+ *  - 算牌:空白(空城計 22 張)扣掉看得到的,剩下的才可能在這疊裡 → 真牌至少 N − 還沒看到的空白;
+ *    撲朔迷離改成機率(holdOdds):對手手上 + 等著的牌裡至少有幾張鬼 / 空白的機率,照這疊要的張數打折。
  *    點數也算(rankOdds):看光的點數不會出現、看到一半的機會變小。
  */
 function blankDist(state: GameState, me: PlayerId, t: ModeTable, n: number): Entry[] {
@@ -194,13 +240,23 @@ function blankDist(state: GameState, me: PlayerId, t: ModeTable, n: number): Ent
   const share = paddedShare(base, n)
   const want = Math.min(0.95, Math.max(0.05, share * (read / prior)))
   const seen = [...state.hands[me], ...state.slots.flatMap((s) => s[me]), ...shown.flat()]
-  const minReals = n - Math.max(0, 22 - seen.filter(isBlank).length)
-  const odds = rankOdds(seen)
+  const unseenB = Math.max(0, t.blanks - seen.filter(isBlank).length)
+  const unseenJ = Math.max(0, t.jokers - seen.filter(isJoker).length)
+  const odds = rankOdds(seen, Math.min(2, unseenJ))
+  let hold: (blanks: number, jokers: number) => number
+  if (t.holdOdds) {
+    // 對手手上 + 等著(沒翻開)的牌 H 張;沒看到的牌 = 牌堆 + H
+    const pending = state.pendingPick?.by === foe ? state.pendingPick.cards.length : 0
+    const H = state.hands[foe].length + pending + state.slots.filter((s) => s.owner === null).reduce((k, s) => k + s[foe].length, 0)
+    const S = state.deck.length + H
+    const pb = [0, 1, 2, 3, 4, 5].map((b) => atLeast(S, unseenB, H, b))
+    const pj = [0, 1, 2].map((j) => atLeast(S, unseenJ, H, j))
+    hold = (b, j) => pb[Math.min(5, b)] * pj[Math.min(2, j)]
+  } else hold = (b) => (b <= unseenB ? 1 : 0)
   const out: Entry[] = []
   for (const [cat, top, j, p, reals = n] of base) {
-    if (reals < minReals) continue
     const w = share <= 0 || share >= 1 ? 1 : reals < n ? want / share : (1 - want) / (1 - share)
-    const q = p * w * odds(cat, top)
+    const q = p * w * odds(cat, top) * hold(n - reals, j)
     if (q > 0) out.push([cat, top, j, q, reals])
   }
   const tot = out.reduce((s, e) => s + e[3], 0)
@@ -288,8 +344,8 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
 // ---- 空城計看棋盤(§11.5d):出牌前模擬對手會把這疊放哪 ----------------------------
 
 let synthId = 0
-/** 照分布表的一種可能合成一疊具體的牌(只給模擬用;牌型 + 點數對就好,花色隨便)。 */
-function synthPile([cat, top]: Entry, n: number): Card[] {
+/** 照分布表的一種可能合成一疊具體的牌(只給模擬用;牌型 + 點數 + 鬼數對就好,花色隨便)。 */
+function synthPile([cat, top, j]: Entry, n: number): Card[] {
   const card = (rank: number, suit: Card['suit'] = 'S'): Card => ({ id: `SYN${++synthId}`, suit, rank: rank as Card['rank'] })
   const blank = (): Card => ({ id: `SYNB${++synthId}`, suit: 'C', rank: 2, kind: 'blank' })
   const low = top > 7 ? top - 1 : top + 1
@@ -307,6 +363,11 @@ function synthPile([cat, top]: Entry, n: number): Card[] {
     case CATEGORY.STRAIGHT_FLUSH: cards = [0, 1, 2, 3, 4].map((k) => card(top - k, 'H')); break
     default: cards = []
   }
+  // 用鬼的:最大的 j 張換成鬼(鬼會變回那張,牌型 / 點數不變)
+  if (j > 0) {
+    const order = cards.map((_, k) => k).sort((a, b) => cards[b].rank - cards[a].rank)
+    for (const k of order.slice(0, j)) cards[k] = { id: `SYNJ${++synthId}`, suit: 'S', rank: 14, kind: 'joker' }
+  }
   while (cards.length < n) cards.push(blank())
   return cards.slice(0, Math.max(n, 1))
 }
@@ -316,15 +377,21 @@ function drawEntry(dist: readonly Entry[], rng: Rng): Entry {
   return dist[dist.length - 1]
 }
 
-/** 空城計:這疊牌的強弱(贏「隨便一疊」的機率),出牌看未來用。 */
-export const blankStrength = (cards: Card[]): number => (cards.length ? strength(keyOf(cards), TABLES.blank!) : 0)
+/** 空城計 / 撲朔迷離:這疊牌的強弱(贏「隨便一疊」的機率),出牌看未來用。 */
+export const blankStrength = (cards: Card[], mode: LimitedMode = 'blank'): number => (cards.length ? strength(keyOf(cards), TABLES[mode]!) : 0)
+/** 同上,直接給牌型 / 點數 / 鬼數(撲朔迷離估「之後補到的鬼」湊出來的牌,手上還沒有那張鬼)。 */
+export const keyStrength = (mode: LimitedMode, cat: number, top: number, j: number): number => strength({ cat, top, j }, TABLES[mode]!)
 
 /**
- * 空城計看棋盤(§11.5d):每個候選出牌 → 對手會放哪格 → 我這手的期望(格子價值為單位)。
+ * 看棋盤(空城計 §11.5d / 撲朔迷離 §11.6a):每個候選出牌 → 對手會放哪格 → 我這手的期望(格子價值為單位)。
  * 對手等著的牌只知道張數,照分布表抽 samples 次;對手用同一套放牌、站在他那邊挑(他只看得到張數)。
  */
 export function blankBoardScores(state: GameState, me: PlayerId, options: Card[][], samples: number, rng: Rng): number[] {
-  const t = TABLES.blank!
+  const t = TABLES[state.mode === 'mixed' ? 'mixed' : 'blank']!
+  // 每疊只 evaluate 一次(鬼牌估值很貴):我的候選先算好,對手抽出來的牌每次抽完算一次
+  const mineV = options.map((p) => evaluate(p))
+  const later = options.map((p) => Math.max(0, strength(keyOf(p), t) - LATER_EDGE))
+  const cmp = (o: number, b: Card[], vb: HandValue) => (t.jokerTie ? compareLimitedWith(options[o], mineV[o], b, vb).cmp : compareHands(options[o], b))
   const foe = otherPlayer(me)
   const targets = emptySlotsFor(state, me)
   const waiting = targets.filter((i) => state.slots[i][foe].length > 0)
@@ -335,14 +402,22 @@ export function blankBoardScores(state: GameState, me: PlayerId, options: Card[]
   for (let k = 0; k < samples; k++) {
     const slots = state.slots.map((s, i) => (dists.has(i) ? { ...s, [foe]: synthPile(drawEntry(dists.get(i)!, rng), s[foe].length) } : s))
     const hyp: GameState = { ...state, slots, hands: { ...state.hands, [foe]: [] }, phase: 'place' }
+    const theirV = new Map<number, HandValue>()
+    for (const i of dists.keys()) theirV.set(i, evaluate(slots[i][foe]))
+    // 對手只看得到張數 → 同樣張數放的格子一樣,每種張數只算一次
+    const placeFor = new Map<number, number>()
     options.forEach((pile, o) => {
-      const i = targets.length <= 1 ? targets[0] : placeByTable({ ...hyp, pendingPick: { by: me, cards: pile } }, foe, foeRt, () => 0)
+      let i = targets.length <= 1 ? targets[0] : placeFor.get(pile.length)
+      if (i === undefined) {
+        i = placeByTable({ ...hyp, pendingPick: { by: me, cards: pile } }, foe, foeRt, () => 0)
+        placeFor.set(pile.length, i)
+      }
       const theirs = slots[i][foe]
       if (theirs.length) {
-        const c = compareHands(pile, theirs)
+        const c = cmp(o, theirs, theirV.get(i) ?? evaluate(theirs))
         totals[o] += c > 0 ? value(me, i) : c < 0 ? -value(foe, i) : 0
       } else {
-        const s = Math.max(0, strength(keyOf(pile), t) - LATER_EDGE)
+        const s = later[o]
         totals[o] += LATER_DISCOUNT * (s * value(me, i) - (1 - s) * value(foe, i))
       }
     })

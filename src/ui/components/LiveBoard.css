@@ -211,6 +211,13 @@
   font-weight: 800;
   white-space: nowrap;
 }
+/* 顏色跟牌桌玩法方鈕一致(LIMITED-ROOM-SPEC §8.4):百鬼 = 上面的紫 */
+.livecard__mode--blank {
+  background: #5b7493;
+}
+.livecard__mode--mixed {
+  background: #2a8379;
+}
 .livecard__watchers {
   margin-left: auto;
   font-size: 18px; /* 眼睛/數量再大,與 LIVE 齊平(#1) */

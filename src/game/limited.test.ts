@@ -56,9 +56,9 @@ describe('牌組', () => {
 })
 
 describe('排程', () => {
-  it('測試期固定玩法(步驟 2 = 空城計)', () => {
-    expect(LIMITED_TEST_MODE).toBe('blank')
-    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('blank')
+  it('測試期固定玩法(步驟 3 = 撲朔迷離)', () => {
+    expect(LIMITED_TEST_MODE).toBe('mixed')
+    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('mixed')
   })
   it('輪值表:同玩法的星期併一列(§8.2)', () => {
     expect(LIMITED_ROTA.map((r) => [r.label, r.mode])).toEqual([
@@ -510,6 +510,97 @@ describe('空城計放牌(§11.5c,玩家模型表 + 讀人 + 算牌)', () => {
       expect(g.winner).not.toBeNull()
     }
   })
+})
+
+describe('撲朔迷離人機(§11.6a)', () => {
+  const Bk = (n: number): Card => ({ id: `BLANK_d${n}`, suit: 'C', rank: 2, kind: 'blank' })
+  const bk = (n: number) => Array.from({ length: n }, (_, i) => Bk(i + 1))
+  const jk = (n: number) => Array.from({ length: n }, (_, i) => Jk(i + 1))
+  function mixedState(hand: Card[], placed = 0): GameState {
+    const g = createGame(5, 'p2', 'p2', 'mixed')
+    return { ...g, hands: { ...g.hands, p2: hand }, placementsDone: { p1: placed, p2: placed }, turn: 'p2', phase: 'pick' }
+  }
+  const pickWith = (g: GameState, rt: BossRuntime, r: number) => {
+    const ids = new Set(limitedPick(g, 'p2', rt, () => r))
+    return g.hands.p2.filter((c) => ids.has(c.id))
+  }
+  const realsOf = (p: Card[]) => p.filter((c) => !isBlank(c) && !isJoker(c))
+  const hand = [C('CK'), C('DK'), C('S9'), C('H9'), C('C9'), C('SQ'), C('SJ'), C('S10'), ...jk(3), ...bk(3)]
+  const MAINS = ['attack', 'balance', 'hoard'] as const
+
+  it('每一手 1~5 張、最多 2 鬼、都是手上的牌;前五手不出「單張 + 鬼」', () => {
+    for (const main of MAINS) {
+      for (const ex of [1, 0]) {
+        for (let pd = 0; pd <= 6; pd++) {
+          for (const r of [0.05, 0.5, 0.95]) {
+            const p = pickWith(mixedState(hand, pd), brain(main, ex), r)
+            expect(p.length).toBeGreaterThanOrEqual(1)
+            expect(p.length).toBeLessThanOrEqual(5)
+            expect(p.filter(isJoker).length).toBeLessThanOrEqual(2)
+            if (pd <= 4 && p.some(isJoker)) expect(realsOf(p).length).not.toBe(1)
+          }
+        }
+      }
+    }
+  })
+  it('差一格就分勝負:出真正最大的;最大是兩對 → 沒鬼改出最大的一對、有鬼補成葫蘆', () => {
+    const point = (h: Card[]) => {
+      const g = mixedState(h, 3)
+      return { ...g, slots: g.slots.map((s, i) => (i < 3 ? { p1: [C('SA')], p2: [C('C8')], owner: 'p1' as const } : s)) }
+    }
+    for (const main of MAINS) {
+      expect(realsOf(pickWith(point([C('CK'), C('DK'), C('S7'), C('H7'), C('HA'), ...bk(3)]), brain(main), 0.95)).map((c) => c.rank)).toEqual([13, 13])
+      expect(evaluate(pickWith(point([C('CK'), C('DK'), C('S7'), C('H7'), C('HA'), Jk(1), ...bk(3)]), brain(main), 0.95)).category).toBe(CATEGORY.FULL_HOUSE)
+    }
+  })
+  it('鬼很少(之後也補不到)時:前五手不做 2 鬼的大牌', () => {
+    const few = [C('CK'), C('DK'), C('S9'), C('H9'), C('SQ'), C('SJ'), C('S10'), ...jk(2), ...bk(3)]
+    for (const main of MAINS) {
+      for (let pd = 0; pd <= 4; pd++) {
+        for (const r of [0.05, 0.5, 0.95]) {
+          const g = { ...mixedState(few, pd), drawsDone: { p1: 6, p2: 6 } }
+          expect(pickWith(g, brain(main), r).filter(isJoker).length).toBeLessThan(2)
+        }
+      }
+    }
+  })
+  it('失手 = 照實出最划算的一手(三條 + 1 鬼 = 鐵支),不墊', () => {
+    const p = pickWith(mixedState([C('C9'), C('D9'), C('H9'), C('SK'), C('D7'), Jk(1), ...bk(3)], 1), brain('balance', 0), 0.5)
+    expect(evaluate(p).category).toBe(CATEGORY.FOUR_KIND)
+    expect(p.filter(isJoker)).toHaveLength(1)
+    expect(p.some(isBlank)).toBe(false)
+  })
+  it('最後一手:最大的一疊、最多 2 鬼', () => {
+    const p = pickWith(mixedState([C('C9'), C('D9'), C('SK'), ...jk(3), ...bk(2)], 6), brain('balance'), 0.5)
+    expect(p.filter(isJoker)).toHaveLength(2)
+    expect(evaluate(p).category).toBe(CATEGORY.FOUR_KIND)
+  })
+  it('120 場電腦對電腦:合法、打得完', () => {
+    for (let seed = 1; seed <= 120; seed++) {
+      const rng = mulberry32(seed)
+      const rts: Record<PlayerId, BossRuntime> = {
+        p1: { profile: CAMPAIGN[seed % CAMPAIGN.length].profile, main: rollMain(CAMPAIGN[seed % CAMPAIGN.length].profile, rng), execution: [0.5, 0.65, 0.8][seed % 3] },
+        p2: defaultLimitedBrain('mixed'),
+      }
+      let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', 'mixed')
+      let steps = 0
+      while (g.phase !== 'ended' && steps++ < 400) {
+        if (g.phase === 'pick') {
+          const ids = limitedPick(g, g.turn, rts[g.turn], rng)
+          expect(ids.length).toBeGreaterThanOrEqual(1)
+          expect(ids.length).toBeLessThanOrEqual(5)
+          expect(g.hands[g.turn].filter((c) => ids.includes(c.id) && isJoker(c)).length).toBeLessThanOrEqual(2)
+          g = applyPick(g, g.turn, ids)
+        } else if (g.phase === 'place') {
+          const placer = otherPlayer(g.pendingPick!.by)
+          g = applyPlace(g, placer, aiPlace(g, placer, rts[placer]))
+        } else if (g.phase === 'showdown') g = resolveShowdown(g)
+        else if (g.phase === 'draw') g = applyDraw(g)
+      }
+      expect(g.phase).toBe('ended')
+      expect(g.winner).not.toBeNull()
+    }
+  }, 120_000)
 })
 
 describe('百鬼夜行整場:人機出的每一手都合法、打得完', () => {

@@ -14,7 +14,7 @@ import { groupBy } from './aiCore'
 import { bossPlace, type BossProfile, type BossRuntime } from './bossAI'
 import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
 import { mulberry32 } from './rng'
-import { blankBoardScores, blankStrength, hasPlaceTable, placeByTable, winsIfOwns } from './limitedPlace'
+import { blankBoardScores, blankStrength, hasPlaceTable, keyStrength, placeByTable, winsIfOwns } from './limitedPlace'
 import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, otherPlayer, type GameState, type PlayerId } from './state'
 
 type Rng = () => number
@@ -42,7 +42,8 @@ export interface LimitedPickOpts {
 
 export function limitedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random, opts: LimitedPickOpts = {}): string[] {
   if (state.mode === 'blank') return blankPick(state, me, rt, rng, opts).map((c) => c.id)
-  // 撲朔迷離 / 火力全開上線時在這裡分派
+  if (state.mode === 'mixed') return mixedPick(state, me, rt, rng).map((c) => c.id)
+  // 火力全開上線時在這裡分派
   return ghostPick(state, me, rt, rng).map((c) => c.id)
 }
 
@@ -731,4 +732,204 @@ function padBlanks(state: GameState, me: PlayerId, plan: BlankPlan, blanks: Card
   }
   const spend = Math.max(core.length ? 0 : 1, Math.min(want, maxSpend))
   return [...core, ...blanks.slice(0, spend)]
+}
+
+// ---- 撲朔迷離(§11.6a) ----------------------------------------------------------
+//
+// 鬼才是稀有資產(每人約 6 鬼、每格最多 2 鬼 → 一整局最多約 3 手大牌),真牌多到用不完。
+// 沿用空城計「資產 + 看棋盤」,多一個維度:每個資產補幾張鬼;每用一張鬼扣一點成本(鬼少時加倍)。
+
+/** 撲朔迷離價值表(使用者 10/30 定,CP 值用;要出最大的牌時改用真正的比牌)。 */
+const mixedValue: ValueFn = (cat, top) => {
+  switch (cat) {
+    case CATEGORY.STRAIGHT_FLUSH:
+      return 10 + (top - 11) * 0.05
+    case CATEGORY.FOUR_KIND:
+      return 9 + (top - 7) * 0.05
+    case CATEGORY.FULL_HOUSE:
+      return 7 + (top - 7) * 0.05
+    case CATEGORY.THREE_KIND:
+      return 6 + (top - 7) * 0.05
+    case CATEGORY.PAIR:
+      return top >= STRONG_PAIR ? 5 + (top - STRONG_PAIR) * 0.1 : 2 + (top - 7) * 0.1
+    case CATEGORY.STRAIGHT:
+    case CATEGORY.FLUSH:
+      return 4 + (top - 11) * 0.05
+    case CATEGORY.TWO_PAIR:
+      return 3 + (top - 8) * 0.05
+    case CATEGORY.HIGH_CARD:
+      return top >= 13 ? 1 : 0.5
+    default:
+      return 0
+  }
+}
+
+/**
+ * 撲朔迷離可調參數(§11.6a)。
+ *  - jokerCost:每用一張鬼扣的分;鬼少(自己的 + 之後大概補到的 ≤ lowJokers)時 × 2,而且不做 2 鬼的大牌
+ *  - gamma / samples / blankCost / noise / sacWin / maxSac / earlySac / bigBluff / realsPerAsset:同空城計
+ */
+// 2026-10-30 調參(400 場,執行力 1 vs 玩家模型):鬼成本 0.15 → 54%、0.35 → 55%、0.6 → 62%、0.8 / 1.0 → 61~62%;
+// 鬼很少門檻 3 / 5、送格上限 2、不先送白、空白成本 0.1 都在 ±2% 內 → 照原設定
+export const MIXED_TUNE = {
+  jokerCost: 0.6,
+  lowJokers: 4,
+  /** 順子 / 同花最多用幾張鬼 */
+  straightMaxJ: 1,
+  /** 鬼多到之後裝不下時,多出來的不算成本 */
+  surplusFree: true,
+  gamma: { attack: 0.98, balance: 1.19, hoard: 1.4 } as Record<BossRuntime['main'], number>,
+  samples: 10,
+  blankCost: 0.03,
+  noise: 0.05,
+  sacWin: 0.04,
+  maxSac: 3,
+  earlySac: { hands: 2, p: { attack: 0.2, balance: 0.15, hoard: 0.15 } as Record<BossRuntime['main'], number> },
+  bigBluff: { attack: 0.08, balance: 0.1, hoard: 0.15 } as Record<BossRuntime['main'], number>,
+  realsPerAsset: 2.5,
+}
+const M = MIXED_TUNE
+const MIXED_JOKERS = 12
+const MIXED_REALS = 32
+const isReal = (c: Card) => !isJoker(c) && !isBlank(c)
+
+/** 模擬(玩家模型)用:撲朔迷離手牌所有組法(牌 + 牌型 + 鬼數)。 */
+export function mixedOptions(hand: Card[]): { cards: Card[]; cat: number; top: number; jokers: number }[] {
+  const jokers = hand.filter(isJoker)
+  return candidates(hand.filter(isReal), jokers.length, LIMITED_JOKER_CAP, mixedValue).map((c) => ({
+    cards: [...c.reals, ...jokers.slice(0, c.jokers)],
+    cat: c.cat,
+    top: c.top,
+    jokers: c.jokers,
+  }))
+}
+
+function mixedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): Card[] {
+  const hand = state.hands[me]
+  const cap = jokerCapOf(state.mode) ?? LIMITED_JOKER_CAP
+  const reals = hand.filter(isReal)
+  const jokers = hand.filter(isJoker)
+  const blanks = hand.filter(isBlank)
+  const J = jokers.length
+  const pd = state.placementsDone[me]
+  const left = SLOT_COUNT - pd
+  const foe = otherPlayer(me)
+  const nonBlank = [...reals, ...jokers]
+
+  // 最後一手:全部塞進最大的一疊(≤ 2 鬼,張數多的踢腳贏)
+  if (left <= 1) return nonBlank.length ? biggestPile(nonBlank, cap) : blanks.slice(0, 1)
+  // 沒真牌:只剩鬼就出鬼(一對 A),連鬼都沒有就送空白
+  if (!reals.length) return J ? jokers.slice(0, Math.min(cap, J)) : blanks.slice(0, 1)
+
+  const cands = candidates(reals, J, cap, mixedValue)
+  const pileOf = (c: Cand) => [...c.reals, ...jokers.slice(0, c.jokers)]
+  const realBest = (cs: Cand[]) => cs.reduce((b, c) => (compareLimited(pileOf(c), pileOf(b)).cmp > 0 ? c : b), cs[0])
+
+  // 差一格就分勝負:出真正最大的;最大是兩對(沒鬼,有鬼就會是葫蘆)→ 改出最大的一對
+  if (atMatchPoint(state, foe) || atMatchPoint(state, me)) {
+    let pick = realBest(cands)
+    if (pick.cat === CATEGORY.TWO_PAIR) pick = realBest(cands.filter((c) => c.cat === CATEGORY.PAIR && !c.jokers))
+    return pileOf(pick)
+  }
+
+  // 單張 + 鬼湊對子 / 三條 = 浪費;光出單張也不出(送格用空白),沒空白才可以
+  const futureJ = futureOf(state, me, isJoker, MIXED_JOKERS).hits
+  const lowJ = J + futureJ <= M.lowJokers
+  // 順子 / 同花只換一般牌力 → 最多用 1 鬼
+  const sensible = (c: Cand, allowTwo = !lowJ) =>
+    !(c.reals.length === 1 && c.jokers > 0) &&
+    (c.cat !== CATEGORY.HIGH_CARD || !blanks.length) &&
+    (allowTwo || c.jokers < 2) &&
+    !((c.cat === CATEGORY.STRAIGHT || c.cat === CATEGORY.FLUSH) && c.jokers > M.straightMaxJ)
+  const jokerPrice = M.jokerCost * (lowJ ? 2 : 1)
+  // 鬼多到之後裝不下(剩下的手 × 每格 2 張)→ 多出來的不算成本(不用就浪費)
+  const surplus = M.surplusFree ? Math.max(0, Math.floor(J + futureJ - cap * (left - 1))) : 0
+  const jokerCostOf = (n: number) => jokerPrice * Math.max(0, n - surplus)
+  const cost = (c: Cand) => c.value - jokerPrice * c.jokers
+
+  // 執行力失手:照實出最划算的一手(價值 − 用的鬼),不墊、不看以後
+  if (rng() >= rt.execution) {
+    const ok = cands.filter((c) => sensible(c, true))
+    if (!ok.length) return blanks.length ? blanks.slice(0, 1) : [lowestReal(reals)]
+    return pileOf(ok.reduce((b, c) => (c.value - c.jokers > b.value - b.jokers ? c : b)))
+  }
+
+  // 最後兩手:窮舉這手 + 下一手(空白送格也算一種)
+  if (left === 2) {
+    const total = (c: Cand) => {
+      const rest = candidates(reals.filter((x) => !c.reals.includes(x)), J - c.jokers, cap, mixedValue)
+      return c.value + (rest.length ? Math.max(...rest.map((r) => r.value)) : 0)
+    }
+    let pick: Cand | null = null
+    let top = blanks.length ? total({ reals: [], jokers: 0, cat: CATEGORY.EMPTY, top: 0, value: 0 }) : -Infinity
+    for (const c of cands.filter((x) => sensible(x, true))) {
+      const s = total(c)
+      if (s > top) {
+        top = s
+        pick = c
+      }
+    }
+    return pick ? pileOf(pick) : blanks.slice(0, 1)
+  }
+
+  // 前期偶爾先送 2~3 張全空白(同空城計 §11.5e)
+  if (pd < M.earlySac.hands && blanks.length >= 3 && !sacrificesDone(state, me) && rng() < M.earlySac.p[rt.main]) {
+    return blanks.slice(0, Math.min(blanks.length - 1, rng() < 0.5 ? 2 : 3))
+  }
+
+  // ---- 看棋盤 ----
+  // 候選:每種(牌型, 鬼數)留價值最高的 3 個 × 墊空白(對子 0~2、三條 0~1、4 張以上不墊)+ 送格
+  const byKind = new Map<string, Cand[]>()
+  for (const c of cands.filter((x) => sensible(x))) {
+    const k = c.cat * 10 + c.jokers
+    byKind.set(String(k), [...(byKind.get(String(k)) ?? []), c])
+  }
+  const cores = [...byKind.values()].flatMap((cs) => cs.sort((a, b) => b.value - a.value).slice(0, 3))
+  const quota = (blanks.length + futureOf(state, me, isBlank, MIXED_JOKERS).hits) / left
+  const budget = Math.min(blanks.length, Math.max(1, Math.ceil(quota * 2)))
+  const opts: { pile: Card[]; core: Cand | null; spent: number }[] = []
+  for (const c of cores) {
+    const size = c.reals.length + c.jokers
+    const maxPad = size >= 4 ? 0 : Math.min(budget, c.cat === CATEGORY.THREE_KIND ? 1 : 2, 5 - size)
+    for (let p = 0; p <= maxPad; p++) opts.push({ pile: [...pileOf(c), ...blanks.slice(0, p)], core: c, spent: p })
+  }
+  const singles = reals.filter((x) => reals.filter((y) => y.rank === x.rank).length === 1).sort((a, b) => a.rank - b.rank)
+  if (blanks.length && (sacrificesDone(state, me) < M.maxSac || !opts.length)) {
+    for (let k = 1; k <= Math.min(3, budget); k++) opts.push({ pile: blanks.slice(0, k), core: null, spent: k })
+    if (singles.length && budget >= 3 && rng() < M.bigBluff[rt.main]) opts.push({ pile: [singles[0], ...blanks.slice(0, 3)], core: null, spent: 3 })
+  }
+  if (!opts.length) return [lowestReal(reals)]
+
+  // 看未來:剩下的真牌 + 鬼(含之後大概補到的)一手一手挑最划算的,取前 slotsForRest 手的勝率
+  const futureAssets = futureOf(state, me, isReal, MIXED_REALS).hits / M.realsPerAsset
+  const slotsForRest = Math.max(0, Math.round(left - 1 - futureAssets))
+  const futureCache = new Map<Cand | null, number>()
+  const future = (core: Cand | null) => {
+    const hit = futureCache.get(core)
+    if (hit !== undefined) return hit
+    let rs = core ? reals.filter((x) => !core.reals.includes(x)) : reals
+    let j = Math.round(J - (core?.jokers ?? 0) + futureJ)
+    let v = 0
+    for (let p = 0; p < slotsForRest && rs.length; p++) {
+      const cs = candidates(rs, j, cap, mixedValue).filter((c) => c.reals.length > 1 || (!c.jokers && c.cat !== CATEGORY.HIGH_CARD))
+      if (!cs.length) break
+      const b = cs.reduce((x, c) => (cost(c) > cost(x) ? c : x))
+      v += 2 * (keyStrength('mixed', b.cat, b.top, b.jokers) - M.sacWin)
+      rs = rs.filter((x) => !b.reals.includes(x))
+      j -= b.jokers
+    }
+    futureCache.set(core, v)
+    return v
+  }
+  const now = blankBoardScores(state, me, opts.map((o) => o.pile), M.samples, rng)
+  let best = 0
+  let top = -Infinity
+  opts.forEach((o, k) => {
+    const s = now[k] + M.gamma[rt.main] * future(o.core) - jokerCostOf(o.core?.jokers ?? 0) - M.blankCost * o.spent + rng() * M.noise
+    if (s > top) {
+      top = s
+      best = k
+    }
+  })
+  return opts[best].pile
 }

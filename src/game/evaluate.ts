@@ -144,8 +144,10 @@ export type LimitedTieStep = 'jokers' | 'rank' | 'suit' | 'tie'
  * 一般房 / 特殊房仍用 compareValue,這支只在限定房用。
  */
 export function compareLimited(a: Card[], b: Card[]): { cmp: number; by?: LimitedTieStep } {
-  const va = evaluate(a)
-  const vb = evaluate(b)
+  return compareLimitedWith(a, evaluate(a), b, evaluate(b))
+}
+/** 同 compareLimited,但兩邊已經 evaluate 過(人機模擬同一疊要比很多次,鬼牌估值很貴)。 */
+export function compareLimitedWith(a: Card[], va: HandValue, b: Card[], vb: HandValue): { cmp: number; by?: LimitedTieStep } {
   if (va.category !== vb.category) return { cmp: va.category - vb.category }
   const len = Math.min(va.rankSeq.length, vb.rankSeq.length)
   for (let i = 0; i < len; i++) {

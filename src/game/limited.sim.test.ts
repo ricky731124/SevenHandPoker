@@ -9,10 +9,10 @@
 import { describe, it } from 'vitest'
 import { bossPick, bossPlace, rollMain, type BossRuntime } from './bossAI'
 import { CAMPAIGN } from './campaign'
-import { BLANK_TUNE, blankAssets, defaultLimitedBrain, limitedPick, limitedPlace, type LimitedPickOpts } from './limitedAI'
+import { BLANK_TUNE, MIXED_TUNE, blankAssets, defaultLimitedBrain, limitedPick, limitedPlace, mixedOptions, type LimitedPickOpts } from './limitedAI'
 import { PLACE_TUNE, winsIfOwns } from './limitedPlace'
 import { isBlank, isJoker, type Card } from './cards'
-import { CATEGORY, CATEGORY_NAME_ZH, compareHands, evaluate } from './evaluate'
+import { CATEGORY, CATEGORY_NAME_ZH, compareHands, compareLimited, evaluate } from './evaluate'
 import type { LimitedMode } from './limited'
 import { mulberry32 } from './rng'
 import { applyDraw, applyPick, applyPlace, createGame, emptySlotsFor, otherPlayer, resolveShowdown, type GameState, type PlayerId } from './state'
@@ -168,10 +168,17 @@ const playerModel: Brain = {
 const lowest = (hand: Card[]) => [...hand].sort((a, b) => a.rank - b.rank)[0]
 
 /** 一場空城計,每一疊出牌交給 onPile;回傳 p1 贏沒。 */
-function playBlank(seed: number, a: Brain, b: Brain, onPile?: (cards: Card[], by: PlayerId, g: GameState) => void, onSlot?: (mine: Card[], won: boolean | null, who: PlayerId) => void): boolean {
+function playBlank(
+  seed: number,
+  a: Brain,
+  b: Brain,
+  onPile?: (cards: Card[], by: PlayerId, g: GameState) => void,
+  onSlot?: (mine: Card[], won: boolean | null, who: PlayerId) => void,
+  mode: LimitedMode = 'blank',
+): boolean {
   const rng = mulberry32(seed)
   const brains: Record<PlayerId, Brain> = { p1: a, p2: b }
-  let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', 'blank')
+  let g = createGame(seed, rng() < 0.5 ? 'p1' : 'p2', 'p2', mode)
   for (let i = 0; i < 500 && g.phase !== 'ended'; i++) {
     if (g.phase === 'pick') {
       const ids = brains[g.turn].pick(g, g.turn, rng)
@@ -276,6 +283,144 @@ describe.skipIf(!process.env.BLANK)('空城計模擬(BLANK=1 才跑)', () => {
           t[1] += won === null ? 0.5 : won ? 1 : 0
           t[2]++
         })
+      }
+      const rows = [...shapes.entries()].sort((a, b) => b[1][0] - a[1][0]).filter(([, [n]]) => n / total >= 0.005)
+      console.log(`\n執行力 ${ex}:出牌樣態(佔所有手數 / 拿下格子)\n` + rows.map(([k, [n, w, d]]) => `${k}: ${((n / total) * 100).toFixed(1)}% / ${d ? Math.round((w / d) * 100) : '-'}%`).join('\n'))
+    }
+  }, 1_800_000)
+})
+
+// ---- 撲朔迷離(§11.6a)--------------------------------------------------------
+// MIXED=1 npx vitest run src/game/limited.sim.test.ts  → 執行力 × 勝率表(打玩家模型)+ 出牌樣態(ROW=正規式 只跑指定列)
+
+/**
+ * 玩家模型(照使用者 10/30 給的分布表寫):約 3 成送全空白 1~3 張;不然照比重挑一種資產
+ * (鐵支 3、三條 2.5、強對 2、同花順 1.5、弱對 1.5、葫蘆 1、兩對 0.5),同一種挑用鬼最少的;
+ * 三條 25% / 對子 15% / 鐵支 10% 墊 1 張空白。最後兩手 / 差一格照電腦(執行力 1)。放牌同空城計玩家模型。
+ */
+const mixedPlayerRt: BossRuntime = { ...defaultLimitedBrain('mixed'), execution: 1 }
+const MIXED_WEIGHT: [number, (o: { cat: number; top: number; cards: Card[] }) => boolean][] = [
+  [3, (o) => o.cat === CATEGORY.FOUR_KIND],
+  [2.5, (o) => o.cat === CATEGORY.THREE_KIND],
+  [2, (o) => o.cat === CATEGORY.PAIR && o.top >= 11],
+  [1.5, (o) => o.cat === CATEGORY.STRAIGHT_FLUSH && o.cards.filter((c) => !isJoker(c)).length >= 3],
+  [1.5, (o) => o.cat === CATEGORY.PAIR && o.top < 11],
+  [1, (o) => o.cat === CATEGORY.FULL_HOUSE],
+  [0.5, (o) => o.cat === CATEGORY.TWO_PAIR],
+]
+const mixedPlayer: Brain = {
+  pick: (g, me, rng) => {
+    const hand = g.hands[me]
+    const blanks = hand.filter(isBlank)
+    const left = 7 - g.placementsDone[me]
+    const foe = otherPlayer(me)
+    const point = g.slots.some((s, i) => s.owner === null && (winsIfOwns(g, me, i) || winsIfOwns(g, foe, i)))
+    if (left <= 2 || point) return limitedPick(g, me, mixedPlayerRt, rng)
+    const sac = () => blanks.slice(0, 1 + Math.floor(rng() * Math.min(3, blanks.length))).map((c) => c.id)
+    if (blanks.length && rng() < 0.3) return sac()
+    // 單張 + 鬼的組法不算;同一種挑用鬼最少、點數最大的
+    const opts = mixedOptions(hand).filter((o) => o.cards.filter((c) => !isJoker(c)).length >= 2)
+    const kinds = MIXED_WEIGHT.map(([w, is]) => {
+      const xs = opts.filter(is).sort((a, b) => a.jokers - b.jokers || b.top - a.top)
+      return { w: xs.length ? w : 0, o: xs[0] }
+    })
+    const tot = kinds.reduce((s, k) => s + k.w, 0)
+    if (!tot) return blanks.length ? sac() : [lowest(hand.filter((c) => !isJoker(c)).length ? hand.filter((c) => !isJoker(c)) : hand).id]
+    let u = rng() * tot
+    const o = kinds.find((k) => (u -= k.w) < 0)?.o ?? kinds.find((k) => k.w)!.o!
+    const padP = o.cat === CATEGORY.THREE_KIND ? 0.25 : o.cat === CATEGORY.PAIR ? 0.15 : o.cat === CATEGORY.FOUR_KIND ? 0.1 : 0
+    const pad = o.cards.length < 5 && rng() < padP ? 1 : 0
+    return [...o.cards, ...blanks.slice(0, pad)].map((c) => c.id)
+  },
+  place: playerModel.place,
+}
+// 直覺玩家:每手出最大(≤ 2 鬼、不墊),放牌用原本 boss 放牌
+const mixedGreedy: Brain = {
+  pick: (g, me) => {
+    const nb = g.hands[me].filter((c) => !isBlank(c))
+    if (!nb.length) return [g.hands[me][0].id]
+    let best: Card[] = [nb[0]]
+    const rec = (start: number, cur: Card[], j: number) => {
+      if (cur.length && compareLimited(cur, best).cmp > 0) best = [...cur]
+      if (cur.length === 5) return
+      for (let i = start; i < nb.length; i++) {
+        const jk = isJoker(nb[i]) ? 1 : 0
+        if (j + jk <= 2) rec(i + 1, [...cur, nb[i]], j + jk)
+      }
+    }
+    rec(0, [], 0)
+    return best.map((c) => c.id)
+  },
+  place: (g, me, rng) => bossPlace(g, me, greedyRt, rng),
+}
+
+/** 出牌分類:全空白 / 高牌 / 弱對 / 強對 / 兩對 / 三條 / 鐵支 / 葫蘆 / 同花順…,加「N 鬼」「墊 N」。 */
+function mixedShape(cards: Card[]): string {
+  const nb = cards.filter((c) => !isBlank(c))
+  if (!nb.length) return `全空白 ${cards.length} 張`
+  const v = evaluate(nb)
+  const top = v.rankSeq[0]
+  const j = nb.filter(isJoker).length
+  const pad = cards.length - nb.length
+  const name = v.category === CATEGORY.HIGH_CARD ? '高牌' : v.category === CATEGORY.PAIR ? (top >= 11 ? '強對' : '弱對') : CATEGORY_NAME_ZH[v.category]
+  return `${name}${j ? ` ${j}鬼` : ''}${pad ? ` 墊${pad}` : ''}`
+}
+
+describe.skipIf(!process.env.MIXED)('撲朔迷離模擬(MIXED=1 才跑)', () => {
+  // 調參:MIXED_EXP='{"jokerCost":0.5}' → 暫時蓋掉 MIXED_TUNE 的欄位
+  if (process.env.MIXED_EXP) Object.assign(MIXED_TUNE, JSON.parse(process.env.MIXED_EXP))
+  const brain = (rt: BossRuntime): Brain => ({ pick: (g, me, rng) => limitedPick(g, me, rt, rng), place: (g, me, rng) => limitedPlace(g, me, rt, rng) })
+  const ONLINE = [0.5, 0.65, 0.8]
+  const name = (m: BossRuntime['main']) => (m === 'attack' ? '強攻' : m === 'balance' ? '平衡' : '囤牌')
+  it(`勝率 × ${N} 場(對手 = 玩家模型)`, () => {
+    const rows: [string, (r: Rng) => [Brain, Brain]][] = [
+      ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`快配人機 執行力 ${ex} vs 玩家模型`, (r) => [brain(withExec(r, ex)), mixedPlayer]]),
+      ...EXECS.map((ex): [string, (r: Rng) => [Brain, Brain]] => [`對戰電腦 執行力 ${ex} vs 玩家模型`, () => [brain({ ...defaultLimitedBrain('mixed'), execution: ex }), mixedPlayer]]),
+      ['快配人機 0.5/0.65/0.8 隨機抽(現在線上) vs 玩家模型', (r) => [brain(withExec(r, ONLINE[Math.floor(r() * 3)])), mixedPlayer]],
+      ...(['attack', 'balance', 'hoard'] as const).flatMap((m) => [
+        [`${name(m)} 執行力 1 vs 玩家模型`, (r: Rng) => [brain(withExec(r, 1, m)), mixedPlayer]] as [string, (r: Rng) => [Brain, Brain]],
+        [`${name(m)} 線上隨機抽 vs 玩家模型`, (r: Rng) => [brain(withExec(r, ONLINE[Math.floor(r() * 3)], m)), mixedPlayer]] as [string, (r: Rng) => [Brain, Brain]],
+      ]),
+      ['快配人機 執行力 1 vs 直覺玩家(每手最大)', (r) => [brain(withExec(r, 1)), mixedGreedy]],
+      ['玩家模型 vs 直覺玩家', () => [mixedPlayer, mixedGreedy]],
+      ['玩家模型 vs 玩家模型(先後手基準)', () => [mixedPlayer, mixedPlayer]],
+      ['強攻 vs 平衡(執行力 1)', (r) => [brain(withExec(r, 1, 'attack')), brain(withExec(r, 1, 'balance'))]],
+      ['強攻 vs 囤牌(執行力 1)', (r) => [brain(withExec(r, 1, 'attack')), brain(withExec(r, 1, 'hoard'))]],
+      ['平衡 vs 囤牌(執行力 1)', (r) => [brain(withExec(r, 1, 'balance')), brain(withExec(r, 1, 'hoard'))]],
+    ]
+    const out: string[] = ['| 對局 | 前者勝率 |', '|---|---|']
+    const only = process.env.ROW ? new RegExp(process.env.ROW) : null
+    rows.forEach(([label, mk], k) => {
+      if (only && !only.test(label)) return
+      let w = 0
+      for (let i = 0; i < N; i++) {
+        const [a, b] = mk(mulberry32(170_000 * (k + 1) + i))
+        if (playBlank(1_910_000 * (k + 1) + i, a, b, undefined, undefined, 'mixed')) w++
+      }
+      out.push(`| ${label} | ${Math.round((w / N) * 100)}% |`)
+    })
+    console.log('\n' + out.join('\n'))
+  }, 3_600_000)
+
+  it('出牌樣態 + 拿下格子比例(快配人機 vs 玩家模型)', () => {
+    for (const ex of [1, 0.65]) {
+      const shapes = new Map<string, [number, number, number]>()
+      let total = 0
+      for (let i = 0; i < N; i++) {
+        const r = mulberry32(180_000 + i)
+        playBlank(1_800_000 + i, brain(withExec(r, ex)), mixedPlayer, (cards, by) => {
+          if (by !== 'p1') return
+          const t = shapes.get(mixedShape(cards)) ?? [0, 0, 0]
+          t[0]++
+          shapes.set(mixedShape(cards), t)
+          total++
+        }, (mine, won, who) => {
+          if (who !== 'p1') return
+          const t = shapes.get(mixedShape(mine))
+          if (!t) return
+          t[1] += won === null ? 0.5 : won ? 1 : 0
+          t[2]++
+        }, 'mixed')
       }
       const rows = [...shapes.entries()].sort((a, b) => b[1][0] - a[1][0]).filter(([, [n]]) => n / total >= 0.005)
       console.log(`\n執行力 ${ex}:出牌樣態(佔所有手數 / 拿下格子)\n` + rows.map(([k, [n, w, d]]) => `${k}: ${((n / total) * 100).toFixed(1)}% / ${d ? Math.round((w / d) * 100) : '-'}%`).join('\n'))
