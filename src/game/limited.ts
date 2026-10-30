@@ -82,8 +82,8 @@ export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; 
   ghost: { casual: [0.35, 0.5, 0.65], vsComputer: 0.5 },
   // 空城計:使用者實測 8 戰 8 勝(2026-10-30)→ 調成跟主線第二關一樣
   blank: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
-  // 撲朔迷離:先用空城計這組,模擬後再調(§11.6a)
-  mixed: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
+  // 撲朔迷離:使用者實測 3 戰 3 勝(2026-10-30,§11.6b 修正後)→ 跟一般房一樣
+  mixed: { casual: [0.6, 0.75, 0.9], vsComputer: 0.75 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */
