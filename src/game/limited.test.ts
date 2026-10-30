@@ -3,7 +3,7 @@ import type { Card, Rank, Suit } from './cards'
 import { isJoker, isBlank, isStarterSpecial, makeDeck } from './cards'
 import { evaluate, compareHands, compareLimited, CATEGORY } from './evaluate'
 import { BLANK_EXAMPLES, LIMITED_ROTA, LIMITED_TEST_MODE, TIE_STEPS, limitedModeAt, makeLimitedDeck } from './limited'
-import { defaultLimitedBrain, limitedPick } from './limitedAI'
+import { defaultLimitedBrain, limitedPick, limitedPlace } from './limitedAI'
 import { aiPick, aiPlace } from './ai'
 import { buildFrames } from './replay'
 import { rollMain, type BossRuntime } from './bossAI'
@@ -574,6 +574,51 @@ describe('撲朔迷離人機(§11.6a)', () => {
     const p = pickWith(mixedState([C('C9'), C('D9'), C('SK'), ...jk(3), ...bk(2)], 6), brain('balance'), 0.5)
     expect(p.filter(isJoker)).toHaveLength(2)
     expect(evaluate(p).category).toBe(CATEGORY.FOUR_KIND)
+  })
+  // ---- 使用者 10/30 回放(5 戰 5 勝)裡的局面(§11.6b)----
+  const RS = [0.05, 0.3, 0.5, 0.7, 0.95]
+  it('回放 1:四張 10 + 鬼,不拆成一對 10 出(要出就三張 / 四張)', () => {
+    const h = [Jk(1), C('DA'), C('CQ'), C('SJ'), C('H10'), C('D10'), C('S10'), C('C10'), C('C8'), C('H7'), ...bk(2)]
+    for (const main of MAINS) for (const r of RS) expect([0, 3, 4]).toContain(pickWith(mixedState(h, 0), brain(main), r).filter((c) => c.rank === 10 && !isJoker(c)).length)
+  })
+  it('回放 4:鐵支不帶真牌踢腳(7 鐵不帶 A)', () => {
+    const h = [Jk(1), C('DA'), C('DK'), C('SJ'), C('C8'), C('D8'), C('H7'), C('S7'), C('C7'), ...bk(4)]
+    for (const main of MAINS) {
+      for (const r of RS) {
+        const p = pickWith(mixedState(h, 3), brain(main), r)
+        if (evaluate(p).category === CATEGORY.FOUR_KIND) expect(new Set(realsOf(p).map((c) => c.rank)).size).toBe(1)
+      }
+    }
+  })
+  it('回放 5 / 6:鬼夠用時,出對子 / 三條會補鬼(3 鬼不出 99 + 空白、4 鬼不出光 QQQ)', () => {
+    const h5 = [...jk(3), C('DA'), C('CQ'), C('HQ'), C('D10'), C('S9'), C('C9'), C('S8'), C('H7'), ...bk(3)]
+    const h6 = [...jk(4), C('DA'), C('CQ'), C('HQ'), C('DQ'), C('D10'), C('S8'), C('H7'), ...bk(3)]
+    for (const main of MAINS) {
+      for (const r of RS) {
+        const p5 = pickWith(mixedState(h5, 1), brain(main), r)
+        if (p5.some((c) => c.rank === 9 && !isJoker(c))) expect(p5.some(isJoker)).toBe(true)
+        const p6 = pickWith(mixedState(h6, 2), brain(main), r)
+        if (realsOf(p6).filter((c) => c.rank === 12).length === 3) expect(p6.some(isJoker)).toBe(true)
+      }
+    }
+  })
+  it('回放 3:手上有 3 張以上空白時,不送 1 張空白', () => {
+    const h = [...jk(6), C('SA'), C('DK'), C('DQ'), ...bk(3)]
+    for (const main of MAINS) for (let pd = 0; pd <= 4; pd++) for (const r of RS) {
+      const p = pickWith(mixedState(h, pd), brain(main), r)
+      expect(p.length === 1 && isBlank(p[0])).toBe(false)
+    }
+  })
+  it('回放 2:自己的弱對子很少拿去接對方 2 張(有空格可放時)', () => {
+    const g = createGame(5, 'p1', 'p2', 'mixed')
+    const slots = g.slots.map((_, i) => ({ p1: [] as Card[], p2: i === 5 ? [C('D9'), C('H9')] : i === 1 ? [C('SA'), C('HA')] : [], owner: null }))
+    const st: GameState = { ...g, slots, hands: { ...g.hands, p2: [] }, pendingPick: { by: 'p1', cards: [Jk(1), C('HA')] }, phase: 'place' }
+    for (const main of MAINS) {
+      const rng = mulberry32(77)
+      let onWeak = 0
+      for (let i = 0; i < 200; i++) if (limitedPlace(st, 'p2', brain(main), rng) === 5) onWeak++
+      expect(onWeak / 200).toBeLessThan(0.3)
+    }
   })
   it('120 場電腦對電腦:合法、打得完', () => {
     for (let seed = 1; seed <= 120; seed++) {

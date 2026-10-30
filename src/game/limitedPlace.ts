@@ -167,7 +167,16 @@ function distStrength(dist: readonly Entry[], t: ModeTable): number {
 }
 
 /** 放牌可調參數(模擬比較用):rankCount = 算點數;readPrior = 讀人時表的預設比例當幾疊牌的份量。 */
-export const PLACE_TUNE = { rankCount: true, readPrior: 3 }
+export const PLACE_TUNE = {
+  rankCount: true,
+  readPrior: 3,
+  // 撲朔迷離放牌 = 交換(§11.6b):強牌留給對方的大牌(keep 加重)、拿來對決時對方那疊也用掉了(drain);
+  // 自己的弱對子 / 單張去接對方 1~2 張只有 weakVsSmall 的機率(其他時候扣 weakPenalty)
+  mixedKeep: 1.6,
+  mixedDrain: 0.5,
+  weakVsSmall: 0.15,
+  weakPenalty: 1,
+}
 
 const choose = (n: number, k: number): number => (k < 0 || k > n ? 0 : k === 0 ? 1 : (choose(n - 1, k - 1) * n) / k)
 /**
@@ -315,7 +324,12 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
 
   const w = STYLE[rt.main]
   const value = (who: PlayerId, i: number) => (winsIfOwns(state, who, i) ? WIN_SLOT : 1 + (who === me ? w.adj : 0.4) * adjacent(state, who, i))
-  const later = Math.min(1, distStrength(dist, t) + LATER_EDGE)
+  const theirStrength = distStrength(dist, t)
+  const later = Math.min(1, theirStrength + LATER_EDGE)
+  const mixed = !!t.holdOdds
+  const keepW = w.keep * (mixed ? PLACE_TUNE.mixedKeep : 1)
+  const drain = mixed ? PLACE_TUNE.mixedDrain * theirStrength : 0
+  const shunWeak = mixed && n <= 2 && rng() >= PLACE_TUNE.weakVsSmall
 
   let best = empties[0]
   let bestScore = -Infinity
@@ -327,7 +341,9 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
       const k = keyOf(mine)
       const { win, lose } = vsDist(k, dist, t.jokerTie)
       const keep = 2 * strength(k, t) - 1
-      score = win * value(me, i) - lose * value(foe, i) * w.loss - w.keep * keep
+      score = win * value(me, i) - lose * value(foe, i) * w.loss - keepW * keep + drain
+      // 自己的弱對子 / 單張(真牌)留著擋對方的大牌,不拿去搶對方 1~2 張的小牌
+      if (shunWeak && mine.some((c) => !isBlank(c)) && k.cat <= CATEGORY.PAIR && (k.cat < CATEGORY.PAIR || k.top < 11)) score -= PLACE_TUNE.weakPenalty
     } else {
       // 我這格還空著:對方這疊留在這裡等
       score = LATER_DISCOUNT * ((1 - later) * value(me, i) - later * value(foe, i) * w.loss) + w.defer
@@ -386,7 +402,7 @@ export const keyStrength = (mode: LimitedMode, cat: number, top: number, j: numb
  * 看棋盤(空城計 §11.5d / 撲朔迷離 §11.6a):每個候選出牌 → 對手會放哪格 → 我這手的期望(格子價值為單位)。
  * 對手等著的牌只知道張數,照分布表抽 samples 次;對手用同一套放牌、站在他那邊挑(他只看得到張數)。
  */
-export function blankBoardScores(state: GameState, me: PlayerId, options: Card[][], samples: number, rng: Rng): number[] {
+export function blankBoardScores(state: GameState, me: PlayerId, options: Card[][], samples: number, rng: Rng, drain = 0): number[] {
   const t = TABLES[state.mode === 'mixed' ? 'mixed' : 'blank']!
   // 每疊只 evaluate 一次(鬼牌估值很貴):我的候選先算好,對手抽出來的牌每次抽完算一次
   const mineV = options.map((p) => evaluate(p))
@@ -403,7 +419,12 @@ export function blankBoardScores(state: GameState, me: PlayerId, options: Card[]
     const slots = state.slots.map((s, i) => (dists.has(i) ? { ...s, [foe]: synthPile(drawEntry(dists.get(i)!, rng), s[foe].length) } : s))
     const hyp: GameState = { ...state, slots, hands: { ...state.hands, [foe]: [] }, phase: 'place' }
     const theirV = new Map<number, HandValue>()
-    for (const i of dists.keys()) theirV.set(i, evaluate(slots[i][foe]))
+    const theirS = new Map<number, number>()
+    for (const i of dists.keys()) {
+      const v = evaluate(slots[i][foe])
+      theirV.set(i, v)
+      if (drain) theirS.set(i, strength({ cat: v.category, top: v.rankSeq[0] ?? 0, j: slots[i][foe].filter(isJoker).length }, t))
+    }
     // 對手只看得到張數 → 同樣張數放的格子一樣,每種張數只算一次
     const placeFor = new Map<number, number>()
     options.forEach((pile, o) => {
@@ -415,7 +436,8 @@ export function blankBoardScores(state: GameState, me: PlayerId, options: Card[]
       const theirs = slots[i][foe]
       if (theirs.length) {
         const c = cmp(o, theirs, theirV.get(i) ?? evaluate(theirs))
-        totals[o] += c > 0 ? value(me, i) : c < 0 ? -value(foe, i) : 0
+        // 對決是交換(撲朔迷離 §11.6b):不管輸贏,對方等著的那疊都用掉了 → 換到它越強越賺
+        totals[o] += (c > 0 ? value(me, i) : c < 0 ? -value(foe, i) : 0) + drain * (theirS.get(i) ?? 0)
       } else {
         const s = later[o]
         totals[o] += LATER_DISCOUNT * (s * value(me, i) - (1 - s) * value(foe, i))

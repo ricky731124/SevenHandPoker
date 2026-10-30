@@ -175,6 +175,7 @@ function playBlank(
   onPile?: (cards: Card[], by: PlayerId, g: GameState) => void,
   onSlot?: (mine: Card[], won: boolean | null, who: PlayerId) => void,
   mode: LimitedMode = 'blank',
+  onEnd?: (g: GameState) => void,
 ): boolean {
   const rng = mulberry32(seed)
   const brains: Record<PlayerId, Brain> = { p1: a, p2: b }
@@ -191,6 +192,7 @@ function playBlank(
     else if (g.phase === 'draw') g = applyDraw(g)
   }
   if (onSlot) for (const s of g.slots) for (const who of ['p1', 'p2'] as const) if (s[who].length && s.owner !== null) onSlot(s[who], s.owner === 'both' ? null : s.owner === who, who)
+  onEnd?.(g)
   return g.winner === 'p1'
 }
 
@@ -406,8 +408,14 @@ describe.skipIf(!process.env.MIXED)('撲朔迷離模擬(MIXED=1 才跑)', () => 
     for (const ex of [1, 0.65]) {
       const shapes = new Map<string, [number, number, number]>()
       let total = 0
+      let leftB = 0
+      let leftJ = 0
       for (let i = 0; i < N; i++) {
         const r = mulberry32(180_000 + i)
+        const end = (g: GameState) => {
+          leftB += g.hands.p1.filter(isBlank).length
+          leftJ += g.hands.p1.filter(isJoker).length
+        }
         playBlank(1_800_000 + i, brain(withExec(r, ex)), mixedPlayer, (cards, by) => {
           if (by !== 'p1') return
           const t = shapes.get(mixedShape(cards)) ?? [0, 0, 0]
@@ -420,10 +428,13 @@ describe.skipIf(!process.env.MIXED)('撲朔迷離模擬(MIXED=1 才跑)', () => 
           if (!t) return
           t[1] += won === null ? 0.5 : won ? 1 : 0
           t[2]++
-        }, 'mixed')
+        }, 'mixed', end)
       }
       const rows = [...shapes.entries()].sort((a, b) => b[1][0] - a[1][0]).filter(([, [n]]) => n / total >= 0.005)
-      console.log(`\n執行力 ${ex}:出牌樣態(佔所有手數 / 拿下格子)\n` + rows.map(([k, [n, w, d]]) => `${k}: ${((n / total) * 100).toFixed(1)}% / ${d ? Math.round((w / d) * 100) : '-'}%`).join('\n'))
+      console.log(
+        `\n執行力 ${ex}:結束時手上平均剩 空白 ${(leftB / N).toFixed(2)} 張、鬼 ${(leftJ / N).toFixed(2)} 張;出牌樣態(佔所有手數 / 拿下格子)\n` +
+          rows.map(([k, [n, w, d]]) => `${k}: ${((n / total) * 100).toFixed(1)}% / ${d ? Math.round((w / d) * 100) : '-'}%`).join('\n'),
+      )
     }
   }, 1_800_000)
 })
