@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Card as TCard, Rank, Suit } from '../../../game/cards'
 import { LIMITED_INFO, LIMITED_ROTA, type LimitedMode, type TieStep } from '../../../game/limited'
 import Card from '../Card'
+import SpecialCard from '../SpecialCard'
+import { getSpecialCard, type SpecialCardId } from '../../../game/specialCards'
 import Modal from '../Modal'
 import Button from '../Button'
 import { sfx } from '../../../audio/sfx'
@@ -29,10 +31,12 @@ export function LimitedRuleModal({
   }, [open, autoCloseMs, onClose])
 
   const info = LIMITED_INFO[mode]
+  // 左欄:比牌範例;火力全開沒有比牌變化 → 放「帶 5 用 3、每回合 1 張」示意(使用者 2026-10-31)
+  const split = !!info.examples || mode === 'fire'
   return (
-    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={info.examples ? 680 : 380} panelClass="limited-rule">
+    <Modal open={open} onClose={onClose} title={`限定房・${info.name}`} width={split ? 680 : 380} panelClass="limited-rule">
       {/* 有範例的玩法分兩欄(左:範例、右:規則 + 知道了),手機橫向才不用往下捲 */}
-      <div className={info.examples ? 'limited-rule__split' : undefined}>
+      <div className={split ? 'limited-rule__split' : undefined}>
         <ul className="limited-rule__list">
           {info.rules.map((r) => (
             <li key={r}>{r}</li>
@@ -42,6 +46,11 @@ export function LimitedRuleModal({
           <div className="limited-rule__ties">
             <div className="limited-rule__ties-intro">{info.examples.intro}</div>
             <TieSteps steps={info.examples.steps} />
+          </div>
+        )}
+        {mode === 'fire' && (
+          <div className="limited-rule__ties">
+            <FireDemo />
           </div>
         )}
         <div className="limited-rule__ok">
@@ -97,6 +106,58 @@ function TieSteps({ steps }: { steps: TieStep[] }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** 火力全開示意卡:一張小特殊卡,可加打勾 / 打叉 / 已用 / 變暗。 */
+function DemoCard({ id, mark, dim }: { id: SpecialCardId; mark?: 'ok' | 'no' | 'used'; dim?: boolean }) {
+  const def = getSpecialCard(id)!
+  return (
+    <span className={`fire-demo__card${dim ? ' fire-demo__card--dim' : ''}`}>
+      <SpecialCard card={def} w={46} interactive={false} />
+      {mark === 'ok' && <span className="tie-step__check">✔</span>}
+      {mark === 'no' && <span className="tie-step__check fire-demo__x">✘</span>}
+      {mark === 'used' && <span className="fire-demo__used">🚫 已用</span>}
+    </span>
+  )
+}
+/** 規則卡左欄(火力全開):① 帶 5 用 3 ② 每回合最多 1 張 ③ 每張只能用一次。 */
+function FireDemo() {
+  const five: SpecialCardId[] = ['explode', 'spy', 'hearts', 'refresh', 'deathEye']
+  return (
+    <div className="tie-steps">
+      <div className="tie-step">
+        <div className="tie-step__title">
+          ① 帶 5 張，整場用 3 張<span className="tie-step__note">哪 3 張你自己決定</span>
+        </div>
+        <div className="tie-step__row fire-demo__row">
+          {five.map((id, k) => (
+            <DemoCard key={id} id={id} mark={k < 3 ? 'ok' : undefined} dim={k >= 3} />
+          ))}
+        </div>
+      </div>
+      <div className="tie-step">
+        <div className="tie-step__title">
+          ② 每回合最多 1 張<span className="tie-step__note">輪到你出牌、送出前用</span>
+        </div>
+        <div className="tie-step__row fire-demo__row">
+          <span className="fire-demo__label">這回合</span>
+          <DemoCard id="explode" mark="ok" />
+          <span className="tie-step__vs">再用</span>
+          <DemoCard id="spy" mark="no" dim />
+        </div>
+      </div>
+      <div className="tie-step">
+        <div className="tie-step__title">
+          ③ 每張只能用一次<span className="tie-step__note">用過的卡會標「已用」</span>
+        </div>
+        <div className="tie-step__row fire-demo__row">
+          <DemoCard id="explode" mark="used" dim />
+          <DemoCard id="spy" />
+          <DemoCard id="hearts" />
+        </div>
+      </div>
     </div>
   )
 }

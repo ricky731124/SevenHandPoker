@@ -70,7 +70,12 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
   fire: {
     name: '火力全開',
     badge: ['火力', '全開'],
-    rules: ['帶 5 張特殊卡進場，整場可以用 3 張。', '每回合最多用 1 張，每張只能用一次。', HIDDEN_RULE],
+    rules: [
+      // 第 10 關上線、有人解鎖超過 10 張時,要補一句「解鎖更多就開更多(快配真人看兩人誰少)」(/new-stage 有寫)
+      '開放到第 9 關的 10 張特殊卡（沒解鎖的也能帶），選 5 張進場。',
+      '整場可以用 3 張：每回合最多 1 張，每張只能用一次。',
+      HIDDEN_RULE,
+    ],
   },
 }
 
@@ -84,6 +89,8 @@ export const LIMITED_EXECUTION: Partial<Record<LimitedMode, { casual: number[]; 
   blank: { casual: [0.5, 0.65, 0.8], vsComputer: 0.65 },
   // 撲朔迷離:使用者實測 3 戰 3 勝(2026-10-30,§11.6b 修正後)→ 跟一般房一樣
   mixed: { casual: [0.6, 0.75, 0.9], vsComputer: 0.75 },
+  // 火力全開:執行力影響很小(§11.7c)→ 使用者 2026-11-01 定跟一般房一樣
+  fire: { casual: [0.6, 0.75, 0.9], vsComputer: 0.75 },
 }
 
 /** 星期 → 玩法(0 = 星期日,台灣時間)。之後要限時段只改這張表(spec §9)。 */
@@ -119,9 +126,9 @@ export const LIMITED_ROTA: { mode: LimitedMode; days: number[]; label: string }[
 /**
  * 測試期固定玩法(spec §0):有設定時,不管星期幾都是這一種。四種都測完才改成 null 開星期輪替。
  * 步驟 1 = 百鬼夜行;步驟 2 = 空城計(2026-10-29 使用者定:直接切,百鬼暫時下架);
- * 步驟 3 = 撲朔迷離(2026-10-30 使用者手機測)。
+ * 步驟 3 = 撲朔迷離(2026-10-30 使用者手機測);步驟 4 = 火力全開(2026-11-01 使用者說上版並切過去)。
  */
-export const LIMITED_TEST_MODE: LimitedMode | null = 'mixed'
+export const LIMITED_TEST_MODE: LimitedMode | null = 'fire'
 
 const TAIWAN_OFFSET_MS = 8 * 60 * 60 * 1000
 
@@ -143,6 +150,9 @@ export const usesLimitedCompare = (m: LimitedMode | null | undefined): boolean =
  */
 export const LIMITED_JOKER_CAP = 2
 export const jokerCapOf = (m: LimitedMode | null | undefined): number | null => (usesLimitedCompare(m) ? LIMITED_JOKER_CAP : null)
+
+/** 這個玩法有沒有特殊卡(戰前選卡、牌桌特殊牌按鈕):只有火力全開。 */
+export const usesSpecials = (m: LimitedMode | null | undefined): boolean => m === 'fire'
 
 /** 牌組有沒有變(2~6 換掉)。牌組變化日沒有特殊卡,當一般房處理。 */
 export const changesDeck = (m: LimitedMode | null | undefined): boolean => m === 'ghost' || m === 'blank' || m === 'mixed'

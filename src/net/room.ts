@@ -20,8 +20,9 @@ export type RoomType = 'normal' | 'special' | 'limited'
  * 限定房擋舊版(LIMITED-ROOM-SPEC §12):新版開房寫 hostVer、加入寫 guestVer,RTDB 規則要求
  * 限定房兩邊都 ≥ 2 → 手機上還在跑舊版的人開不了、也加入不了限定房。
  * 2 = 每格最多 2 張鬼牌(舊版不會擋第 3 張鬼)。
+ * 3 = 火力全開(帶 5 用 3、每回合 1 張);規則另外要求火力全開房兩邊都 ≥ 3。
  */
-export const ROOM_CLIENT_VER = 2
+export const ROOM_CLIENT_VER = 3
 
 export interface PlayerPresence {
   connected: boolean

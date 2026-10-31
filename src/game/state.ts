@@ -3,6 +3,7 @@ import { isSpecial, isStarterSpecial, makeBlank, makeJoker } from './cards'
 import { compareLimited, compareValue, evaluate, type LimitedTieStep } from './evaluate'
 import { makeLimitedDeck, usesLimitedCompare, type LimitedMode } from './limited'
 import { mulberry32, shuffle } from './rng'
+import { FIRE_USES, getSpecialCard, type SpecialCardId } from './specialCards'
 
 export type PlayerId = 'p1' | 'p2'
 export type Phase = 'coinToss' | 'pick' | 'place' | 'showdown' | 'draw' | 'ended'
@@ -69,6 +70,12 @@ export interface GameState {
    * engine only tracks the one-shot budget and applies the concrete effects.
    */
   specialUsed: Record<PlayerId, boolean>
+  /**
+   * 限定房「火力全開」(LIMITED-ROOM-SPEC §6):每個人用過的特殊卡(照順序)。火力全開裡
+   * specialUsed 的意思變成「這回合用過了」:輪到自己選牌時,用不到 3 次就重置成 false(applyDraw)。
+   * 選填:其他房型 / 舊快照沒有這欄;RTDB 不存空陣列 → 讀的時候一律 `?? []`(用 fireUsedOf)。
+   */
+  fireUsed?: Record<PlayerId, SpecialCardId[]>
   /**
    * 死神之眼:被翻開的格子。exposed[p] = p 的牌堆被對手看光的格子 index(對決前都保持翻開,
    * 雙方都看得到)。選填:舊快照/回放/測試造的 state 沒有這欄 = 沒有被翻開的牌堆。
@@ -300,7 +307,56 @@ export function applyDraw(state: GameState): GameState {
   if (state.phase !== 'draw' || !state.postPicker) return state
   const picker = state.postPicker
   const drawn = drawFor(state, picker)
-  return { ...drawn, turn: otherPlayer(picker), phase: 'pick', postPicker: null }
+  const next = otherPlayer(picker)
+  // 火力全開:輪到 next 選牌 = 新的回合 → 還有次數就能再用一張(§6「每回合最多 1 張」)
+  const reopen = state.mode === 'fire' && drawn.specialUsed[next] && fireUsedOf(drawn, next).length < FIRE_USES
+  return {
+    ...drawn,
+    turn: next,
+    phase: 'pick',
+    postPicker: null,
+    ...(reopen ? { specialUsed: { ...drawn.specialUsed, [next]: false } } : {}),
+  }
+}
+
+/** 火力全開:這個人用過的特殊卡(沒有 = 空)。 */
+export function fireUsedOf(state: GameState, player: PlayerId): SpecialCardId[] {
+  return state.fireUsed?.[player] ?? []
+}
+
+/** 火力全開:這個人整場還剩幾次(每個人都帶滿 5 張,§6)。其他房型 = 0。 */
+export function fireUsesLeft(state: GameState, player: PlayerId): number {
+  return state.mode === 'fire' ? Math.max(0, FIRE_USES - fireUsedOf(state, player).length) : 0
+}
+
+/**
+ * 發動一張特殊卡(所有入口共用:自己用、電腦用、房主代對手用、回放重播)。依卡分派到下面的
+ * 效果;火力全開另外把卡記進 fireUsed。效果沒發生(目標不合法、牌堆空…)→ 原 state 原封不動。
+ * targetId:花色卡 / 偷天換日要指定的手牌;rng:有隨機的卡(偷天換日 / 強迫更新 / 爆破)。
+ */
+export function applySpecial(
+  state: GameState,
+  player: PlayerId,
+  card: SpecialCardId,
+  opts: { targetId?: string; rng?: () => number } = {},
+): GameState {
+  const def = getSpecialCard(card)
+  // 火力全開:這回合用過 / 這張用過 / 3 次用完 → 不准(連線時房主也靠這裡擋對手)
+  if (state.mode === 'fire') {
+    const used = fireUsedOf(state, player)
+    if (state.specialUsed[player] || used.includes(card) || used.length >= FIRE_USES) return state
+  }
+  let next: GameState
+  if (def?.suit) next = opts.targetId ? applySuit(state, player, opts.targetId, def.suit) : state
+  else if (card === 'swap') next = opts.targetId ? applySwap(state, player, opts.targetId, opts.rng) : state
+  else if (card === 'refresh') next = applyRefresh(state, player, opts.rng)
+  else if (card === 'explode') next = applyExplode(state, player, opts.rng)
+  else if (card === 'deathEye') next = applyDeathEye(state, player)
+  else next = markSpecialUsed(state, player) // 偷窺 / 讓我看看:不動牌面,只記用過
+  if (next === state || state.mode !== 'fire') return next
+  const used = { p1: fireUsedOf(state, 'p1'), p2: fireUsedOf(state, 'p2') }
+  used[player] = [...used[player], card]
+  return { ...next, fireUsed: used }
 }
 
 function drawFor(state: GameState, player: PlayerId): GameState {

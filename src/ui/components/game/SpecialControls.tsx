@@ -1,5 +1,6 @@
 import { useGameStore } from '../../../state/gameStore'
 import { getSpecialCard } from '../../../game/specialCards'
+import { fireUsedOf, fireUsesLeft, otherPlayer } from '../../../game/state'
 import { sortHand } from '../../../game/sort'
 import Modal from '../Modal'
 import Card from '../Card'
@@ -12,23 +13,43 @@ import './SpecialControls.css'
  *  - SpecialTray: the "特殊牌" button opens a tray of the ≤3 carried cards;
  *    tapping one either enters hand-targeting (swap/clubs) or resolves info now.
  *  - SpecialInfoModal: shows the peek (next draw) / spy (foe hand) result.
- * Only one card may be activated per match; after that the button is gone.
+ * Only one card may be activated per match; after that the button is greyed.
+ * 火力全開(LIMITED-ROOM-SPEC §6):標題寫自己剩幾次、說明寫每回合限 1 張 + 對手剩幾次,用過的卡蓋「已用」點不了。
  */
 export function SpecialTray() {
   const open = useGameStore((s) => s.specialTrayOpen)
   const loadout = useGameStore((s) => s.loadout)
   const choose = useGameStore((s) => s.chooseSpecial)
   const close = useGameStore((s) => s.closeSpecialTray)
+  const engine = useGameStore((s) => s.engine)
+  const me = useGameStore((s) => s.me)
+  const fire = engine?.mode === 'fire'
+  const used = fire ? fireUsedOf(engine, me) : []
 
   return (
-    <Modal open={open} onClose={close} title="發動特殊牌" width={380}>
-      <p className="spx-tray__hint">點一張發動（整場僅限一次）</p>
+    <Modal
+      open={open}
+      onClose={close}
+      title={fire ? `發動特殊牌（剩 ${fireUsesLeft(engine, me)} 次）` : '發動特殊牌'}
+      width={fire ? 460 : 380}
+      panelClass={fire ? 'spx-tray-panel--fire' : undefined}
+    >
+      <p className="spx-tray__hint">
+        {fire ? `每回合限 1 張・對手剩 ${fireUsesLeft(engine, otherPlayer(me))} 次` : '點一張發動（整場僅限一次）'}
+      </p>
       <div className="spx-tray">
         {loadout.map((id) => {
           const def = getSpecialCard(id)
           if (!def) return null
           return (
-            <SpecialCard key={id} card={def} w={92} onSelect={() => choose(id)} />
+            <SpecialCard
+              key={id}
+              card={def}
+              w={fire ? 84 : 92}
+              locked={used.includes(id)}
+              lockLabel="🚫 已用"
+              onSelect={() => choose(id)}
+            />
           )
         })}
       </div>

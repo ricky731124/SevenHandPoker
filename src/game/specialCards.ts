@@ -48,6 +48,13 @@ export interface SpecialCardDef {
   /** 會動到對手的卡:用「被打的人」的角度寫的一句介紹。對手用了你還沒有的卡時跳出來,
    *  不然你不知道剛剛發生了什麼(朋友房不受共同卡池限制後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡)。 */
   foeNote?: string
+  /**
+   * 限定房「火力全開」電腦帶卡用(LIMITED-ROOM-SPEC §11.7):這張卡適合哪種打法的電腦。
+   * 電腦固定帶自己打法的 2 張(強攻 偷天換日+偷窺、囤牌 爆破+強迫更新、平衡 讓我看看+死神之眼),
+   * 再從其他卡隨機補到 5 張。每種打法剛好 2 張;花色卡中立(使用者 2026-11-01 改)。
+   * neutral = 不屬於任何打法,只會被隨機抽到。**新增特殊卡時一定要填**(/new-stage 流程有這步)。
+   */
+  fireStyle: 'attack' | 'hoard' | 'balance' | 'neutral'
 }
 
 export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
@@ -59,6 +66,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: true,
     accent: '#c9962e',
+    fireStyle: 'attack',
   },
   peek: {
     id: 'peek',
@@ -68,6 +76,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: false,
     accent: '#4f8f4a',
+    fireStyle: 'attack',
   },
   spy: {
     id: 'spy',
@@ -78,6 +87,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#a1233a',
+    fireStyle: 'balance',
   },
   clubs: {
     id: 'clubs',
@@ -87,6 +97,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: true,
     accent: '#2f6d4f',
+    fireStyle: 'neutral',
     suit: 'C',
   },
   diamonds: {
@@ -97,6 +108,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: true,
     accent: '#2b6cb0',
+    fireStyle: 'neutral',
     suit: 'D',
   },
   hearts: {
@@ -107,6 +119,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: true,
     accent: '#c0392b',
+    fireStyle: 'neutral',
     suit: 'H',
   },
   spades: {
@@ -117,6 +130,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: false,
     needsTarget: true,
     accent: '#33384a',
+    fireStyle: 'neutral',
     suit: 'S',
   },
   refresh: {
@@ -128,6 +142,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#6b3fa0',
+    fireStyle: 'hoard',
   },
   explode: {
     id: 'explode',
@@ -138,6 +153,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#d9480f',
+    fireStyle: 'hoard',
   },
   deathEye: {
     id: 'deathEye',
@@ -148,6 +164,7 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     affectsFoe: true,
     needsTarget: false,
     accent: '#b8860b',
+    fireStyle: 'balance',
   },
 }
 
@@ -156,6 +173,37 @@ export const ALL_SPECIAL_CARD_IDS: SpecialCardId[] = SPECIAL_CARD_LIST.map((c) =
 
 /** Carry this many into a match; only one may be activated (SPEC §15). */
 export const LOADOUT_SIZE = 3
+
+/** 限定房「火力全開」(LIMITED-ROOM-SPEC §6):帶 5 張、整場用 3 次、每回合最多 1 張、每張只能用一次。 */
+export const FIRE_LOADOUT = 5
+export const FIRE_USES = 3
+
+/**
+ * 火力全開卡池(使用者 2026-11-01):照解鎖順序(SPECIAL_CARD_LIST 的順序 = 起始卡 + 第 1、2、3… 關)
+ * 的前 N 張,沒解鎖的也能用;N 最少 FIRE_MIN_POOL(= 起始卡 + 第 1~9 關)。新手不用看 20 幾張卡。
+ *  - 朋友房:各算各的,N = 自己解鎖幾張。
+ *  - 快配真人:N = 兩人解鎖比較少的那個,兩人都用前 N 張。
+ *  - 快配人機 / 對戰電腦:N = 自己解鎖幾張,自己跟電腦都用前 N 張。
+ */
+export const FIRE_MIN_POOL = 10
+
+/** 解鎖了幾張(只算真的存在的卡;null = 還不知道)。 */
+export function unlockedCount(ids: Iterable<string> | null | undefined): number | null {
+  if (!ids) return null
+  const set = new Set(ids)
+  return SPECIAL_CARD_LIST.filter((c) => set.has(c.id)).length
+}
+
+/** 這場火力全開可用幾張。foe 只有快配真人才傳(還不知道對手解鎖幾張 → 先用最少的 N)。 */
+export function firePoolSize(mine: number, foe?: number | null): number {
+  const n = foe === undefined ? mine : foe === null ? FIRE_MIN_POOL : Math.min(mine, foe)
+  return Math.max(FIRE_MIN_POOL, n)
+}
+
+/** 前 n 張卡(照解鎖順序;n 超過現有張數 = 全部)。 */
+export function firePool(n: number): SpecialCardId[] {
+  return SPECIAL_CARD_LIST.slice(0, n).map((c) => c.id)
+}
 
 export function getSpecialCard(id: string): SpecialCardDef | undefined {
   return SPECIAL_CARDS[id as SpecialCardId]

@@ -23,3 +23,20 @@
   color: var(--parch-muted);
   font-weight: 700;
 }
+
+/* 火力全開:用過的卡蓋在正中間的斜章「🚫 已用」(預設的鎖頭小字在卡片頂端,太不明顯) */
+.spx-tray .spc__lock {
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+/* 火力全開:標題多了「（剩 N 次）」→ 字縮一點才不會斷成兩行 */
+.spx-tray-panel--fire .modal__title {
+  font-size: 24px;
+  white-space: nowrap;
+}

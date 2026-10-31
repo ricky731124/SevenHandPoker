@@ -56,9 +56,9 @@ describe('牌組', () => {
 })
 
 describe('排程', () => {
-  it('測試期固定玩法(步驟 3 = 撲朔迷離)', () => {
-    expect(LIMITED_TEST_MODE).toBe('mixed')
-    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('mixed')
+  it('測試期固定玩法(步驟 4 = 火力全開)', () => {
+    expect(LIMITED_TEST_MODE).toBe('fire')
+    for (let d = 0; d < 7; d++) expect(limitedModeAt(Date.UTC(2026, 9, 26 + d, 3))).toBe('fire')
   })
   it('輪值表:同玩法的星期併一列(§8.2)', () => {
     expect(LIMITED_ROTA.map((r) => [r.label, r.mode])).toEqual([

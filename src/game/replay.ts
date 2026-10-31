@@ -2,15 +2,10 @@ import type { LimitedMode } from './limited'
 import {
   applyDraw,
   applyPick,
-  applyDeathEye,
-  applyExplode,
   applyPlace,
-  applyRefresh,
-  applySuit,
-  applySwap,
+  applySpecial,
   createGame,
   deathEyeSlots,
-  markSpecialUsed,
   removedCard,
   resolveShowdown,
   type GameState,
@@ -162,26 +157,26 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
         const def = getSpecialCard(m.card)
         const before = m.targetId ? g.hands[m.by].find((c) => c.id === m.targetId) : undefined
         if (def?.suit && m.targetId) {
-          g = applySuit(g, m.by, m.targetId, def.suit)
+          g = applySpecial(g, m.by, m.card, { targetId: m.targetId })
           const after = g.hands[m.by].find((c) => c.id === m.targetId)
           const detail = before && after ? `:${cardFace(before)}→${cardFace(after)}` : ''
           add(g, name(m.by), `使用「${def.name}」${detail}`, 'special')
         } else if (m.card === 'swap' && m.targetId) {
           const prevIds = new Set(g.hands[m.by].map((c) => c.id))
-          g = applySwap(g, m.by, m.targetId, replayRng(m.rng))
+          g = applySpecial(g, m.by, m.card, { targetId: m.targetId, rng: replayRng(m.rng) })
           const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
           const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
           add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
         } else if (m.card === 'refresh') {
           const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
           const n = g.hands[foe].filter((c) => !isBlank(c) && !isJoker(c)).length
-          g = applyRefresh(g, m.by, replayRng(m.rng))
+          g = applySpecial(g, m.by, m.card, { rng: replayRng(m.rng) })
           add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
           frames[frames.length - 1].refreshTarget = foe
         } else if (m.card === 'explode') {
           const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
           const prev = g.hands[foe]
-          g = applyExplode(g, m.by, replayRng(m.rng))
+          g = applySpecial(g, m.by, m.card, { rng: replayRng(m.rng) })
           const gone = removedCard(prev, g.hands[foe])
           add(g, name(m.by), `使用「${def?.name ?? '爆破'}」:炸掉 ${name(foe)} 的 ${gone ? cardFace(gone) : '一張牌'}`, 'special')
           frames[frames.length - 1].explode = { target: foe, card: gone }
@@ -189,12 +184,12 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
           // 死神之眼:決定性(翻開對手當下在決鬥區的牌堆)→ 不用 rng。回放本來就全翻開,只放動畫+字幕。
           const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
           const slots = deathEyeSlots(g, m.by)
-          g = applyDeathEye(g, m.by)
+          g = applySpecial(g, m.by, m.card)
           add(g, name(m.by), `用了「${def?.name ?? '死神之眼'}」，透視了目前決鬥區所有的牌`, 'special')
           frames[frames.length - 1].deathEye = { target: foe, slots }
         } else {
           // peek / spy:不改牌面,只記用過。
-          g = markSpecialUsed(g, m.by)
+          g = applySpecial(g, m.by, m.card)
           add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`, 'special')
         }
       } else if (m.t === 'place') {

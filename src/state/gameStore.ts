@@ -6,12 +6,8 @@ import { sortHand, type SortDir, type SortMode } from '../game/sort'
 import {
   applyDraw,
   applyPick,
-  applyDeathEye,
-  applyExplode,
   applyPlace,
-  applyRefresh,
-  applySuit,
-  applySwap,
+  applySpecial,
   canDeathEye,
   canExplode,
   deathEyeSlots,
@@ -19,7 +15,7 @@ import {
   removedCard,
   createGame,
   emptySlotsFor,
-  markSpecialUsed,
+  fireUsedOf,
   otherPlayer,
   peekNextDraw,
   resolveShowdown,
@@ -29,21 +25,23 @@ import {
   type PlayerId,
 } from '../game/state'
 import type { Suit } from '../game/cards'
-import { jokerCapOf, type LimitedMode } from '../game/limited'
+import { jokerCapOf, usesSpecials, type LimitedMode } from '../game/limited'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
 import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
 import type { Intent, LiveSel, SpecExtras } from '../net/sync'
 import type { DanmakuMsg } from '../net/spectate'
-import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
+import { ALL_SPECIAL_CARD_IDS, FIRE_LOADOUT, LOADOUT_SIZE, firePool, firePoolSize, getSpecialCard, unlockedCount, type SpecialCardId } from '../game/specialCards'
 import { recordingRng, type Move, type ReplayFrame } from '../game/replay'
 import { recordBotResult, releaseLeasedBot } from '../net/bots'
 import { startBroadcast, type Broadcaster } from '../net/broadcast'
 import { fetchBotRecord, patchLivePlayerRecord, type LivePlayer } from '../net/liveIndex'
 import { saveLocalMatch, clearLocalMatch, newLocalMatchId, type LocalSnapshot } from '../net/localMatch'
 import type { SeriesState } from '../game/campaign'
-import { aiChooseSpecial } from '../game/ai'
-import { bossChooseSpecial, rollMain, type BossRuntime } from '../game/bossAI'
+import { aiPick } from '../game/ai'
+import { bossChooseSpecial, rollMain, type BossRuntime, type PickMain } from '../game/bossAI'
+import { fireChooseSpecial, fireLearn, fireLoadout, suitPlayCheck, type FireDecision } from '../game/fireAI'
+import { defaultLimitedBrain } from '../game/limitedAI'
 import { useToastStore } from './toastStore'
 import { usePlatformStore } from './platformStore'
 import { useAchievementStore } from './achievementStore'
@@ -290,11 +288,37 @@ export type Status = 'coinToss' | 'playing' | 'ended'
 const SUIT_ZH: Record<Suit, string> = { C: '梅花', D: '方塊', H: '紅心', S: '黑桃' }
 
 /**
- * The special-card loadout the single-player AI opponent carries (SPEC §15 "選 3
- * 用 1"). A generic mix — a swap plus two suit-bloom colours — so the AI has
- * something to use against most hands. Per-boss loadouts arrive with Phase E.
+ * 特殊房「對戰電腦」帶的 3 張(2026-10-31 使用者:可以隨機)。從玩家自己解鎖的卡裡隨機挑,
+ * 但不帶資訊卡(偷窺 / 讓我看看 / 死神之眼)——對戰電腦的電腦不會利用看到的東西,帶了只會白用。
+ * 以前固定帶偷天換日 + 兩張花色卡,而且手上 2 張同花色就換 → 換完湊不成同花,看起來像亂換。
  */
-const AI_LOADOUT: SpecialCardId[] = ['swap', 'clubs', 'hearts']
+const INFO_CARDS: SpecialCardId[] = ['peek', 'spy', 'deathEye']
+function vsComputerLoadout(): SpecialCardId[] {
+  const unlocked = Object.keys(usePlatformStore.getState().profile?.unlocked?.specialCards ?? {}) as SpecialCardId[]
+  const pool = unlocked.filter((id) => getSpecialCard(id) && !INFO_CARDS.includes(id))
+  const out: SpecialCardId[] = []
+  while (out.length < LOADOUT_SIZE && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
+  return out
+}
+
+/** 火力全開的對戰電腦:限定房預設個性 + 隨機一種打法(打法決定帶哪幾張固定卡)。 */
+function fireComputerBrain(): BossRuntime {
+  const styles: PickMain[] = ['attack', 'hoard', 'balance']
+  return { ...defaultLimitedBrain('fire'), main: styles[Math.floor(Math.random() * styles.length)] }
+}
+
+/** 我解鎖了幾張特殊卡(測試帳號 ricky = 全部)。 */
+export function myUnlockedSpecialCount(): number {
+  const ps = usePlatformStore.getState()
+  if (ps.username === 'ricky') return ALL_SPECIAL_CARD_IDS.length
+  const unlocked = ps.profile?.unlocked?.specialCards ?? {}
+  return unlockedCount(Object.keys(unlocked).filter((id) => unlocked[id])) ?? 0
+}
+
+/** 火力全開單機(對戰電腦 / 快配人機)的卡池:前 max(10, 我解鎖幾張) 張,我跟電腦用同一池(§6)。 */
+function myFirePool(): SpecialCardId[] {
+  return firePool(firePoolSize(myUnlockedSpecialCount()))
+}
 
 /** Result of a peek/spy activation, shown in an info modal. */
 export interface SpecialInfo {
@@ -423,6 +447,8 @@ interface GameStore {
   aiLoadout: SpecialCardId[]
   /** campaign boss brain for the AI opponent (null = default AI / non-campaign) */
   aiBoss: BossRuntime | null
+  /** 電腦用了花色卡、已經決定這手要出的牌(fireAI / suitPlayCheck)——下一次電腦出牌照這個出 */
+  aiForcedPick: string[] | null
   /** free-match ("自由匹配") bot opponent identity (fake name + boss avatar), shown
    *  in place of the plain "電腦"; non-null also makes the match count as PvP at
    *  the end (win tally + diamond reward), per 使用者定案「bot 勝全部照算」. */
@@ -667,6 +693,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadout: [],
   aiLoadout: [],
   aiBoss: null,
+  aiForcedPick: null,
   casualFoe: null,
   campaignSubId: null,
   campaignSeries: null,
@@ -697,6 +724,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startSinglePlayer: (special = false, loadout = [], ready = false, timeLimit = 50, limitedMode = null) => {
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
+    const fire = usesSpecials(limitedMode)
+    if (fire) special = true // 火力全開 = 限定房裡唯一有特殊卡的玩法
+    const fireBrain = fire ? fireComputerBrain() : null
     set({
       mode: 'ai',
       limitedMode,
@@ -715,8 +745,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sortDir: 'asc',
       special,
       loadout,
-      aiLoadout: special ? AI_LOADOUT : [],
-      aiBoss: null,
+      aiLoadout: fireBrain ? fireLoadout(fireBrain.main, Math.random, myFirePool()) : special ? vsComputerLoadout() : [],
+      aiBoss: fireBrain,
+      aiForcedPick: null,
       casualFoe: null,
       campaignSubId: null,
       campaignSeries: null,
@@ -773,6 +804,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const cur = get()
     if (cur.status === 'playing' && cur.engine && cur.engine.phase !== 'ended') return
     const firstPicker: PlayerId = Math.random() < 0.5 ? 'p1' : 'p2'
+    // 火力全開:有特殊卡;電腦照這局抽到的打法帶 5 張(重開一局打法重抽 → 帶卡也重抽)
+    const fire = usesSpecials(limitedMode)
+    if (fire) {
+      special = true
+      aiLoadout = fireLoadout(boss.main, Math.random, myFirePool())
+    }
     set({
       mode: 'ai',
       limitedMode,
@@ -793,6 +830,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadout,
       aiLoadout,
       aiBoss: boss,
+      aiForcedPick: null,
       casualFoe: foe, // shown as the opponent + makes the match count as PvP
       campaignSubId: null,
       campaignSeries: null,
@@ -1513,8 +1551,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // ----- special cards (Phase C) -----
   confirmLoadout: (ids) => {
     sfx.click()
-    const { online } = get()
-    const loadout = ids.slice(0, 3)
+    const { online, limitedMode } = get()
+    const fire = usesSpecials(limitedMode)
+    const loadout = ids.slice(0, fire ? FIRE_LOADOUT : LOADOUT_SIZE)
+    if (fire) void usePlatformStore.getState().saveFireLoadout(loadout) // 下次進火力全開預設帶這組
     if (online) {
       // B barrier: tell the peer I'm ready; advance only when BOTH are (setLoadoutReady).
       set({ loadout, loadoutWaiting: true })
@@ -1591,6 +1631,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { engine, me, online } = get()
     const def = getSpecialCard(id)
     if (!engine || !def) return
+    if (engine.specialUsed[me]) return // 用過了(火力全開 = 這回合用過)——按鈕本來就擋,這裡防萬一
+    // 火力全開:每張只能用一次(彈窗上用過的卡本來就點不了,這裡防萬一)
+    if (engine.mode === 'fire' && fireUsedOf(engine, me).includes(id)) {
+      sfx.error()
+      useToastStore.getState().show('這張已經用過了')
+      return
+    }
     if (def.needsTarget) {
       // swap / suit-bloom — only enter targeting if a legal target exists.
       // 偷天換日:牌堆空了就換不了(以前會讓你選牌、選了卻沒反應)→ 先擋下來說清楚
@@ -1624,7 +1671,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       const foe = otherPlayer(me)
       const rec = recordingRng() // §6:重洗是隨機的 → 錄下種子,回放照吐即重現
-      const next = applyRefresh(engine, me, rec.rng)
+      const next = applySpecial(engine, me, id, { rng: rec.rng })
       const n = Date.now()
       get().recordMove({ t: 'special', by: me, card: id, rng: rec.out })
       // 對手若是 boss/人機且偷看過自己下次補牌 → 牌堆重洗後作廢(合法資訊已過期)
@@ -1657,7 +1704,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       const foe = otherPlayer(me)
       const rec = recordingRng() // §6:炸哪張是隨機的 → 錄下來,回放照吐即重現
-      const next = applyExplode(engine, me, rec.rng)
+      const next = applySpecial(engine, me, id, { rng: rec.rng })
       const gone = removedCard(engine.hands[foe], next.hands[foe])
       const n = Date.now()
       get().recordMove({ t: 'special', by: me, card: id, rng: rec.out })
@@ -1687,7 +1734,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         get().flashStatus(`你用「${def.name}」透視了對手目前決鬥區的牌`, DEATH_EYE_NOTICE_MS)
         return
       }
-      const next = applyDeathEye(engine, me)
+      const next = applySpecial(engine, me, id)
       get().recordMove({ t: 'special', by: me, card: id }) // 決定性,不用 rng
       set({ engine: next, specFx: { by: me, card: id, n }, deathEyeFx: { target: foe, slots, n } })
       _bcast?.onEngine(next)
@@ -1715,7 +1762,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const foe = otherPlayer(me)
       const cards = (id === 'peek' ? peekNextDraw(engine, me) : engine.hands[foe]).slice()
       sfx.special()
-      const nextEng = markSpecialUsed(engine, me)
+      const nextEng = applySpecial(engine, me, id)
       const kind = id as 'peek' | 'spy'
       const n = Date.now()
       set({
@@ -1762,7 +1809,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // §6 棋譜:偷天換日(swap)是唯一非決定性效果 → 用 recordingRng 包 Math.random,實際隨機
     //   照舊,但把兩次輸出記進 move.rng,回放照吐一次即可完全重現。花色類是決定性,不需 rng。
     const rec = def?.suit ? null : recordingRng()
-    const next = def?.suit ? applySuit(engine, me, cardId, def.suit) : applySwap(engine, me, cardId, rec!.rng)
+    const next = applySpecial(engine, me, specialTargeting, { targetId: cardId, rng: rec?.rng })
     if (next === engine) return // illegal target → ignore
     sfx.special()
     get().recordMove({ t: 'special', by: me, card: specialTargeting, targetId: cardId, rng: rec?.out })
@@ -1800,28 +1847,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!engine || online || !special || engine.phase !== 'pick') return false
     const ai = engine.turn
     if (ai === me || engine.specialUsed[ai]) return false
-    // Campaign bosses use bossChooseSpecial (handles their signature incl. peek/
-    // spy); the plain single-player AI keeps the default value-only policy.
-    const decision = aiBoss
-      ? bossChooseSpecial(engine, ai, aiLoadout, aiBoss.profile, { signature: aiBoss.signature })
-      : aiChooseSpecial(engine, ai, aiLoadout)
+    // 火力全開 → fireAI(帶 5 用 3);主線 boss / 快配人機 → bossChooseSpecial(招牌卡等);
+    // 特殊房對戰電腦 → 同一套 boss 用卡,但花色卡只在「這手就出那個同花」時用(2026-10-31)。
+    let decision: FireDecision | null
+    if (engine.mode === 'fire') {
+      decision = fireChooseSpecial(engine, ai, aiLoadout, aiBoss ?? defaultLimitedBrain('fire'))
+    } else if (aiBoss) {
+      decision = bossChooseSpecial(engine, ai, aiLoadout, aiBoss.profile, { signature: aiBoss.signature })
+    } else {
+      decision = bossChooseSpecial(engine, ai, aiLoadout)
+      if (decision?.targetId && getSpecialCard(decision.card)?.suit) {
+        decision = suitPlayCheck(engine, ai, decision.card, decision.targetId, (after) => aiPick(after, ai))
+      }
+    }
     if (!decision) return false
     const def = getSpecialCard(decision.card)
-    let next: GameState
     const randomCard = decision.card === 'swap' || decision.card === 'refresh' || decision.card === 'explode'
     const rec = randomCard ? recordingRng() : null // §6:有隨機的才錄 rng
-    if (def?.suit && decision.targetId) next = applySuit(engine, ai, decision.targetId, def.suit)
-    else if (decision.card === 'swap' && decision.targetId) next = applySwap(engine, ai, decision.targetId, rec!.rng)
-    else if (decision.card === 'refresh') next = applyRefresh(engine, ai, rec!.rng)
-    else if (decision.card === 'explode') next = applyExplode(engine, ai, rec!.rng)
-    else if (decision.card === 'deathEye') next = applyDeathEye(engine, ai)
-    else next = markSpecialUsed(engine, ai) // peek / spy: no board change, just the one-shot
+    const next = applySpecial(engine, ai, decision.card, { targetId: decision.targetId, rng: rec?.rng })
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
     sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
     get().recordMove({ t: 'special', by: ai, card: decision.card, targetId: decision.targetId, rng: rec?.out }) // §6 棋譜
+    // 花色卡:這手要出的牌已經決定好了(就是換出來的同花)→ 出牌時照這個出
+    set({ aiForcedPick: decision.thenPick ?? null })
     // 資訊卡強化打法 (#5): record what the boss legitimately learned so its later
     // picks/placements can act on it (spy → true-strength reads; peek → sure draw-hold).
-    if (aiBoss && decision.card === 'spy') set({ aiBoss: { ...aiBoss, spySeen: true, spyHand: next.hands[otherPlayer(ai)] } })
+    if (aiBoss && engine.mode === 'fire') set({ aiBoss: fireLearn(aiBoss, decision.card, next, ai) })
+    else if (aiBoss && decision.card === 'spy') set({ aiBoss: { ...aiBoss, spySeen: true, spyHand: next.hands[otherPlayer(ai)] } })
     else if (aiBoss && decision.card === 'peek') set({ aiBoss: { ...aiBoss, peekDraw: peekNextDraw(next, ai) } })
     // §特殊牌:記通知 + 鏡射給觀戰(bot 換牌也要即時更新,否則觀戰看到的牌對不上)。
     const n = Date.now()

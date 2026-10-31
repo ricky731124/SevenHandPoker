@@ -7,7 +7,7 @@ import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
 import { setPlayerMeta } from '../../net/room'
 import { aiPick, aiPlace } from '../../game/ai'
-import { otherPlayer, suitTargets, swapTargets, type GameState } from '../../game/state'
+import { fireUsesLeft, otherPlayer, suitTargets, swapTargets, type GameState } from '../../game/state'
 import { getSpecialCard, ALL_SPECIAL_CARD_IDS, type SpecialCardId } from '../../game/specialCards'
 import { SUIT_SYMBOL } from '../../game/cards'
 import { sortHand } from '../../game/sort'
@@ -411,7 +411,12 @@ export function GameBoard() {
         // does, the engine changes → this effect re-runs (now specialUsed) and
         // the pick fires on the next pass, giving a natural beat between them.
         if (g.aiMaybeSpecial()) return
-        g.submitPick(aiPick(engine, engine.turn, g.aiBoss ?? undefined))
+        // 電腦剛用花色卡 → 這手要出的牌已經決定(換出來的同花),照出;牌對不上(被炸 / 重抽)才重算
+        const forced = useGameStore.getState().aiForcedPick
+        const hand = new Set(engine.hands[engine.turn].map((c) => c.id))
+        const ids = forced && forced.every((id) => hand.has(id)) ? forced : aiPick(engine, engine.turn, g.aiBoss ?? undefined)
+        if (forced) useGameStore.setState({ aiForcedPick: null })
+        g.submitPick(ids)
       }, delay)
     } else if (engine.phase === 'place') {
       const placer = otherPlayer(engine.pendingPick!.by)
@@ -442,6 +447,13 @@ export function GameBoard() {
   // rather than removing it, so the player still sees the one-shot is used.
   const showSpecialBtn = g.special && iPick && !targeting && g.loadout.length > 0
   const specialSpent = engine.specialUsed[me]
+  // 火力全開:按鈕變灰的原因有兩種(這回合用過 / 3 次用完),都順便講對手剩幾次(使用者 2026-10-31)
+  const spentText =
+    engine.mode === 'fire'
+      ? fireUsesLeft(engine, me) <= 0
+        ? `3 次都用完了（對手剩 ${fireUsesLeft(engine, otherPlayer(me))} 次）`
+        : `這回合已經用過了（剩 ${fireUsesLeft(engine, me)} 次・對手剩 ${fireUsesLeft(engine, otherPlayer(me))} 次）`
+      : '本場特殊牌已使用完畢'
   const targetHint = targetingDef?.suit
     ? `選一張手牌，變成 ${SUIT_SYMBOL[targetingDef.suit]}`
     : '選一張手牌換掉'
@@ -780,7 +792,7 @@ export function GameBoard() {
           hover/tap explaining it's used up (rather than a silent no-op). */}
       {showSpecialBtn && !spec && (
         <>
-          {spentTip && <div className="game__special-tip">本場特殊牌已使用完畢</div>}
+          {spentTip && <div className="game__special-tip">{spentText}</div>}
           <button
             type="button"
             className={`game__special-trigger${specialSpent || isPaused ? ' game__special-trigger--used' : ''}`}

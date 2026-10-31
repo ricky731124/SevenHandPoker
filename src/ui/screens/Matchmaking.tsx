@@ -7,7 +7,7 @@ import { joinMatchmaking } from '../../net/matchmaking'
 import { leaseBot, releaseLeasedBot } from '../../net/bots'
 import { rollCasualBot } from '../../game/casualBots'
 import type { SpecialCardId } from '../../game/specialCards'
-import { LIMITED_INFO, type LimitedMode } from '../../game/limited'
+import { LIMITED_INFO, usesSpecials, type LimitedMode } from '../../game/limited'
 import { limitedModeNow } from '../../net/limitedClock'
 import Modal from '../components/Modal'
 import Button from '../components/Button'
@@ -41,7 +41,7 @@ export default function Matchmaking() {
 
   useEffect(() => {
     let cancelled = false
-    const special = matchType === 'special'
+    const special = matchType === 'special' || usesSpecials(limited) // 火力全開也有特殊卡
     const startBot = async () => {
       if (cancelled) return
       const profile = usePlatformStore.getState().profile

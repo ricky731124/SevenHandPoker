@@ -26,16 +26,13 @@ import { startBroadcast, type Broadcaster } from './broadcast'
 import { patchLivePlayerRecord, type LivePlayer } from './liveIndex'
 import { fetchCard } from '../platform/cards'
 import {
-  applyDeathEye,
-  applyExplode,
-  applyRefresh,
-  applySuit,
-  applySwap,
+  applySpecial,
   canDeathEye,
   canExplode,
   canRefresh,
   deathEyeSlots,
-  markSpecialUsed,
+  fireUsedOf,
+  fireUsesLeft,
   peekNextDraw,
   removedCard,
 } from '../game/state'
@@ -45,7 +42,7 @@ import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
 import type { Card } from '../game/cards'
-import type { LimitedMode } from '../game/limited'
+import { usesSpecials, type LimitedMode } from '../game/limited'
 
 /**
  * Phase-2/3 orchestrator: bridges the RTDB room and the local gameStore.
@@ -165,9 +162,9 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
     teardown: teardownFor(code, 'host'),
   }
   const room0 = useNetStore.getState().room
-  const special = room0?.roomType === 'special'
   const timeLimit = room0?.timeLimit ?? 50
   const limitedMode = room0?.roomType === 'limited' ? (room0.limitedMode ?? null) : null
+  const special = room0?.roomType === 'special' || usesSpecials(limitedMode) // 火力全開也要特殊卡
   if (opts?.reconnect && opts.hostSnapshot) {
     g.restoreOnlineHost(online, opts.hostSnapshot)
   } else if (!(g.online?.role === 'host' && g.online.code === code && g.engine)) {
@@ -277,12 +274,12 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       if (!(e.phase === 'pick' && e.turn === 'p2') || e.specialUsed.p2) return
       const def = getSpecialCard(intent.card)
       if (!def) return
+      // 火力全開:這張用過 / 3 次用完 → 不理(guest 端按鈕本來就擋了,這裡防舊畫面重送)
+      if (e.mode === 'fire' && (fireUsedOf(e, 'p2').includes(intent.card) || fireUsesLeft(e, 'p2') <= 0)) return
       if (def.needsTarget) {
         // §6 棋譜:swap 錄 rng(唯一非決定性);花色類決定性,不需 rng。host 端錄 guest 這一步。
         const rec = def.suit ? null : recordingRng()
-        const next = def.suit
-          ? applySuit(e, 'p2', intent.targetId ?? '', def.suit)
-          : applySwap(e, 'p2', intent.targetId ?? '', rec!.rng)
+        const next = applySpecial(e, 'p2', intent.card, { targetId: intent.targetId ?? '', rng: rec?.rng })
         if (next === e) return // illegal target
         // §特殊牌:記通知(by:p2 guest)→ subscribe 會把 specFx 廣播給觀戰;engine 變動也鏡射新牌面。
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: intent.card, n: Date.now() } })
@@ -295,7 +292,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           return
         }
         const rec = recordingRng()
-        const next = applyRefresh(e, 'p2', rec.rng)
+        const next = applySpecial(e, 'p2', 'refresh', { rng: rec.rng })
         const n = Date.now()
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n }, refreshFx: { target: 'p1', n }, selected: [] })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', rng: rec.out })
@@ -308,7 +305,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           return
         }
         const rec = recordingRng()
-        const next = applyExplode(e, 'p2', rec.rng)
+        const next = applySpecial(e, 'p2', 'explode', { rng: rec.rng })
         const gone = removedCard(e.hands.p1, next.hands.p1)
         const index = gone ? e.hands.p1.findIndex((c) => c.id === gone.id) : -1
         const n = Date.now()
@@ -337,7 +334,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           return
         }
         const slots = deathEyeSlots(e, 'p2')
-        const next = applyDeathEye(e, 'p2')
+        const next = applySpecial(e, 'p2', 'deathEye')
         const n = Date.now()
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'deathEye', n }, deathEyeFx: { target: 'p1', slots, n } })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'deathEye' })
@@ -352,7 +349,7 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
           id: Date.now(),
         })
         useGameStore.setState({
-          engine: markSpecialUsed(e, 'p2'),
+          engine: applySpecial(e, 'p2', intent.card),
           specFx: { by: 'p2', card: intent.card, n: Date.now() },
           // guest 偷看我(host)的手牌 → 我這邊播「被偷看」演出;偷窺沒動到我 → 不播
           ...(intent.card === 'spy' ? { cardFx: { kind: 'spy' as const, by: 'p2' as const, card: 'spy' as const, n: Date.now() } } : {}),
@@ -426,9 +423,9 @@ function _attachGuest(code: string, opts?: AttachOpts): () => void {
   const room0 = useNetStore.getState().room
   // On reconnect the room subscription may not have populated yet, so prefer the
   // config passed from tryReconnect's room fetch (else fall back to the store).
-  const special = opts?.special ?? room0?.roomType === 'special'
   const timeLimit = opts?.timeLimit ?? room0?.timeLimit ?? 50
   const limitedMode = opts?.limitedMode ?? (room0?.roomType === 'limited' ? (room0.limitedMode ?? null) : null)
+  const special = opts?.special ?? (room0?.roomType === 'special' || usesSpecials(limitedMode)) // 火力全開也要特殊卡
   if (!(g.online?.role === 'guest' && g.online.code === code)) {
     g.startOnlineGuest(
       {
@@ -624,7 +621,7 @@ export async function tryReconnect(): Promise<boolean> {
     attachOnline(code, role, {
       reconnect: true,
       hostSnapshot,
-      special: room.roomType === 'special',
+      special: room.roomType === 'special' || (room.roomType === 'limited' && usesSpecials(room.limitedMode)),
       timeLimit: room.timeLimit ?? 50,
       limitedMode: room.roomType === 'limited' ? (room.limitedMode ?? null) : null,
     })

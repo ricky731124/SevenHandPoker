@@ -4,7 +4,7 @@
       "$roomId": {
         ".read": true,
         ".write": true,
-        ".validate": "$roomId.matches(/^[0-9]{3}$/) && (newData.child('roomType').val() !== 'limited' || (newData.child('hostVer').isNumber() && newData.child('hostVer').val() >= 2 && (!newData.child('guestId').exists() || (newData.child('guestVer').isNumber() && newData.child('guestVer').val() >= 2))))"
+        ".validate": "$roomId.matches(/^[0-9]{3}$/) && (newData.child('roomType').val() !== 'limited' || (newData.child('hostVer').isNumber() && newData.child('hostVer').val() >= 2 && (!newData.child('guestId').exists() || (newData.child('guestVer').isNumber() && newData.child('guestVer').val() >= 2))) && (newData.child('limitedMode').val() !== 'fire' || (newData.child('hostVer').val() >= 3 && (!newData.child('guestId').exists() || newData.child('guestVer').val() >= 3))))"
       }
     },
     "users": {

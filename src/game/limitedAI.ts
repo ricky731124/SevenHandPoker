@@ -11,7 +11,7 @@ import type { Card } from './cards'
 import { isBlank, isJoker } from './cards'
 import { CATEGORY, compareHands, compareLimited, evaluate } from './evaluate'
 import { groupBy } from './aiCore'
-import { bossPlace, type BossProfile, type BossRuntime } from './bossAI'
+import { bossPick, bossPlace, type BossProfile, type BossRuntime } from './bossAI'
 import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
 import { mulberry32 } from './rng'
 import { blankBoardScores, blankStrength, hasPlaceTable, keyStrength, placeByTable, winsIfOwns } from './limitedPlace'
@@ -43,7 +43,8 @@ export interface LimitedPickOpts {
 export function limitedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random, opts: LimitedPickOpts = {}): string[] {
   if (state.mode === 'blank') return blankPick(state, me, rt, rng, opts).map((c) => c.id)
   if (state.mode === 'mixed') return mixedPick(state, me, rt, rng).map((c) => c.id)
-  // 火力全開上線時在這裡分派
+  // 火力全開:一般牌組 → 照一般房 boss 出牌(§11.7;用卡在 fireAI.ts)
+  if (state.mode === 'fire') return bossPick(state, me, rt, rng)
   return ghostPick(state, me, rt, rng).map((c) => c.id)
 }
 

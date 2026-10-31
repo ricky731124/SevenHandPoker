@@ -57,7 +57,14 @@ export interface SyncGame {
   exposed?: { p1?: number[]; p2?: number[] }
   /** 限定房玩法(GameState.mode);沒有 = 一般房 / 特殊房。 */
   mode?: LimitedMode
+  /** 火力全開:guest 自己用過的卡(GameState.fireUsed.p2)。 */
+  guestFire?: SpecialCardId[]
+  /** 火力全開:host 用了幾次——只給次數,不給是哪張(偷天換日 / 花色卡對手本來就不該知道)。 */
+  hostFireCount?: number
 }
+
+/** guest 端還原 host 用過的卡:只知道次數 → 用看不出是哪張的佔位。 */
+const UNKNOWN_FIRE = '?' as SpecialCardId
 
 const HIDDEN: Card = { id: '_', suit: 'S', rank: 2 }
 function hidden(n: number, prefix: string): Card[] {
@@ -107,6 +114,8 @@ export function serializeForGuest(engine: GameState, foeSel: { total: number; id
   }
   if (engine.exposed) out.exposed = engine.exposed
   if (engine.mode) out.mode = engine.mode
+  if (engine.fireUsed?.p2?.length) out.guestFire = engine.fireUsed.p2
+  if (engine.fireUsed?.p1?.length) out.hostFireCount = engine.fireUsed.p1.length
   return out
 }
 
@@ -145,6 +154,8 @@ export interface SpecView {
   emote?: { by: PlayerId; id: string; n: number } | null
   /** 限定房玩法 → 觀戰也標出玩法、攤牌照限定房規則說明。 */
   mode?: LimitedMode
+  /** 火力全開:雙方用過的卡(觀戰全開,照送)。 */
+  fireUsed?: { p1?: SpecialCardId[]; p2?: SpecialCardId[] }
 }
 
 /** Broadcaster-side live UI state that isn't in the engine (§ 推牌/特殊牌/暫停/貼圖). */
@@ -183,6 +194,7 @@ export function serializeForSpectator(engine: GameState, extras?: SpecExtras): S
   if (extras?.paused) v.paused = true
   if (extras?.emote) v.emote = extras.emote
   if (engine.mode) v.mode = engine.mode
+  if (engine.fireUsed && (engine.fireUsed.p1?.length || engine.fireUsed.p2?.length)) v.fireUsed = engine.fireUsed
   return v
 }
 
@@ -216,6 +228,7 @@ export function deserializeForSpectator(v: SpecView): GameState {
     tieBreakWinner: 'p1',
     specialUsed: v.specialUsed ?? { p1: false, p2: false },
     ...(v.mode ? { mode: v.mode } : {}),
+    ...(v.fireUsed ? { fireUsed: { p1: v.fireUsed.p1 ?? [], p2: v.fireUsed.p2 ?? [] } } : {}),
   }
 }
 
@@ -255,6 +268,9 @@ export function deserializeForGuest(g: SyncGame): { engine: GameState; foeSel: {
     specialUsed: g.specialUsed ?? { p1: false, p2: false },
     exposed,
     ...(g.mode ? { mode: g.mode } : {}),
+    ...(g.mode === 'fire'
+      ? { fireUsed: { p1: Array.from({ length: g.hostFireCount ?? 0 }, () => UNKNOWN_FIRE), p2: g.guestFire ?? [] } }
+      : {}),
   }
   // RTDB drops empty arrays, so a foeSel that was {total, idx:[]} reads back
   // without idx — normalise so the UI never touches idx.length on undefined.

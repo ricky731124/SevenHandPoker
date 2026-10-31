@@ -93,6 +93,13 @@ C 類清單(照強迫更新的做法):
 9. 動畫元件掛在 `Game.tsx` 的 `.game` 裡(參考 `RefreshFx.tsx`)。
 10. `bots.ts`:挑幾隻人機門面牌組加這張(快配人機實際用卡 = 玩家已解鎖池隨機 3 張,自動)。
 11. `difficulty.sim.test.ts` 的 `bossSpecial` 加這張卡的套用分支(不然模擬裡 boss 用了也沒效果)。
+12. `state.ts` 的 `applySpecial` 分派加這張卡(所有入口都走它;火力全開靠它記用過哪幾張)。
+
+**每一張新卡(A / B / C 都要)——限定房「火力全開」(LIMITED-ROOM-SPEC §11.7a)**:
+- `specialCards.ts` 的 `fireStyle` **一定要填**(`attack` / `hoard` / `balance` / `neutral`):先問使用者「這張建議給哪種打法的電腦帶,還是中立?」。每種打法**剛好 2 張固定帶**(強攻 偷天換日+偷窺、囤牌 爆破+強迫更新、平衡 讓我看看+死神之眼,`fire.test.ts` 有測),所以新卡要標打法 = 換掉那個打法原本的一張(使用者決定換哪張);不換就標 `neutral`。
+- `fireAI.ts` 的 `fireChooseSpecial` 加這張卡的「**有條件才用**」判斷(通常沿用 `bossChooseSpecial` 那張卡的觸發條件,機率放進 `FIRE_TUNE`),再在 `forcedPick` 排進「趕進度時用哪張」(只排現在用有效果的情況)。資訊卡要在 `fireLearn` 記學到什麼。
+- 火力全開卡池 = 照解鎖順序的前 N 張、最少 10 張(`firePoolSize`:朋友房 / 快配人機 / 對戰電腦看自己解鎖數,快配真人看兩人比較少的)。新卡要接在 `SPECIAL_CARDS` 最後面(順序 = 解鎖順序,`fire.test.ts` 有測)。**做第 10 關時**:`limited.ts` 火力全開規則第一句要補「解鎖更多就開更多(快配到真人看兩人誰解鎖得少)」。
+- 跑 `FIRE=1 SIM_N=100 npx vitest run src/game/fire.sim.test.ts` 看「第 5 手前用完」(目標約 9 成)、沒有「前三手用完」警告、這張卡「帶了有用到」的比例。
 
 C 類的經驗(第 8 關爆破):
 - 「打對手、對方看得到結果」的卡:guest 看不到對手手牌 → guest 只送 intent,由 host 判定+算結果,再用 `sendFx(msg, { card, target, victim })` 回報;guest 的 fx 處理依 `target` 決定動畫播在哪一方。

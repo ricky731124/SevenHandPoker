@@ -218,6 +218,10 @@
 .livecard__mode--mixed {
   background: #2a8379;
 }
+.livecard__mode--fire {
+  background: #2a2a2f;
+  color: #ffa24d;
+}
 .livecard__watchers {
   margin-left: auto;
   font-size: 18px; /* 眼睛/數量再大,與 LIVE 齊平(#1) */

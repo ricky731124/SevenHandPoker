@@ -24,6 +24,7 @@ import {
   markTutorialSeen as persistTutorialSeen,
   setUsername,
   setSpecialLoadout,
+  setFireLoadout,
   setAvatar,
   setEquippedAchievements,
   unlockAll,
@@ -130,6 +131,8 @@ interface PlatformStore {
   logout: () => Promise<void>
   /** Save the special-card loadout (ensures an account exists first). */
   saveLoadout: (ids: string[]) => Promise<void>
+  /** 火力全開的 5 張(戰前選卡確認時存;本機 profile 也立刻更新,下一局預設帶這組) */
+  saveFireLoadout: (ids: string[]) => Promise<void>
   /** Save the equipped avatar (ensures an account exists first). */
   saveAvatar: (id: string) => Promise<void>
   /** Save the displayed achievements (≤3 family ids; ensures an account first). */
@@ -330,6 +333,14 @@ export const usePlatformStore = create<PlatformStore>((set, get) => ({
       await setSpecialLoadout(uid, ids)
       void syncCard(uid) // 更新公開名片的預設牌組(#5)
     }
+  },
+
+  saveFireLoadout: async (ids) => {
+    const prof = get().profile
+    if (prof) set({ profile: { ...prof, equipped: { ...prof.equipped, fireCards: ids } } })
+    if (!isFirebaseConfigured()) return
+    const uid = get().uid
+    if (uid) await setFireLoadout(uid, ids)
   },
 
   saveAvatar: async (id) => {

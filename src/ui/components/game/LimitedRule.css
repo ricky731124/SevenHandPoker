@@ -176,8 +176,56 @@
     0 2px 0 #1d5c57,
     0 4px 8px rgba(0, 0, 0, 0.4);
 }
+/* 火力全開 = 炭黑底 + 橘字(橘色只當字,不整塊鋪,才不會跟紅布糊在一起);框跟其他玩法一樣用低調的深色(暗橘) */
+.limited-badge--fire {
+  border-color: #7a3a12;
+  background:
+    radial-gradient(115% 78% at 50% -14%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, #4b4b52, #26262b);
+  color: #ffa24d;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.18),
+    0 2px 0 #7a3a12,
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
 .limited-badge:active {
   transform: translateY(1px);
+}
+
+/* 火力全開規則卡左欄示意 */
+.fire-demo__row {
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.fire-demo__card {
+  position: relative;
+  display: inline-flex;
+}
+/* 只淡化卡本身,上面的 ✘ / 已用 記號保持清楚 */
+.fire-demo__card--dim > .spc {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+.fire-demo__x {
+  background: #b3261e;
+}
+.fire-demo__used {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.fire-demo__label {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.75;
 }
 
 /* 快速配對 / 建立房間「?」→ 輪值表:星期 | 玩法(對齊成一欄)| 玩法介紹 */

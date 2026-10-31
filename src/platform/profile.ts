@@ -66,7 +66,8 @@ export interface Profile {
     achievements: Record<string, number>
     emojis: Record<string, true>
   }
-  equipped: { avatar: string; achievements: string[]; specialCards: string[] }
+  /** fireCards:限定房「火力全開」上次帶的 5 張(跟特殊房的 specialCards 分開存,LIMITED-ROOM-SPEC §6) */
+  equipped: { avatar: string; achievements: string[]; specialCards: string[]; fireCards?: string[] }
   stats: Record<string, number>
 }
 
@@ -139,6 +140,7 @@ function normalize(raw: any): Profile {
       avatar: raw?.equipped?.avatar ?? DEFAULT_AVATAR,
       achievements: raw?.equipped?.achievements ?? [],
       specialCards: raw?.equipped?.specialCards ?? [],
+      fireCards: raw?.equipped?.fireCards ?? [],
     },
     stats: raw?.stats ?? {},
   }
@@ -236,6 +238,11 @@ export async function markTutorialSeen(uid: string): Promise<void> {
 /** Save the player's special-card loadout (equipped.specialCards, ≤3). */
 export async function setSpecialLoadout(uid: string, ids: string[]): Promise<void> {
   await update(ref(db(), `users/${uid}/equipped`), { specialCards: ids })
+}
+
+/** 火力全開的出戰牌組(equipped.fireCards,5 張)。 */
+export async function setFireLoadout(uid: string, ids: string[]): Promise<void> {
+  await update(ref(db(), `users/${uid}/equipped`), { fireCards: ids })
 }
 
 /** Save the player's equipped avatar. */
