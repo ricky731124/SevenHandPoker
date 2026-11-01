@@ -6,6 +6,7 @@ import {
   applySpecial,
   createGame,
   deathEyeSlots,
+  peekNextDraw,
   removedCard,
   resolveShowdown,
   type GameState,
@@ -26,8 +27,10 @@ import { getSpecialCard, type SpecialCardId } from './specialCards'
  *  - `special`: 誰、用了哪張特殊牌。
  *      · 偷天換日(swap)會改牌面 → 另記 `targetId`(棄掉哪張)+ `rng`(當時那次隨機抽/塞的
  *        兩個 Math.random 輸出,回放照吐一次 → 抽到的新牌、牌堆順序完全重現,決定性)。
- *      · 花色類(踏雪尋梅/正中紅心…)是決定性的,只需 `targetId`(把哪張改花色),不需 `rng`。
- *      · 強迫更新(refresh)把對手手牌洗回牌堆重抽 → 只記 `rng`(一個值 = 重洗的種子),回放照吐即重現。
+ *      · 花色類(踏雪尋梅/正中紅心…)是決定性的,只需 `targetId`(改 1 張)或 `targetIds`(改 2 張,
+ *        2026-11-02 起),不需 `rng`。
+ *      · 強迫更新(refresh)把對手手牌洗回牌堆重抽 → 只記 `rng`(一個值 = 重洗的種子),回放照吐即重現;
+ *        洗自己(第一手才行)另記 `self: true`。
  *      · 爆破(explode)隨機炸掉對手一張 → 只記 `rng`(一個值 = 炸哪張)。
  *      · 死神之眼(deathEye)只翻開對手當下在決鬥區的牌堆,決定性 → 什麼都不用多記。
  *      · 偷窺/讓我看看(peek/spy)不改任何牌面,只記「有這一步、用了什麼」→ 回放照樣顯示玩家用過。
@@ -35,7 +38,16 @@ import { getSpecialCard, type SpecialCardId } from './specialCards'
 export type Move =
   | { t: 'pick'; by: PlayerId; ids: string[] }
   | { t: 'place'; by: PlayerId; slot: number }
-  | { t: 'special'; by: PlayerId; card: SpecialCardId; targetId?: string; rng?: number[] }
+  | { t: 'special'; by: PlayerId; card: SpecialCardId; targetId?: string; targetIds?: string[]; self?: boolean; rng?: number[] }
+
+/**
+ * 花色卡 / 偷天換日那一步的棋譜:花色卡改 1 張照舊記 targetId(舊版也播得出來),2 張才記 targetIds。
+ * suitIds 沒給 = 不是花色卡(偷天換日)→ 記 targetId。
+ */
+export function suitMove(by: PlayerId, card: SpecialCardId, suitIds: string[] | undefined, targetId: string | undefined, rng?: number[]): Move {
+  if (suitIds && suitIds.length > 1) return { t: 'special', by, card, targetIds: suitIds }
+  return { t: 'special', by, card, targetId: suitIds ? suitIds[0] : targetId, rng }
+}
 
 /**
  * 錄製用 rng:包一層在 `Math.random` 外,實際對局照常用真隨機(玩法一字不動),
@@ -86,6 +98,9 @@ export interface ReplayFrame {
   explode?: { target: PlayerId; card?: Card }
   /** 死神之眼那一幀:翻開了誰(target)的哪幾格 → 播放器前進到這幀時播透視動畫。 */
   deathEye?: { target: PlayerId; slots: number[] }
+  /** 花色卡 / 偷天換日 / 偷窺 / 讓我看看那一幀(2026-11-02 補):播放器播 CardFx 演出。
+   *  targets = 哪幾張從什麼變成什麼;cards = 偷窺看到的那幾張(回放翻給觀眾看)。 */
+  cardFx?: { kind: 'suit' | 'swap' | 'peek' | 'spy'; by: PlayerId; card: SpecialCardId; targets?: { before: Card; after?: Card }[]; cards?: Card[] }
   /** 回放在這幀之後套不下去(版本太舊)→ 這幀是提示幀,播放器要跳 toast 提示更新。 */
   outdated?: boolean
 }
@@ -156,23 +171,33 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
       } else if (m.t === 'special') {
         const def = getSpecialCard(m.card)
         const before = m.targetId ? g.hands[m.by].find((c) => c.id === m.targetId) : undefined
-        if (def?.suit && m.targetId) {
-          g = applySpecial(g, m.by, m.card, { targetId: m.targetId })
-          const after = g.hands[m.by].find((c) => c.id === m.targetId)
-          const detail = before && after ? `:${cardFace(before)}→${cardFace(after)}` : ''
+        const suitIds = m.targetIds ?? (m.targetId ? [m.targetId] : [])
+        if (def?.suit && suitIds.length) {
+          // 花色卡 1~2 張(舊棋譜只有 targetId = 1 張)
+          const befores = suitIds.map((id) => g.hands[m.by].find((c) => c.id === id))
+          g = applySpecial(g, m.by, m.card, { targetIds: suitIds })
+          const targets = befores.flatMap((b) => {
+            const after = b && g.hands[m.by].find((c) => c.id === b.id)
+            return b && after ? [{ before: b, after }] : []
+          })
+          const detail = targets.length ? `:${targets.map((t) => `${cardFace(t.before)}→${cardFace(t.after)}`).join('、')}` : ''
           add(g, name(m.by), `使用「${def.name}」${detail}`, 'special')
+          frames[frames.length - 1].cardFx = { kind: 'suit', by: m.by, card: m.card, targets }
         } else if (m.card === 'swap' && m.targetId) {
           const prevIds = new Set(g.hands[m.by].map((c) => c.id))
           g = applySpecial(g, m.by, m.card, { targetId: m.targetId, rng: replayRng(m.rng) })
           const drawn = g.hands[m.by].find((c) => !prevIds.has(c.id))
           const detail = before && drawn ? `:${cardFace(before)}→${cardFace(drawn)}` : ''
           add(g, name(m.by), `使用「${def?.name ?? '偷天換日'}」${detail}`, 'special')
+          if (before) frames[frames.length - 1].cardFx = { kind: 'swap', by: m.by, card: m.card, targets: [{ before, after: drawn }] }
         } else if (m.card === 'refresh') {
-          const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
-          const n = g.hands[foe].filter((c) => !isBlank(c) && !isJoker(c)).length
-          g = applySpecial(g, m.by, m.card, { rng: replayRng(m.rng) })
-          add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」:${name(foe)} 手牌重抽 ${n} 張`, 'special')
-          frames[frames.length - 1].refreshTarget = foe
+          // 強迫更新:預設洗對手;self = 洗自己(只有自己的第一手可以,2026-11-02)
+          const target: PlayerId = m.self ? m.by : m.by === 'p1' ? 'p2' : 'p1'
+          const n = g.hands[target].filter((c) => !isBlank(c) && !isJoker(c)).length
+          g = applySpecial(g, m.by, m.card, { rng: replayRng(m.rng), self: !!m.self })
+          const who = m.self ? '自己' : name(target)
+          add(g, name(m.by), `使用「${def?.name ?? '強迫更新'}」${m.self ? '（自己）' : ''}:${who}手牌重抽 ${n} 張`, 'special')
+          frames[frames.length - 1].refreshTarget = target
         } else if (m.card === 'explode') {
           const foe: PlayerId = m.by === 'p1' ? 'p2' : 'p1'
           const prev = g.hands[foe]
@@ -188,9 +213,11 @@ export function buildFrames(input: ReplayInput): ReplayFrame[] {
           add(g, name(m.by), `用了「${def?.name ?? '死神之眼'}」，透視了目前決鬥區所有的牌`, 'special')
           frames[frames.length - 1].deathEye = { target: foe, slots }
         } else {
-          // peek / spy:不改牌面,只記用過。
+          // peek / spy:不改牌面,只記用過。回放雙方牌都看得到 → 偷窺直接翻出那幾張給觀眾看。
+          const seen = m.card === 'peek' ? peekNextDraw(g, m.by) : undefined
           g = applySpecial(g, m.by, m.card)
           add(g, name(m.by), `使用「${def?.name ?? '特殊牌'}」`, 'special')
+          if (m.card === 'peek' || m.card === 'spy') frames[frames.length - 1].cardFx = { kind: m.card, by: m.by, card: m.card, cards: seen }
         }
       } else if (m.t === 'place') {
         g = applyPlace(g, m.by, m.slot)

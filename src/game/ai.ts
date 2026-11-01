@@ -1,4 +1,5 @@
 import { compareValue, evaluate } from './evaluate'
+import { isJoker, isSpecial } from './cards'
 import {
   applyPick,
   applyPlace,
@@ -6,14 +7,13 @@ import {
   isTargetable,
   otherPlayer,
   ownsSlot,
-  suitTargets,
   swapTargets,
   type GameState,
   type PlayerId,
 } from './state'
 import { getSpecialCard, type SpecialCardId } from './specialCards'
 import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
-import { bossPick, bossPlace, type BossRuntime } from './bossAI'
+import { bossPick, bossPlace, suitVictims, type BossRuntime } from './bossAI'
 import { defaultLimitedBrain, limitedPick, limitedPlace } from './limitedAI'
 
 /**
@@ -31,7 +31,14 @@ export function aiPick(state: GameState, me: PlayerId, boss?: BossRuntime): stri
   if (state.mode) return limitedPick(state, me, boss ?? defaultLimitedBrain(state.mode))
   if (boss) return bossPick(state, me, boss)
   const hand = state.hands[me]
-  const cands = candidatePiles(hand)
+  // 單出一張鬼不當候選(使用者 2026-11-02);沒成牌又有鬼 → 鬼 + 最大那張(最強的合法出法 = 一對)
+  const cands = candidatePiles(hand).filter((c) => !(c.length === 1 && isJoker(c[0])))
+  const joker = hand.find(isJoker)
+  const reals = hand.filter((c) => !isSpecial(c))
+  if (cands.length === 0 && joker && reals.length) {
+    const top = reals.reduce((b, c) => (c.rank > b.rank ? c : b), reals[0])
+    return [top.id, joker.id]
+  }
   if (cands.length > 0) {
     let best = cands[0]
     for (const c of cands) {
@@ -99,24 +106,21 @@ export function aiChooseSpecial(
   state: GameState,
   me: PlayerId,
   loadout: SpecialCardId[],
-): { card: SpecialCardId; targetId: string } | null {
+): { card: SpecialCardId; targetId?: string; targetIds?: string[] } | null {
   if (state.specialUsed[me]) return null
   const hand = state.hands[me]
 
-  let best: { card: SpecialCardId; targetId: string; cluster: number } | null = null
+  // 花色卡(2026-11-02 一次改 1~2 張):跟 boss 同一套(suitVictims),換完能湊成同花才用
+  let best: { card: SpecialCardId; targetIds: string[]; have: number } | null = null
   for (const id of loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const targets = suitTargets(state, me, def.suit)
-    if (targets.length === 0) continue
+    const victims = suitVictims(state, me, def.suit)
+    if (!victims) continue
     const have = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
-    const cluster = have + 1
-    if (cluster >= 3 && (!best || cluster > best.cluster)) {
-      const victim = targets.reduce((lo, c) => (c.rank < lo.rank ? c : lo), targets[0])
-      best = { card: id, targetId: victim.id, cluster }
-    }
+    if (!best || have > best.have) best = { card: id, targetIds: victims.map((c) => c.id), have }
   }
-  if (best) return { card: best.card, targetId: best.targetId }
+  if (best) return { card: best.card, targetIds: best.targetIds }
 
   if (loadout.includes('swap') && state.deck.length > 0) {
     const targets = swapTargets(state, me)

@@ -95,10 +95,20 @@ describe('boss 特殊牌 — bossChooseSpecial', () => {
     const g = handState('p2', [c('C', 9), c('C', 13), c('C', 5), c('C', 7), c('D', 4), c('H', 8)])
     const d = bossChooseSpecial(g, 'p2', ['clubs'])
     expect(d?.card).toBe('clubs')
-    expect(d?.targetId).toBe('D4') // lowest unpaired off-suit
+    expect(d?.targetIds).toEqual(['D4']) // lowest unpaired off-suit
   })
 
-  it('踏雪尋梅:只有 2~3 張同花→一次轉牌湊不出同花,不亂用', () => {
+  it('踏雪尋梅(2026-11-02 一次 1~2 張):握 3 張同花→換 2 張沒成對的低散牌湊成同花', () => {
+    const g = handState('p2', [c('C', 9), c('C', 13), c('C', 5), c('D', 4), c('H', 8), c('S', 12)])
+    expect(bossChooseSpecial(g, 'p2', ['clubs'])).toEqual({ card: 'clubs', targetIds: ['D4', 'H8'] })
+  })
+
+  it('踏雪尋梅:3 張同花但只有 1 張沒成對的散牌 → 不拆對子,不用', () => {
+    const g = handState('p2', [c('C', 9), c('C', 13), c('C', 5), c('D', 4), c('H', 8), c('S', 8)])
+    expect(bossChooseSpecial(g, 'p2', ['clubs'])).toBeNull()
+  })
+
+  it('踏雪尋梅:只有 2 張同花→換 2 張也湊不出同花,不亂用', () => {
     const g = handState('p2', [c('C', 9), c('C', 13), c('D', 4), c('H', 8)])
     expect(bossChooseSpecial(g, 'p2', ['clubs'])).toBeNull()
   })
@@ -127,7 +137,8 @@ describe('資訊卡強化打法 (#5)', () => {
     const g = handState('p2', hand)
     const rt: BossRuntime = { ...RT('attack', 1, { draw: 0 }), peekDraw: [c('C', 13)] }
     const ids = bossPick(g, 'p2', rt, R(0))
-    expect(ids).toEqual(['C2']) // holds K,K,3,3 for the full house; dumps the lowest junk club
+    // holds K,K,3,3 for the full house; 送格送 2 張最沒用的(2026-11-02:送 1 張對手一看就知道是送的)
+    expect(ids).toEqual(['C2', 'C5'])
   })
 
   it('沒 peek(拼牌%=0)→ 直接梭出最強對子,不留同花', () => {

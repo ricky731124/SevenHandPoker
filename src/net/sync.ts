@@ -24,8 +24,9 @@ export type Intent =
   | { type: 'pick'; ids: string[]; sel?: LiveSel }
   | { type: 'place'; slot: number }
   | { type: 'continue' }
-  // guest activates a special card; host arbitrates. targetId only for swap/suit.
-  | { type: 'special'; card: SpecialCardId; targetId?: string }
+  // guest activates a special card; host arbitrates. targetId only for swap;
+  // targetIds = 花色卡 1~2 張(ROOM_CLIENT_VER 4);self = 強迫更新洗自己(第一手才行)。
+  | { type: 'special'; card: SpecialCardId; targetId?: string; targetIds?: string[]; self?: boolean }
 
 export interface SyncSlot {
   owner: SlotOwner // includes 'both' for a joker tie
@@ -147,7 +148,7 @@ export interface SpecView {
   /** 廣播端(p1)當前排序 → 觀戰下方手牌用同排序渲染,推牌位置才對得上。 */
   p1Sort?: { mode: SortMode; dir: SortDir }
   /** 剛用出的特殊牌通知:誰、哪張、n(去重用)→ 觀戰跳 toast(牌變了才不會莫名其妙)。 */
-  fx?: { by: PlayerId; card: SpecialCardId; n: number } | null
+  fx?: { by: PlayerId; card: SpecialCardId; n: number; self?: boolean } | null
   /** 玩家暫停中 → 觀戰也顯示「暫停中」(#6)。 */
   paused?: boolean
   /** 玩家送出的貼圖:誰(p1/p2)、貼圖 id、n(去重)→ 觀戰也吃到貼圖效果(#6)。 */
@@ -162,7 +163,7 @@ export interface SpecView {
 export interface SpecExtras {
   p1Sel?: string[]
   p1Sort?: { mode: SortMode; dir: SortDir }
-  fx?: { by: PlayerId; card: SpecialCardId; n: number } | null
+  fx?: { by: PlayerId; card: SpecialCardId; n: number; self?: boolean } | null
   paused?: boolean
   emote?: { by: PlayerId; id: string; n: number } | null
 }

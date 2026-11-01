@@ -26,23 +26,26 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
-/* 卡名標籤 */
+/* 卡名標籤:跟強迫更新 / 爆破同一種純色膠囊,底色 = 這張卡的主色(CardFx.tsx LABEL_BG,inline 設定)。
+   2026-11-02 使用者:原本的木紋太像按鈕,不像說明。 */
 .card-fx__label {
   position: absolute;
-  padding: 3px 12px;
+  padding: 4px 12px;
   border-radius: 999px;
-  border: 2px solid var(--wood-edge);
-  background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
-  color: var(--wood-text);
-  font-family: var(--font-display);
+  background: #555;
+  color: #fff;
   font-weight: 900;
   font-size: 15px;
   letter-spacing: 1px;
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
+/* 紅色系的標籤(正中紅心、讓我看看)在紅桌上不夠跳 → 加白框 */
+.card-fx__label.is-red,
 .card-fx__label.is-victim {
-  border-color: #6b1424;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.card-fx__label.is-victim {
   background: linear-gradient(180deg, #b8324a, #7a1420);
   color: #fff3e6;
 }
@@ -114,14 +117,18 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* 偷窺:掀起的牌角 + 放大鏡 */
-.card-fx__peek-corner {
+/* 偷窺:牌角缺一塊(clip-path,在 tsx)+ 往內折的白色牌角 + 放大鏡 */
+.card-fx__peek-flap {
   position: absolute;
-  right: 0;
-  top: 0;
   z-index: 1;
-  border-radius: 0 6px 0 0;
-  background: linear-gradient(225deg, rgba(255, 255, 255, 0) 50%, rgba(255, 250, 235, 0.95) 50%);
+  transform-origin: 100% 0; /* 從折線那邊翻出來 */
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+  background: linear-gradient(45deg, #fffaf0 0%, #f3e9d2 55%, #d9cba9 100%);
+  filter: drop-shadow(-1px 1px 1px rgba(0, 0, 0, 0.45));
+}
+/* 正中紅心:弓 */
+.card-fx__bow {
+  z-index: 2;
 }
 .card-fx__magnifier {
   z-index: 2;

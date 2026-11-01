@@ -37,7 +37,7 @@ function bossSpecial(g: GameState, me: PlayerId, loadout: SpecialCardId[], rt: B
   if (!d) return { g, rt }
   const def = getSpecialCard(d.card)
   let next = g
-  if (def?.suit && d.targetId) next = applySuit(g, me, d.targetId, def.suit)
+  if (def?.suit && d.targetIds) next = applySuit(g, me, d.targetIds, def.suit)
   else if (d.card === 'swap' && d.targetId) next = applySwap(g, me, d.targetId, rng)
   else if (d.card === 'refresh') next = applyRefresh(g, me, rng)
   else if (d.card === 'explode') next = applyExplode(g, me, rng)

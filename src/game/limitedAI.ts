@@ -4,7 +4,8 @@
  *
  * 目前做了:百鬼夜行(§11.4)出牌 + 限定房放牌(§11.9,limitedPlace.ts)。空城計 / 撲朔迷離 / 火力全開之後一種一種加。
  *
- * 公平:限定房對手只看得到張數(推牌位置隨機),所以 boss 的「看破」一律當 0(§11.2)。
+ * 公平:牌組變了的限定房對手只看得到張數(推牌位置隨機),所以 boss 的「看破」當 0(§11.2);
+ * 火力全開是一般牌組、看得到位置 → 看破照常(2026-11-02)。
  */
 
 import type { Card } from './cards'
@@ -12,7 +13,7 @@ import { isBlank, isJoker } from './cards'
 import { CATEGORY, compareHands, compareLimited, evaluate } from './evaluate'
 import { groupBy } from './aiCore'
 import { bossPick, bossPlace, type BossProfile, type BossRuntime } from './bossAI'
-import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
+import { LIMITED_EXECUTION, LIMITED_JOKER_CAP, hidesPushPos, jokerCapOf, makeLimitedDeck, type LimitedMode } from './limited'
 import { mulberry32 } from './rng'
 import { blankBoardScores, blankStrength, hasPlaceTable, keyStrength, placeByTable, winsIfOwns } from './limitedPlace'
 import { DRAW_SCHEDULE, SLOT_COUNT, countCoins, otherPlayer, type GameState, type PlayerId } from './state'
@@ -27,8 +28,18 @@ export const DEFAULT_LIMITED_PROFILE: BossProfile = {
   jokerTiming: 0,
   insight: 0,
 }
+/**
+ * 火力全開的對戰電腦(使用者 2026-11-02):一般牌組、看得到推牌位置 → 被鬼牌 / 空白牌關掉的副技能恢復,
+ * 拼牌 / 鬼牌時機 / 看破各 30(約前幾關 boss 的程度)。
+ */
+export const FIRE_COMPUTER_PROFILE: BossProfile = { ...DEFAULT_LIMITED_PROFILE, draw: 30, jokerTiming: 30, insight: 30 }
+
 export function defaultLimitedBrain(mode?: LimitedMode): BossRuntime {
-  return { profile: DEFAULT_LIMITED_PROFILE, main: 'balance', execution: (mode && LIMITED_EXECUTION[mode]?.vsComputer) || 0.75 }
+  return {
+    profile: mode === 'fire' ? FIRE_COMPUTER_PROFILE : DEFAULT_LIMITED_PROFILE,
+    main: 'balance',
+    execution: (mode && LIMITED_EXECUTION[mode]?.vsComputer) || 0.75,
+  }
 }
 
 /** 看破關掉的 boss(只讀張數)。不改原 profile,複製一份傳下去。 */
@@ -49,9 +60,9 @@ export function limitedPick(state: GameState, me: PlayerId, rt: BossRuntime, rng
 }
 
 export function limitedPlace(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random): number {
-  // 有分布表的玩法走限定房放牌(§11.9);火力全開是一般牌組,照原本 boss 放牌(看破 = 0)
+  // 有分布表的玩法走限定房放牌(§11.9);火力全開是一般牌組、看得到推牌位置 → 照原本 boss 放牌,看破照常(2026-11-02)
   if (hasPlaceTable(state.mode)) return placeByTable(state, me, rt, rng)
-  return bossPlace(state, me, noInsight(rt), rng)
+  return bossPlace(state, me, hidesPushPos(state.mode) ? noInsight(rt) : rt, rng)
 }
 
 // ---- 百鬼夜行(§11.4a,每格最多 2 鬼) ----------------------------------------

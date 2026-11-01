@@ -57,6 +57,35 @@ export function SpecialTray() {
   )
 }
 
+/**
+ * 強迫更新選對象(使用者 2026-11-02):洗自己 / 洗對手。洗自己只有自己的第一手可以 —— 其他手照樣顯示但反灰,
+ * 點了跳原因(onPick 由呼叫端判斷)。洗對手照原本規則任何一手都行。
+ */
+export function RefreshChoice({ selfOk, onPick }: { selfOk: boolean; onPick: (self: boolean | null) => void }) {
+  return (
+    <Modal open onClose={() => onPick(null)} title="強迫更新" width={400}>
+      <p className="spx-tray__hint">要重洗誰的手牌？</p>
+      <div className="spx-choice">
+        <span className={`spx-choice__btn${selfOk ? '' : ' is-locked'}`}>
+          <Button variant="secondary" onClick={() => onPick(true)}>
+            自己
+          </Button>
+          <small>{selfOk ? '只有第一手可以' : '已經不是第一手'}</small>
+        </span>
+        <span className="spx-choice__btn">
+          <Button onClick={() => onPick(false)}>對手</Button>
+          <small>任何一手都可以</small>
+        </span>
+      </div>
+      <div className="confirm__actions">
+        <Button variant="ghost" size="sm" onClick={() => onPick(null)}>
+          取消
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
 export function SpecialInfoModal() {
   const info = useGameStore((s) => s.specialInfo)
   const close = useGameStore((s) => s.closeSpecialInfo)

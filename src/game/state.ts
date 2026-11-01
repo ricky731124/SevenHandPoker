@@ -332,13 +332,14 @@ export function fireUsesLeft(state: GameState, player: PlayerId): number {
 /**
  * 發動一張特殊卡(所有入口共用:自己用、電腦用、房主代對手用、回放重播)。依卡分派到下面的
  * 效果;火力全開另外把卡記進 fireUsed。效果沒發生(目標不合法、牌堆空…)→ 原 state 原封不動。
- * targetId:花色卡 / 偷天換日要指定的手牌;rng:有隨機的卡(偷天換日 / 強迫更新 / 爆破)。
+ * targetId:偷天換日要指定的手牌;targetIds:花色卡 1~2 張(舊棋譜只有 targetId = 1 張);
+ * self:強迫更新洗自己(只有自己的第一手可以);rng:有隨機的卡(偷天換日 / 強迫更新 / 爆破)。
  */
 export function applySpecial(
   state: GameState,
   player: PlayerId,
   card: SpecialCardId,
-  opts: { targetId?: string; rng?: () => number } = {},
+  opts: { targetId?: string; targetIds?: string[]; self?: boolean; rng?: () => number } = {},
 ): GameState {
   const def = getSpecialCard(card)
   // 火力全開:這回合用過 / 這張用過 / 3 次用完 → 不准(連線時房主也靠這裡擋對手)
@@ -347,9 +348,11 @@ export function applySpecial(
     if (state.specialUsed[player] || used.includes(card) || used.length >= FIRE_USES) return state
   }
   let next: GameState
-  if (def?.suit) next = opts.targetId ? applySuit(state, player, opts.targetId, def.suit) : state
-  else if (card === 'swap') next = opts.targetId ? applySwap(state, player, opts.targetId, opts.rng) : state
-  else if (card === 'refresh') next = applyRefresh(state, player, opts.rng)
+  if (def?.suit) {
+    const ids = opts.targetIds ?? (opts.targetId ? [opts.targetId] : [])
+    next = ids.length ? applySuit(state, player, ids, def.suit) : state
+  } else if (card === 'swap') next = opts.targetId ? applySwap(state, player, opts.targetId, opts.rng) : state
+  else if (card === 'refresh') next = applyRefresh(state, player, opts.rng, !!opts.self)
   else if (card === 'explode') next = applyExplode(state, player, opts.rng)
   else if (card === 'deathEye') next = applyDeathEye(state, player)
   else next = markSpecialUsed(state, player) // 偷窺 / 讓我看看:不動牌面,只記用過
@@ -439,23 +442,30 @@ export function applySwap(
   }
 }
 
+/** 花色卡一次最多改幾張(使用者 2026-11-02:1~2 張,玩家自己選)。 */
+export const SUIT_MAX_TARGETS = 2
+
 /**
- * Suit-bloom cards (踏雪尋梅 / 鑽石永恆 / 正中紅心 / 黑桃鴨): re-suit one hand
- * card to `suit`, keeping its rank and id. If that produces a card identical to
+ * Suit-bloom cards (踏雪尋梅 / 鑽石永恆 / 正中紅心 / 黑桃鴨): re-suit 1~2 hand
+ * cards to `suit`, keeping rank and id. If that produces a card identical to
  * one already in play, the eventual showdown ties via the existing `'both'` path
  * (§2.3) — no new mechanism needed. The off-deck blank/joker can't be re-suited.
+ * 任何一張不合法(不在手上 / 已是那個花色 / 重複 / 超過 2 張)→ 整個不生效。
  */
-export function applySuit(state: GameState, player: PlayerId, cardId: string, suit: Suit): GameState {
+export function applySuit(state: GameState, player: PlayerId, cardIds: string | string[], suit: Suit): GameState {
+  const ids = typeof cardIds === 'string' ? [cardIds] : cardIds
+  if (ids.length === 0 || ids.length > SUIT_MAX_TARGETS || new Set(ids).size !== ids.length) return state
   const hand = state.hands[player]
-  const idx = hand.findIndex((c) => c.id === cardId)
-  if (idx < 0) return state
-  const card = hand[idx]
-  if (!isTargetable(card) || card.suit === suit) return state
   const nextHand = hand.slice()
-  // Keep id + rank; remember the original suit so the showdown can reveal the
-  // change (e.g. ♣A→♠A). Only one special per match, so a card is never
-  // re-suited twice — the first original suit is the one that matters.
-  nextHand[idx] = { ...card, suit, resuitFrom: card.resuitFrom ?? card.suit }
+  for (const cardId of ids) {
+    const idx = hand.findIndex((c) => c.id === cardId)
+    if (idx < 0) return state
+    const card = hand[idx]
+    if (!isTargetable(card) || card.suit === suit) return state
+    // Keep id + rank; remember the original suit so the showdown can reveal the
+    // change (e.g. ♣A→♠A). 火力全開一張牌可能被改兩次 → 記最早的原花色。
+    nextHand[idx] = { ...card, suit, resuitFrom: card.resuitFrom ?? card.suit }
+  }
   return {
     ...state,
     hands: { ...state.hands, [player]: nextHand },
@@ -464,23 +474,31 @@ export function applySuit(state: GameState, player: PlayerId, cardId: string, su
 }
 
 /** 踏雪尋梅: re-suit a card to clubs. (Back-compat wrapper over applySuit.) */
-/** 強迫更新 可用嗎:對手手上要有普通牌(空白/鬼牌不算)、牌堆不能是空的(空的話洗回去抽到的還是同一批)。 */
-export function canRefresh(state: GameState, player: PlayerId): boolean {
-  return state.deck.length > 0 && state.hands[otherPlayer(player)].some(isTargetable)
+/** 強迫更新洗自己:只有「自己的第一手」(自己還沒出過牌)可以(使用者 2026-11-02)。洗對手照舊任何一手都行。 */
+export function canRefreshSelf(state: GameState, player: PlayerId): boolean {
+  return state.placementsDone[player] === 0
+}
+
+/** 強迫更新 可用嗎:被洗的那一方手上要有普通牌(空白/鬼牌不算)、牌堆不能是空的(空的話洗回去抽到的還是同一批)。
+ *  self = 洗自己(另外要是自己的第一手)。 */
+export function canRefresh(state: GameState, player: PlayerId, self = false): boolean {
+  if (self && !canRefreshSelf(state, player)) return false
+  return state.deck.length > 0 && state.hands[self ? player : otherPlayer(player)].some(isTargetable)
 }
 
 /**
- * 強迫更新 (refresh): the FOE's normal hand cards go back into the deck, the whole
- * deck is reshuffled, and the foe draws the same number back off the top — so both
- * the foe's hand and the deck order change. The off-deck blank/joker stay in hand
+ * 強迫更新 (refresh): the target's (FOE by default; `self` = my own hand, first hand only)
+ * normal hand cards go back into the deck, the whole deck is reshuffled, and the
+ * target draws the same number back off the top — so both that hand and the deck
+ * order change. The off-deck blank/joker stay in hand
  * (they never belong to the 52-deck). A re-suited card (踏雪尋梅…) returns with its
  * ORIGINAL suit — its id is still the original card's, and keeping the new suit
  * would put a duplicate (e.g. two ♠A) into the deck.
  * Only ONE rng() call (→ a shuffle seed), so a replay records a single number.
  */
-export function applyRefresh(state: GameState, player: PlayerId, rng: () => number = Math.random): GameState {
-  if (!canRefresh(state, player)) return state
-  const foe = otherPlayer(player)
+export function applyRefresh(state: GameState, player: PlayerId, rng: () => number = Math.random, self = false): GameState {
+  if (!canRefresh(state, player, self)) return state
+  const foe = self ? player : otherPlayer(player)
   const hand = state.hands[foe]
   const back = hand.filter(isTargetable).map(restoreSuit)
   const keep = hand.filter((c) => !isTargetable(c))

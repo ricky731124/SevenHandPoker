@@ -129,11 +129,15 @@ describe('applySuit (方塊/紅心/黑桃/梅花 通用)', () => {
 })
 
 describe('aiChooseSpecial (#13 AI 發動特殊牌)', () => {
-  it('re-suits toward a flush when it builds a ≥3 cluster (lowest off-suit victim)', () => {
-    // Two clubs already → converting one more makes 3. Off-suit targets: D9, H3.
-    const g = aiGame([card('C', 5), card('C', 9), card('D', 9), card('H', 3)])
+  it('花色卡(2026-11-02 一次 1~2 張):握 3 張同花 → 換 2 張最低的沒成對散牌湊成同花', () => {
+    const g = aiGame([card('C', 5), card('C', 9), card('C', 12), card('D', 8), card('H', 3)])
     const d = aiChooseSpecial(g, 'p2', ['clubs', 'hearts'])
-    expect(d).toEqual({ card: 'clubs', targetId: 'H3' }) // lowest off-suit card
+    expect(d).toEqual({ card: 'clubs', targetIds: ['H3', 'D8'] })
+  })
+
+  it('只有 2 張同花 → 換 2 張也湊不出同花,不用', () => {
+    const g = aiGame([card('C', 5), card('C', 9), card('D', 9), card('H', 3)])
+    expect(aiChooseSpecial(g, 'p2', ['clubs', 'hearts'])).toBeNull()
   })
 
   it('holds the suit-bloom when it would not build a cluster (<3)', () => {

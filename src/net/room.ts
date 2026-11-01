@@ -21,8 +21,10 @@ export type RoomType = 'normal' | 'special' | 'limited'
  * 限定房兩邊都 ≥ 2 → 手機上還在跑舊版的人開不了、也加入不了限定房。
  * 2 = 每格最多 2 張鬼牌(舊版不會擋第 3 張鬼)。
  * 3 = 火力全開(帶 5 用 3、每回合 1 張);規則另外要求火力全開房兩邊都 ≥ 3。
+ * 4 = 花色卡一次改 1~2 張(targetIds)、強迫更新可洗自己(self);特殊房 / 火力全開房規則要求兩邊都 ≥ 4
+ *     (2026-11-02;舊版收到 2 張只會套 1 張,兩邊手牌會對不上)。
  */
-export const ROOM_CLIENT_VER = 3
+export const ROOM_CLIENT_VER = 4
 
 export interface PlayerPresence {
   connected: boolean

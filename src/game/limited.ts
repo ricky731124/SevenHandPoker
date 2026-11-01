@@ -74,7 +74,7 @@ export const LIMITED_INFO: Record<LimitedMode, LimitedInfo> = {
       // 第 10 關上線、有人解鎖超過 10 張時,要補一句「解鎖更多就開更多(快配真人看兩人誰少)」(/new-stage 有寫)
       '開放到第 9 關的 10 張特殊卡（沒解鎖的也能帶），選 5 張進場。',
       '整場可以用 3 張：每回合最多 1 張，每張只能用一次。',
-      HIDDEN_RULE,
+      // 2026-11-02 使用者:火力全開是一般牌組,不用隱藏推牌位置(那是為了鬼牌 / 空白牌擠成一塊)→ 拿掉 HIDDEN_RULE
     ],
   },
 }
@@ -150,6 +150,12 @@ export const usesLimitedCompare = (m: LimitedMode | null | undefined): boolean =
  */
 export const LIMITED_JOKER_CAP = 2
 export const jokerCapOf = (m: LimitedMode | null | undefined): number | null => (usesLimitedCompare(m) ? LIMITED_JOKER_CAP : null)
+
+/**
+ * 推牌位置要不要隨機(對手只看得到張數,§7):只有牌組變了的三種(鬼牌 / 空白排序後擠成一塊,一看就知道)。
+ * 火力全開是一般牌組 → 跟一般房一樣看得到位置,boss 看破也照常(使用者 2026-11-02)。
+ */
+export const hidesPushPos = (m: LimitedMode | null | undefined): boolean => changesDeck(m)
 
 /** 這個玩法有沒有特殊卡(戰前選卡、牌桌特殊牌按鈕):只有火力全開。 */
 export const usesSpecials = (m: LimitedMode | null | undefined): boolean => m === 'fire'

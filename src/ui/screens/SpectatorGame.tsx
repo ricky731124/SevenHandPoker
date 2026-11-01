@@ -115,7 +115,7 @@ export default function SpectatorGame() {
         useGameStore.setState({ deathEyeFx: { target: fx.by === 'p1' ? 'p2' : 'p1', slots: deathEyeSlots(eng, fx.by), n: fx.n } })
       }
       // 強迫更新 → 觀戰也播被打那一方的重抽動畫
-      if (fx.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.by === 'p1' ? 'p2' : 'p1', n: fx.n } })
+      if (fx.card === 'refresh') useGameStore.setState({ refreshFx: { target: fx.self ? fx.by : fx.by === 'p1' ? 'p2' : 'p1', n: fx.n } })
       // 爆破 → 觀戰播被炸那一方的爆炸動畫;炸到哪張用前後兩個快照的手牌比對出來
       if (fx.card === 'explode') {
         const target = fx.by === 'p1' ? 'p2' : 'p1'

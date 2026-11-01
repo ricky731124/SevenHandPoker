@@ -458,6 +458,11 @@
 .game__status--mine {
   animation: status-breathe 3.6s ease-in-out infinite;
 }
+/* 短暫跳出、會自己消失的提示(flashStatus)疊在牌堆上面(牌堆 z 20~30),長句才不會被中間幾格蓋住;
+   一直掛著的回合提示維持 z 9,不擋牌。2026-11-02 使用者定。 */
+.game__status--flash {
+  z-index: 40;
+}
 .game__action {
   position: absolute;
   right: clamp(4px, 1vw, 18px);

@@ -5,7 +5,7 @@ import { rollMain, type BossRuntime, type PickMain } from './bossAI'
 import { CAMPAIGN } from './campaign'
 import { fireChooseSpecial, fireLearn, fireLoadout, suitPlayCheck } from './fireAI'
 import { limitedPick, limitedPlace } from './limitedAI'
-import { buildFrames, recordingRng, type Move } from './replay'
+import { buildFrames, recordingRng, suitMove, type Move } from './replay'
 import { mulberry32 } from './rng'
 import { FIRE_LOADOUT, FIRE_MIN_POOL, FIRE_USES, SPECIAL_CARD_LIST, firePool, firePoolSize, getSpecialCard, unlockedCount, type SpecialCardId } from './specialCards'
 import {
@@ -180,7 +180,7 @@ describe('火力全開電腦用卡', () => {
       if (!d) continue
       hits++
       expect(d.card).toBe('hearts')
-      const after = applySpecial(g, 'p2', d.card, { targetId: d.targetId })
+      const after = applySpecial(g, 'p2', d.card, { targetId: d.targetId, targetIds: d.targetIds })
       const cards = after.hands.p2.filter((c) => d.thenPick!.includes(c.id))
       const cat = evaluate(cards).category
       expect([CATEGORY.FLUSH, CATEGORY.STRAIGHT_FLUSH]).toContain(cat)
@@ -189,19 +189,36 @@ describe('火力全開電腦用卡', () => {
     expect(hits).toBeGreaterThan(0)
   })
 
-  it('花色卡:只有 2~3 張同花色 → 不換(不會「換了湊不成同花」)', () => {
+  it('花色卡:只有 2 張同花色 → 不換(不會「換了湊不成同花」)', () => {
+    const g0 = createGame(7, 'p2', 'p2', 'fire')
+    const hand = [card('H', 2), card('H', 5), card('S', 3), card('C', 7), card('D', 13), card('S', 11), card('D', 9), ...g0.hands.p2.filter((c) => c.kind)]
+    const g: GameState = { ...g0, hands: { ...g0.hands, p2: hand } }
+    for (let i = 0; i < 40; i++) expect(fireChooseSpecial(g, 'p2', ['hearts', 'clubs', 'spades', 'diamonds'], rt('attack'), mulberry32(i))).toBeNull()
+  })
+
+  it('花色卡(2026-11-02 一次 1~2 張):3 張同花色 → 換 2 張沒成對的低散牌,這手就出那個同花', () => {
     const g0 = createGame(7, 'p2', 'p2', 'fire')
     const hand = [card('H', 2), card('H', 5), card('H', 9), card('S', 3), card('C', 7), card('D', 13), card('S', 11), ...g0.hands.p2.filter((c) => c.kind)]
     const g: GameState = { ...g0, hands: { ...g0.hands, p2: hand } }
-    for (let i = 0; i < 40; i++) expect(fireChooseSpecial(g, 'p2', ['hearts', 'clubs', 'spades', 'diamonds'], rt('attack'), mulberry32(i))).toBeNull()
+    let hits = 0
+    for (let i = 0; i < 40; i++) {
+      const d = fireChooseSpecial(g, 'p2', ['hearts'], rt('attack'), mulberry32(i))
+      if (!d) continue
+      hits++
+      expect(d.targetIds).toEqual(['S3', 'C7'])
+      const after = applySpecial(g, 'p2', d.card, { targetIds: d.targetIds })
+      const cards = after.hands.p2.filter((c) => d.thenPick!.includes(c.id))
+      expect([CATEGORY.FLUSH, CATEGORY.STRAIGHT_FLUSH]).toContain(evaluate(cards).category)
+    }
+    expect(hits).toBeGreaterThan(0)
   })
 
   it('suitPlayCheck:換完這手不出那個同花 → 不換', () => {
     const g0 = createGame(8, 'p2', 'p2', 'fire')
     const hand = [card('H', 2), card('H', 5), card('H', 9), card('H', 12), card('S', 3), ...g0.hands.p2.filter((c) => c.kind)]
     const g: GameState = { ...g0, hands: { ...g0.hands, p2: hand } }
-    expect(suitPlayCheck(g, 'p2', 'hearts', 'S3', () => ['H2'])).toBeNull()
-    expect(suitPlayCheck(g, 'p2', 'hearts', 'S3', (a) => a.hands.p2.filter((c) => c.suit === 'H' && !c.kind).map((c) => c.id))?.thenPick?.length).toBe(5)
+    expect(suitPlayCheck(g, 'p2', 'hearts', ['S3'], () => ['H2'])).toBeNull()
+    expect(suitPlayCheck(g, 'p2', 'hearts', ['S3'], (a) => a.hands.p2.filter((c) => c.suit === 'H' && !c.kind).map((c) => c.id))?.thenPick?.length).toBe(5)
   })
 
   it('開局沒有任何條件 → 不硬用(爆破 / 強迫更新 / 死神之眼都要條件)', () => {
@@ -263,10 +280,10 @@ describe('火力全開電腦用卡', () => {
           const d = fireChooseSpecial(g, me, loads[me], rts[me], rng)
           if (d) {
             const rec = recordingRng(rng)
-            const next = applySpecial(g, me, d.card, { targetId: d.targetId, rng: rec.rng })
+            const next = applySpecial(g, me, d.card, { targetId: d.targetId, targetIds: d.targetIds, rng: rec.rng })
             expect(next).not.toBe(g)
             expect(loads[me]).toContain(d.card)
-            moves.push({ t: 'special', by: me, card: d.card, targetId: d.targetId, rng: rec.out.length ? rec.out : undefined })
+            moves.push(d.targetIds ? suitMove(me, d.card, d.targetIds, undefined) : { t: 'special', by: me, card: d.card, targetId: d.targetId, rng: rec.out.length ? rec.out : undefined })
             rts[me] = fireLearn(rts[me], d.card, next, me)
             totalUses++
             if (getSpecialCard(d.card)?.suit) {

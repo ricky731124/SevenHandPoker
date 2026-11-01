@@ -212,9 +212,10 @@ describe('boss 看牌後怎麼出(eyeAdjust)', () => {
     const sf = pile(5, 'D', 2) // 同花順
     const brain = rt()
     const at = (picks: number) => seen(board({ piles: { 1: sf, 5: pile(1, 'H', 13) }, bossHand: hand, picks }))
-    expect(bossPick(at(0), 'p2', brain, R(0))).toEqual(['C2'])
-    expect(bossPick(at(0), 'p2', brain, R(0))).toEqual(['C2']) // 同一手重算不重複累加
-    expect(bossPick(at(1), 'p2', brain, R(0))).toEqual(['C2'])
+    // 忍的時候送 2 張最沒用的散牌(2026-11-02 送格打法)
+    expect(bossPick(at(0), 'p2', brain, R(0))).toEqual(['C2', 'H4'])
+    expect(bossPick(at(0), 'p2', brain, R(0))).toEqual(['C2', 'H4']) // 同一手重算不重複累加
+    expect(bossPick(at(1), 'p2', brain, R(0))).toEqual(['C2', 'H4'])
     expect(bossPick(at(2), 'p2', brain, R(0))).toHaveLength(3) // 停損:三條照出
   })
 

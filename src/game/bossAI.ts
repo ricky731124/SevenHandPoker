@@ -234,14 +234,9 @@ function hoardPick(cands: Card[][], hand: Card[], state: GameState, me: PlayerId
   const midPairs = cands.filter((c) => evaluate(c).category === CATEGORY.PAIR && c[0].rank >= 7)
   if (midPairs.length) return midPairs.reduce((b, c) => (c[0].rank > b[0].rank ? c : b), midPairs[0]) // 最強中強對
 
-  // 沒中強成牌:丟一張低散牌(保留弱對去湊三條/葫蘆、不拆同花/順)。
-  const held = monsterCards(cands)
-  const rankCount = new Map<number, number>()
-  for (const c of hand) if (!isSpecial(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
-  const junkSingles = hand
-    .filter((c) => !isSpecial(c) && !held.has(c.id) && (rankCount.get(c.rank) ?? 0) === 1)
-    .sort((a, b) => a.rank - b.rank)
-  if (junkSingles.length) return [junkSingles[0]]
+  // 沒中強成牌:送 2 張最沒用的散牌(保留弱對去湊三條/葫蘆、不拆同花/順;送 2 張的理由見 junkCards)。
+  const junk = junkCards(hand, monsterCards(cands))
+  if (junk.length) return junk
 
   // 只剩弱對/兩對等便宜成牌 → 領其中最弱的(照 CP)。
   const cheap = cands.filter((c) => evaluate(c).category < CATEGORY.STRAIGHT)
@@ -280,6 +275,8 @@ function drawHoldPick(hand: Card[]): Card[] | null {
   const spare = reals.filter((c) => !drawSet.has(c.id))
   const sp = candidatePiles(spare)
   if (sp.length) return weakest(sp)
+  const junk = junkCards(hand, drawSet)
+  if (junk.length) return junk
   if (spare.length) return [[...spare].sort((a, b) => a.rank - b.rank)[0]]
   return null
 }
@@ -326,6 +323,8 @@ function peekHoldPick(hand: Card[], peek: Card[]): Card[] | null {
   const spare = reals.filter((c) => !protect.has(c.id))
   const sp = candidatePiles(spare)
   if (sp.length) return weakest(sp)
+  const junk = junkCards(hand, protect)
+  if (junk.length) return junk
   if (spare.length) return [[...spare].sort((a, b) => a.rank - b.rank)[0]]
   return null
 }
@@ -404,22 +403,71 @@ function eyeAdjust(pile: Card[], cands: Card[][], hand: Card[], state: GameState
   return out
 }
 
-/** 忍的時候出的小牌:最低的沒成對散牌(不拆大牌);沒有就出最弱的候選。 */
+/** 忍的時候出的小牌:最沒用的沒成對散牌(不拆大牌,見 junkCards);沒有就出最弱的候選。 */
 function smallPile(cands: Card[][], hand: Card[]): Card[] {
-  const keep = monsterCards(cands)
-  const rankCount = new Map<number, number>()
-  for (const c of hand) if (!isSpecial(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
-  const junk = hand
-    .filter((c) => !isSpecial(c) && !keep.has(c.id) && (rankCount.get(c.rank) ?? 0) === 1)
-    .sort((a, b) => a.rank - b.rank)
-  if (junk.length) return [junk[0]]
+  const junk = junkCards(hand, monsterCards(cands))
+  if (junk.length) return junk
   return weakest(cands)
+}
+
+/**
+ * 送格調整(模擬比較用;遊戲裡永遠是 true)。dumpTwo = 2026-11-02 使用者定的送格打法:
+ * 不單出鬼、送格送 2 張最沒用的牌、沒成牌時收手期出「鬼 + 最大那張」。false = 舊打法(送 1 張、沒成牌就單出鬼 / 最大兩張)。
+ */
+export const PICK_TUNE = { dumpTwo: true }
+
+/** 只有一張鬼牌的那疊(單出鬼 = 白白耗掉鬼牌,使用者 2026-11-02:不准)。 */
+const isLoneJoker = (c: Card[]) => c.length === 1 && isJoker(c[0])
+
+/**
+ * 送格要送「最沒用的 2 張」(使用者 2026-11-02):送 1 張 = 對手一看就知道最多是單張,拿最便宜的牌就吃掉,
+ * 等於白送一格;送 2 張對手分不出是一對還是高牌(例:對手有 8 一對和 3 條,不知道該用哪個打哪疊),
+ * 送格才有價值。最沒用 = 沒成對的單張裡:點數低、不是湊同花(同花色 ≥ 3 張)/ 順子(4 連)的料、
+ * 有鬼牌時 Q 以上留著(之後跟鬼湊大對)。protect = 不能動的牌(要留的大牌 / 拼牌)。
+ */
+function junkCards(hand: Card[], protect: Set<string>, n = PICK_TUNE.dumpTwo ? 2 : 1): Card[] {
+  const reals = hand.filter((c) => !isSpecial(c))
+  const rankCount = new Map<number, number>()
+  const suitCount = new Map<string, number>()
+  for (const c of reals) {
+    rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
+    suitCount.set(c.suit, (suitCount.get(c.suit) ?? 0) + 1)
+  }
+  const hasJoker = hand.some(isJoker)
+  const draw = new Set((straightDrawCards(reals) ?? []).map((c) => c.id))
+  const useful = (c: Card): number =>
+    c.rank + Math.max(0, (suitCount.get(c.suit) ?? 0) - 2) * 6 + (draw.has(c.id) ? 8 : 0) + (hasJoker && c.rank >= 12 ? 10 : 0)
+  return reals
+    .filter((c) => !protect.has(c.id) && (rankCount.get(c.rank) ?? 0) === 1)
+    .sort((a, b) => (PICK_TUNE.dumpTwo ? useful(a) - useful(b) : 0) || a.rank - b.rank)
+    .slice(0, n)
+}
+
+/**
+ * 手上沒有任何成牌(鬼牌也湊不出同花 / 順子)時出什麼(使用者 2026-11-02):
+ *  - 收手期(落後 / 後段,見 shouldCashOut)或失手 → 出最大的:有鬼 = 鬼 + 最大那張(強一對 hold 住);沒鬼 = 最大兩張。
+ *  - 其他時候 → 送格:送 2 張最沒用的牌(junkCards),鬼牌和大牌留著。
+ * 絕不單出一張鬼。
+ */
+function noMadeHandPick(hand: Card[], state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): Card[] {
+  const reals = hand.filter((c) => !isSpecial(c))
+  const joker = hand.find(isJoker)
+  if (!reals.length) return fallbackPile(hand)
+  if (shouldCashOut(state, me, rt) || !sharp(rt.execution, rng)) {
+    if (!joker) return fallbackPile(hand)
+    const top = reals.reduce((b, c) => (c.rank > b.rank ? c : b), reals[0])
+    return [top, joker]
+  }
+  const junk = junkCards(hand, new Set())
+  return junk.length ? junk : fallbackPile(hand)
 }
 
 export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random): string[] {
   const hand = state.hands[me]
-  const cands = candidatePiles(hand)
-  if (cands.length === 0) return fallbackPile(hand).map((c) => c.id)
+  // 單出一張鬼不當候選(使用者 2026-11-02:把鬼耗掉不合理)。拿掉後沒候選 = 手上沒任何成牌 → noMadeHandPick。
+  const all = candidatePiles(hand)
+  const cands = PICK_TUNE.dumpTwo ? all.filter((c) => !isLoneJoker(c)) : all
+  if (cands.length === 0) return (PICK_TUNE.dumpTwo ? noMadeHandPick(hand, state, me, rt, rng) : fallbackPile(hand)).map((c) => c.id)
 
   const cashOut = shouldCashOut(state, me, rt)
 
@@ -699,14 +747,14 @@ export function bossChooseSpecial(
   loadout: SpecialCardId[],
   profile?: BossProfile,
   opts: { signature?: SpecialCardId; rng?: Rng } = {},
-): { card: SpecialCardId; targetId?: string } | null {
+): { card: SpecialCardId; targetId?: string; targetIds?: string[] } | null {
   if (state.specialUsed[me]) return null
   const hand = state.hands[me]
   const insight = profile?.insight ?? 0
   const draw = profile?.draw ?? 0
   const rng = opts.rng ?? Math.random
 
-  type Cand = { card: SpecialCardId; targetId?: string; score: number }
+  type Cand = { card: SpecialCardId; targetId?: string; targetIds?: string[]; score: number }
   const cands: Cand[] = []
 
   // 死神之眼(使用者 2026-10-16 定案):看光對手已放在決鬥區、還沒對決的牌堆。每一手判斷:
@@ -759,39 +807,18 @@ export function bossChooseSpecial(
     if (conds > 0 && rng() < Math.min(0.25, 0.08 + 0.06 * (conds - 1))) return { card: 'refresh' }
   }
 
-  // suit-bloom → ONLY to complete/keep a real 5-card flush (SPEC 使用者 2026-08-16):
-  //   花色牌一定是拿來湊同花/同花順。必須已握 ≥4 張該花色,轉「第 5 張」才成同花;而且不去
-  //   拆掉更該保留的對子/三條——轉一張沒成對的低散牌當犧牲。已握 5 張(已是同花)時,只有
-  //   在「某張同花牌同時能跟別張湊對(雙用)、且有多餘散牌可轉」時才轉,好讓同花與對子兼得。
-  const rankCount = new Map<number, number>()
-  for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
-  const pickVictim = (cards: Card[]): Card | null => {
-    if (!cards.length) return null
-    const unpaired = cards.filter((c) => (rankCount.get(c.rank) ?? 0) === 1)
-    const pool = unpaired.length ? unpaired : cards
-    return pool.reduce((lo, c) => (c.rank < lo.rank ? c : lo), pool[0])
-  }
-  let bloom: { card: SpecialCardId; targetId: string; suited: number } | null = null
+  // suit-bloom → ONLY to complete/keep a real 5-card flush(規則在 suitVictims)。
+  // 2026-11-02 花色卡一次改 1~2 張 → 握 3 張同花色就能換 2 張湊成同花(suitVictims)。
+  let bloom: { card: SpecialCardId; targetIds: string[]; suited: number } | null = null
   for (const id of loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const suited = hand.filter((c) => isTargetable(c) && c.suit === def.suit)
-    const others = suitTargets(state, me, def.suit) // targetable, not this suit
-    if (suited.length < 4) continue // 少於 4 張同花 → 一次轉牌湊不出同花,不亂用
-
-    let victim: Card | null = null
-    if (suited.length === 4) {
-      victim = pickVictim(others) // 轉第 5 張成同花
-    } else {
-      // 已是同花:找「同時能湊對的雙用同花牌」,轉一張多餘散牌把它釋放出來(同花+對子兼得)。
-      const doubleDuty = suited.some((s) => (rankCount.get(s.rank) ?? 0) >= 2)
-      if (doubleDuty) victim = pickVictim(others.filter((o) => (rankCount.get(o.rank) ?? 0) === 1))
-    }
-    if (victim && (!bloom || suited.length > bloom.suited)) {
-      bloom = { card: id, targetId: victim.id, suited: suited.length }
-    }
+    const victims = suitVictims(state, me, def.suit)
+    if (!victims) continue
+    const suited = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
+    if (!bloom || suited > bloom.suited) bloom = { card: id, targetIds: victims.map((c) => c.id), suited }
   }
-  if (bloom) cands.push({ card: bloom.card, targetId: bloom.targetId, score: 70 + bloom.suited }) // 湊成同花
+  if (bloom) cands.push({ card: bloom.card, targetIds: bloom.targetIds, score: 70 + bloom.suited }) // 湊成同花
 
   // spy / peek — high, especially for high-insight / high-draw bosses (use early).
   if (loadout.includes('spy')) cands.push({ card: 'spy', score: 62 + insight * 0.25 })
@@ -811,5 +838,32 @@ export function bossChooseSpecial(
 
   if (!cands.length) return null
   const pick = cands.reduce((b, c) => (c.score > b.score ? c : b), cands[0])
+  if (pick.targetIds) return { card: pick.card, targetIds: pick.targetIds }
   return pick.targetId ? { card: pick.card, targetId: pick.targetId } : { card: pick.card }
+}
+
+/**
+ * 花色卡要換哪幾張(boss / 火力全開 / 對戰電腦共用;2026-11-02 一次改 1~2 張):
+ * 花色卡一定是拿來湊同花 / 同花順(SPEC 使用者 2026-08-16),不拆該留的對子——換沒成對的低散牌。
+ *  - 握 3 張該花色 → 換 2 張沒成對的低散牌,湊成 5 張同花(沒有 2 張沒成對的散牌就不換)。
+ *  - 握 4 張 → 換 1 張(第 5 張)。
+ *  - 已是同花(≥5):只有「某張同花牌同時能跟別張湊對(雙用)、且有多餘散牌可換」時換 1 張,同花與對子兼得。
+ * 回傳 null = 這張卡現在沒用。
+ */
+export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit']): Card[] | null {
+  const hand = state.hands[me]
+  const rankCount = new Map<number, number>()
+  for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
+  const suited = hand.filter((c) => isTargetable(c) && c.suit === suit)
+  const others = suitTargets(state, me, suit) // targetable, not this suit
+  const unpaired = (cards: Card[]) => cards.filter((c) => (rankCount.get(c.rank) ?? 0) === 1)
+  const lowest = (cards: Card[], n: number): Card[] | null =>
+    cards.length >= n ? [...cards].sort((a, b) => a.rank - b.rank).slice(0, n) : null
+  if (suited.length === 3) return lowest(unpaired(others), 2)
+  if (suited.length === 4) {
+    const free = unpaired(others)
+    return lowest(free.length ? free : others, 1)
+  }
+  if (suited.length >= 5 && suited.some((s) => (rankCount.get(s.rank) ?? 0) >= 2)) return lowest(unpaired(others), 1)
+  return null
 }

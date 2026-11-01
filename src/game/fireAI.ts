@@ -10,7 +10,7 @@
 
 import type { Card } from './cards'
 import { CATEGORY, evaluate } from './evaluate'
-import { bossPick, deathEyeTrigger, explodeTriggers, refreshTriggers, type BossRuntime, type PickMain } from './bossAI'
+import { bossPick, deathEyeTrigger, explodeTriggers, refreshTriggers, suitVictims, type BossRuntime, type PickMain } from './bossAI'
 import { shuffle } from './rng'
 import { FIRE_LOADOUT, FIRE_USES, SPECIAL_CARD_LIST, getSpecialCard, type SpecialCardId } from './specialCards'
 import {
@@ -24,7 +24,6 @@ import {
   isTargetable,
   otherPlayer,
   peekNextDraw,
-  suitTargets,
   swapTargets,
   type GameState,
   type PlayerId,
@@ -105,6 +104,8 @@ function forcedPick(state: GameState, me: PlayerId, avail: SpecialCardId[], rt: 
 export interface FireDecision {
   card: SpecialCardId
   targetId?: string
+  /** 花色卡:換哪 1~2 張(2026-11-02) */
+  targetIds?: string[]
   /** 花色卡:用完這手要出的牌(已確認是那個花色的同花)——呼叫端照這個出,不再另外算 */
   thenPick?: string[]
 }
@@ -117,37 +118,18 @@ export function suitPlayCheck(
   state: GameState,
   me: PlayerId,
   card: SpecialCardId,
-  targetId: string,
+  targetIds: string[],
   pickFn: (after: GameState) => string[],
 ): FireDecision | null {
   const suit = getSpecialCard(card)?.suit
   if (!suit) return null
-  const after = applySpecial(state, me, card, { targetId })
+  const after = applySpecial(state, me, card, { targetIds })
   if (after === state) return null
   const pick = pickFn(after)
   const cards = after.hands[me].filter((c) => pick.includes(c.id))
   const cat = evaluate(cards).category
   const flush = cat === CATEGORY.FLUSH || cat === CATEGORY.STRAIGHT_FLUSH
-  return flush && cards.filter(isTargetable).every((c) => c.suit === suit) ? { card, targetId, thenPick: pick } : null
-}
-
-/** 花色卡要換哪張(跟 boss 同一套:已握 4 張同花色才換第 5 張;已是同花時只為了把能湊對的同花牌換出來)。 */
-function suitVictim(state: GameState, me: PlayerId, suit: Card['suit']): Card | null {
-  const hand = state.hands[me]
-  const rankCount = new Map<number, number>()
-  for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
-  const suited = hand.filter((c) => isTargetable(c) && c.suit === suit)
-  const others = suitTargets(state, me, suit)
-  if (suited.length < 4) return null
-  const lowest = (cards: Card[]): Card | null => {
-    if (!cards.length) return null
-    const unpaired = cards.filter((c) => (rankCount.get(c.rank) ?? 0) === 1)
-    const pool = unpaired.length ? unpaired : cards
-    return pool.reduce((lo, c) => (c.rank < lo.rank ? c : lo), pool[0])
-  }
-  if (suited.length === 4) return lowest(others)
-  const doubleDuty = suited.some((s) => (rankCount.get(s.rank) ?? 0) >= 2)
-  return doubleDuty ? lowest(others.filter((o) => (rankCount.get(o.rank) ?? 0) === 1)) : null
+  return flush && cards.filter(isTargetable).every((c) => c.suit === suit) ? { card, targetIds, thenPick: pick } : null
 }
 
 /**
@@ -175,10 +157,10 @@ export function fireChooseSpecial(
   for (const id of avail) {
     const suit = getSpecialCard(id)?.suit
     if (!suit) continue
-    const victim = suitVictim(state, me, suit)
-    if (!victim) continue
+    const victims = suitVictims(state, me, suit)
+    if (!victims) continue
     // 複製一份 runtime:bossPick 會就地記死神之眼停損
-    const ok = suitPlayCheck(state, me, id, victim.id, (after) => bossPick(after, me, { ...rt }, rng))
+    const ok = suitPlayCheck(state, me, id, victims.map((c) => c.id), (after) => bossPick(after, me, { ...rt }, rng))
     if (ok) return ok
   }
 

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
-import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, cardFxMs, useGameStore } from '../../state/gameStore'
+import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, REFRESH_SELF_LOCKED, cardFxMs, useGameStore } from '../../state/gameStore'
+import { useToastStore } from '../../state/toastStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
 import { attachOnline } from '../../net/netgame'
 import { setPlayerMeta } from '../../net/room'
 import { aiPick, aiPlace } from '../../game/ai'
-import { fireUsesLeft, otherPlayer, suitTargets, swapTargets, type GameState } from '../../game/state'
+import { canRefreshSelf, fireUsesLeft, otherPlayer, suitTargets, swapTargets, type GameState } from '../../game/state'
 import { getSpecialCard, ALL_SPECIAL_CARD_IDS, type SpecialCardId } from '../../game/specialCards'
 import { SUIT_SYMBOL } from '../../game/cards'
 import { sortHand } from '../../game/sort'
@@ -27,7 +28,7 @@ import TopBar from '../components/game/TopBar'
 import CoinToss from '../components/game/CoinToss'
 import VsIntro from '../components/game/VsIntro'
 import PreMatchSpecial from '../components/game/PreMatchSpecial'
-import { SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
+import { RefreshChoice, SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
 import StickerProto from '../components/game/StickerProto'
 import DanmakuBar from '../components/game/DanmakuBar'
 import DanmakuLayer from '../components/game/DanmakuLayer'
@@ -455,7 +456,7 @@ export function GameBoard() {
         : `這回合已經用過了（剩 ${fireUsesLeft(engine, me)} 次・對手剩 ${fireUsesLeft(engine, otherPlayer(me))} 次）`
       : '本場特殊牌已使用完畢'
   const targetHint = targetingDef?.suit
-    ? `選一張手牌，變成 ${SUIT_SYMBOL[targetingDef.suit]}`
+    ? `選 1~2 張手牌，變成 ${SUIT_SYMBOL[targetingDef.suit]}（已選 ${g.specialPicks.length} 張）`
     : '選一張手牌換掉'
 
   // ----- per-turn timer -----
@@ -548,7 +549,8 @@ export function GameBoard() {
   const meSortMode = spec ? (g.spectateLive?.p1Sort?.mode ?? 'rank') : g.sortMode
   const meSortDir = spec ? (g.spectateLive?.p1Sort?.dir ?? 'asc') : g.sortDir
   let meHandCards = engine.hands[me]
-  let meSelected: string[] = spec ? (g.spectateLive?.p1Sel ?? []) : targeting ? [] : g.selected
+  // 花色卡指定中:浮起的是「要改花色」的那 1~2 張(原本的出牌選取先放下)
+  let meSelected: string[] = spec ? (g.spectateLive?.p1Sel ?? []) : targeting ? (targetingDef?.suit ? g.specialPicks : []) : g.selected
   if (spec && specPend?.by === me) {
     meHandCards = [...engine.hands[me], ...specPend.cards]
     meSelected = specPend.cards.map((c) => c.id)
@@ -741,7 +743,7 @@ export function GameBoard() {
       {(spec ? spectatorStatusText(engine, seats.p1.name, seats.p2.name) : (g.statusOverride ?? statusText)) && (
         // 只在「輪到我動作」(選牌 / 放對手的牌)時讓提示框微微呼吸,提醒玩家該他了;
         // 對手思考/確認中不呼吸(我沒決定權)。觀戰無「我」→ 不呼吸。#5
-        <div className={`game__status${myActive && !isPaused && !spec ? ' game__status--mine' : ''}`}>
+        <div className={`game__status${myActive && !isPaused && !spec ? ' game__status--mine' : ''}${!spec && g.statusOverride ? ' game__status--flash' : ''}`}>
           {spec ? spectatorStatusText(engine, seats.p1.name, seats.p2.name) : (g.statusOverride ?? statusText)}
         </div>
       )}
@@ -754,8 +756,27 @@ export function GameBoard() {
       {targeting && (
         <div className="game__special-banner">
           <span>{targetHint}</span>
+          {targetingDef?.suit && (
+            <Button size="sm" variant="primary" disabled={g.specialPicks.length === 0} onClick={g.confirmSpecialTarget}>
+              確定
+            </Button>
+          )}
           <Button size="sm" onClick={g.cancelSpecialTarget}>取消</Button>
         </div>
+      )}
+      {/* 強迫更新:洗自己還是洗對手(2026-11-02;自己只有第一手能選,其他手反灰、點了說明原因) */}
+      {g.refreshChoice && iPick && !spec && (
+        <RefreshChoice
+          selfOk={canRefreshSelf(engine, me)}
+          onPick={(self) => {
+            if (self && !canRefreshSelf(engine, me)) {
+              sfx.error()
+              useToastStore.getState().show(REFRESH_SELF_LOCKED)
+              return
+            }
+            g.resolveRefresh(self)
+          }}
+        />
       )}
 
       <div className="game__hand">
@@ -784,8 +805,9 @@ export function GameBoard() {
       {(g.special || spec || replay) && <ExplodeFx me={me} cardW={sz.card} />}
       {/* 死神之眼:眼睛張開閃光 → 被看的那幾堆依序翻開 */}
       {(g.special || spec || replay) && <DeathEyeFx me={me} cardW={sz.card} />}
-      {/* 花色卡 / 偷天換日 / 偷窺 / 讓我看看:自己用的自己看;讓我看看被看的那一方也看得到 */}
-      {g.special && !spec && !replay && <CardFx me={me} cardW={sz.card} />}
+      {/* 花色卡 / 偷天換日 / 偷窺 / 讓我看看:自己用的自己看;讓我看看被看的那一方也看得到。
+          回放也播(2026-11-02,雙方的都播);觀戰沒有這些演出的資料 → 不掛 */}
+      {((g.special && !spec) || replay) && <CardFx me={me} cardW={sz.card} />}
 
       {/* in-game special-card trigger (my pick phase, one-shot; greys when spent).
           When spent we keep it visible but inert, and surface a small bubble on

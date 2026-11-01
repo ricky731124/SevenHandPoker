@@ -23,9 +23,11 @@ interface Run {
   lift: number
 }
 
-/** 手牌位置快照:牌 id → 位置(我方手牌、觀戰全開的對手手牌),以及雙方第幾張 → 位置(牌背用)。 */
+/** 手牌位置快照:牌 id → 位置(我方手牌、觀戰全開的對手手牌),以及雙方第幾張 → 位置(牌背用)。
+ *  byId 分兩邊記(2026-11-02 修):強迫更新 / 偷天換日會把我手上的牌洗回牌堆、之後被對手抽走,
+ *  混在一起查會找到「它以前在我手牌列」的舊位置 → 炸對手的牌、動畫卻飛到我這排。 */
 interface Snapshot {
-  byId: Map<string, Box>
+  byId: { hand: Map<string, Box>; ohand: Map<string, Box> }
   byIdx: { hand: Box[]; ohand: Box[] }
 }
 
@@ -45,7 +47,7 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
   const fx = useGameStore((s) => s.explodeFx)
   const anchor = useRef<HTMLDivElement>(null)
   const seenN = useRef(fx?.n ?? 0)
-  const snap = useRef<Snapshot>({ byId: new Map(), byIdx: { hand: [], ohand: [] } })
+  const snap = useRef<Snapshot>({ byId: { hand: new Map(), ohand: new Map() }, byIdx: { hand: [], ohand: [] } })
   const prevIdx = useRef<{ at: number; idx: Snapshot['byIdx'] } | null>(null)
   const [run, setRun] = useState<Run | null>(null)
 
@@ -71,10 +73,12 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
       const oy = (ph.clientTop + h.offsetTop) * pk
       return { x: (pr.left - rr.left + ox) / k, y: (pr.top - rr.top + oy) / k, w: (h.offsetWidth * pk) / k, h: (h.offsetHeight * pk) / k }
     }
-    root.querySelectorAll('[data-card-id]').forEach((el) => {
-      const id = el.getAttribute('data-card-id')
-      if (id) snap.current.byId.set(id, box(el))
-    })
+    for (const side of ['hand', 'ohand'] as const) {
+      root.querySelectorAll(`.game__${side} [data-card-id]`).forEach((el) => {
+        const id = el.getAttribute('data-card-id')
+        if (id) snap.current.byId[side].set(id, box(el))
+      })
+    }
     const next = {
       hand: [...root.querySelectorAll('.game__hand .hand__slot')].map(box),
       ohand: [...root.querySelectorAll('.game__ohand .ohand__slot')].map(box),
@@ -124,7 +128,7 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
     // 手牌剛少一張(2 秒內)→ 用少之前的排法,牌才會從它原本的位置浮起來
     const before = prevIdx.current
     if (before && Date.now() - before.at < 2000 && before.idx[side].length === list.length + 1) list = before.idx[side]
-    let slot = (fx.card && snap.current.byId.get(fx.card.id)) || undefined
+    let slot = (fx.card && snap.current.byId[side].get(fx.card.id)) || undefined
     if (!slot && fx.index !== undefined && list.length) slot = list[Math.max(0, Math.min(list.length - 1, fx.index))]
     if (!slot) {
       const c = center(targetIsMe ? '.game__hand' : '.game__ohand')

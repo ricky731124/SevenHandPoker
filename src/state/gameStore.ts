@@ -12,6 +12,8 @@ import {
   canExplode,
   deathEyeSlots,
   canRefresh,
+  canRefreshSelf,
+  SUIT_MAX_TARGETS,
   removedCard,
   createGame,
   emptySlotsFor,
@@ -25,14 +27,14 @@ import {
   type PlayerId,
 } from '../game/state'
 import type { Suit } from '../game/cards'
-import { jokerCapOf, usesSpecials, type LimitedMode } from '../game/limited'
+import { hidesPushPos, jokerCapOf, usesSpecials, type LimitedMode } from '../game/limited'
 import type { GameMode } from './appStore'
 import type { Role } from '../net/room'
 import { setOpenMatch, clearOpenMatch, isMatchSettled, markMatchSettled } from '../net/room'
 import type { Intent, LiveSel, SpecExtras } from '../net/sync'
 import type { DanmakuMsg } from '../net/spectate'
 import { ALL_SPECIAL_CARD_IDS, FIRE_LOADOUT, LOADOUT_SIZE, firePool, firePoolSize, getSpecialCard, unlockedCount, type SpecialCardId } from '../game/specialCards'
-import { recordingRng, type Move, type ReplayFrame } from '../game/replay'
+import { recordingRng, suitMove, type Move, type ReplayFrame } from '../game/replay'
 import { recordBotResult, releaseLeasedBot } from '../net/bots'
 import { startBroadcast, type Broadcaster } from '../net/broadcast'
 import { fetchBotRecord, patchLivePlayerRecord, type LivePlayer } from '../net/liveIndex'
@@ -87,6 +89,8 @@ export interface SpecFx {
   by: PlayerId
   card: SpecialCardId
   n: number
+  /** 強迫更新洗的是自己(觀戰播對的那一邊) */
+  self?: boolean
 }
 
 /** Build the broadcaster-side spec extras (推牌選取/排序/特殊牌通知) from gameStore state.
@@ -155,6 +159,8 @@ export const DEATH_EYE_FX_MS = 3200
 /** 死神之眼提示停留時間(使用者 2026-10-16:總長 6 秒,比爆破多 1 秒——前段被動畫擋住,多留一點時間讀)。
  *  用卡方、被看方都用這個。 */
 export const DEATH_EYE_NOTICE_MS = 6000
+/** 強迫更新:不是第一手還點「自己」時的提示(使用者 2026-11-02;遊戲裡統一說「第一手」)。 */
+export const REFRESH_SELF_LOCKED = '已經不是你的第一手，只能對對手使用'
 /** 死神之眼的提示文字(使用者定)。 */
 export const DEATH_EYE_VICTIM_MSG = '對手用了死神之眼，你目前決鬥區的牌被看光了'
 
@@ -172,6 +178,10 @@ export interface CardFxRun {
   targets?: { before: Card; after?: Card }[]
   /** 偷窺:下次補牌幾張 */
   count?: number
+  /** 回放(2026-11-02):雙方牌都看得到 → 演出可以播在上方玩家身上,偷窺直接翻出看到的牌 */
+  replay?: boolean
+  /** 回放的偷窺:看到的那幾張 */
+  cards?: Card[]
   n: number
 }
 export const SUIT_FX_MS = 3000
@@ -182,7 +192,8 @@ export const cardFxMs = (k: CardFxRun['kind']): number =>
   k === 'suit' ? SUIT_FX_MS : k === 'swap' ? SWAP_FX_MS : k === 'peek' ? PEEK_FX_MS : SPY_FX_MS
 
 /**
- * 對手對我用了一張「會動到我」、但我自己還沒有的卡 → 上方提示跳一句介紹(5 秒,在狀態列提示之後)。
+ * 對手對我用了一張「會動到我」、但我自己還沒有的卡 → 上方提示跳一句介紹(6 秒,在狀態列提示之後)。
+ * 2026-11-02 使用者:拿掉「你還沒有這張卡 ·」前綴(功能已經寫了,多餘),停留 5 → 6 秒。
  * 朋友房不受共同卡池限制(2026-10-27)後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡。
  * 沒動到我的卡(偷窺、偷天換日、花色卡)本來就不告訴對手是哪張 → 不會走到這裡。
  */
@@ -191,7 +202,7 @@ export function noteFoeCard(card: SpecialCardId | undefined): void {
   if (!def?.foeNote) return
   const ps = usePlatformStore.getState()
   if (ps.username === 'ricky' || ps.profile?.unlocked.specialCards[def.id]) return // 測試帳號全開 / 自己有這張
-  setTimeout(() => useToastStore.getState().show(`你還沒有這張卡 · ${def.foeNote}`, 5000), 600)
+  setTimeout(() => useToastStore.getState().show(def.foeNote!, 6000), 600)
 }
 
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */
@@ -210,6 +221,8 @@ function playFrameSound(f: ReplayFrame | undefined): void {
   if (f?.refreshTarget) useGameStore.setState({ refreshFx: { target: f.refreshTarget, n: Date.now() } })
   if (f?.explode) useGameStore.setState({ explodeFx: { ...f.explode, n: Date.now() } })
   if (f?.deathEye) useGameStore.setState({ deathEyeFx: { ...f.deathEye, n: Date.now() } })
+  // 花色卡 / 偷天換日 / 偷窺 / 讓我看看(2026-11-02 補):回放也播演出,不然只看右邊字幕跟不上
+  if (f?.cardFx) useGameStore.setState({ cardFx: { ...f.cardFx, count: f.cardFx.cards?.length, replay: true, n: Date.now() } })
 }
 /** Persist the current LOCAL match (§3.7): sessionStorage snapshot (reload-resume)
  *  + localStorage marker (close-reconcile). No-op for online / undealt / ended. */
@@ -471,6 +484,10 @@ interface GameStore {
   specialTrayOpen: boolean
   /** a target-needing card was chosen → now picking a hand card to target */
   specialTargeting: SpecialCardId | null
+  /** 花色卡指定中:已點的 1~2 張(按「確定」才生效;2026-11-02 一次改 1~2 張) */
+  specialPicks: string[]
+  /** 強迫更新:正在問「洗自己 / 洗對手」(自己只有第一手能選) */
+  refreshChoice: boolean
   /** result of a peek/spy activation, shown in a modal */
   specialInfo: SpecialInfo | null
   /** per-turn time limit (seconds) chosen in the create-match config (#9) */
@@ -640,9 +657,15 @@ interface GameStore {
   closeSpecialTray: () => void
   /** pick one of the carried cards: target-needing → targeting; info → resolve now */
   chooseSpecial: (id: SpecialCardId) => void
-  /** apply a target-needing card (swap/clubs) to the chosen hand card */
+  /** apply a target-needing card: 偷天換日點一張就生效;花色卡點選 / 取消 1~2 張(按確定才生效) */
   activateSpecialTarget: (cardId: string) => void
+  /** 花色卡:用已點的 1~2 張生效 */
+  confirmSpecialTarget: () => void
+  /** 指定型特殊卡真的生效(偷天換日 1 張 / 花色卡 1~2 張) */
+  applySpecialTargets: (ids: string[]) => void
   cancelSpecialTarget: () => void
+  /** 強迫更新選好對象(self = 洗自己,只有第一手可以);null = 取消 */
+  resolveRefresh: (self: boolean | null) => void
   closeSpecialInfo: () => void
 
   /** single-player: AI opponent may activate one carried special before its
@@ -703,7 +726,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadoutReady: false,
   loadoutWaiting: false,
   specialTrayOpen: false,
-  specialTargeting: null,
+  specialTargeting: null, specialPicks: [], refreshChoice: false,
   specialInfo: null,
   timeLimit: 50,
   onlinePause: { active: false },
@@ -757,7 +780,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // per fresh game (rematch passes ready=true to reuse the same loadout).
       loadoutReady: special ? ready : true,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -792,7 +815,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // special room → show the pre-match pick (B) each match; normal → skip.
       loadoutReady: !special,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -838,7 +861,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       onMatchEnd: null, // reward/tally handled by recordMatchStat(pvp) via casualFoe
       loadoutReady: !special,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -948,7 +971,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       onMatchEnd: null, // campaign 由 localResume 於還原 series 後重接
       loadoutReady: true, // 已在對局中,不再顯示賽前選牌
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
       incomingEmote: null,
     })
@@ -1026,7 +1049,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadoutReady: !special,
       loadoutWaiting: false,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -1065,7 +1088,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadoutReady: !special || reconnect,
       loadoutWaiting: false,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -1104,7 +1127,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadoutReady: true,
       loadoutWaiting: false,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -1183,7 +1206,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             loadoutReady: !prev.special,
             loadoutWaiting: false,
             specialTrayOpen: false,
-            specialTargeting: null,
+            specialTargeting: null, specialPicks: [], refreshChoice: false,
             specialInfo: null,
           }
         : {}),
@@ -1283,7 +1306,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadoutReady: !special,
       loadoutWaiting: false,
       specialTrayOpen: false,
-      specialTargeting: null,
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
       specialInfo: null,
     })
   },
@@ -1300,7 +1323,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!online || !engine) return
     if (!(engine.phase === 'pick' && engine.turn === me)) return
     // 限定房:對手只看得到張數 → 送隨機位置(§7)
-    if (engine.mode) return online.sendLive(fakeSel(pickKey(engine, me), engine.hands[me].length, selected))
+    if (hidesPushPos(engine.mode)) return online.sendLive(fakeSel(pickKey(engine, me), engine.hands[me].length, selected))
     const ordered = sortHand(engine.hands[me], sortMode, sortDir)
     const idSet = new Set(selected)
     const idx = ordered.map((c, i) => (idSet.has(c.id) ? i : -1)).filter((i) => i >= 0)
@@ -1365,7 +1388,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Pushed-out positions in MY current sorted order, so the opponent's view
     // matches the live preview exactly (no jump on submit).
     let sortedSel: LiveSel | null = null
-    if (engine?.mode) {
+    if (engine && hidesPushPos(engine.mode)) {
       sortedSel = fakeSel(pickKey(engine, me), engine.hands[me].length, selected) // 限定房:跟推牌預覽同一組假位置
     } else if (engine) {
       const ordered = sortHand(engine.hands[me], sortMode, sortDir)
@@ -1407,7 +1430,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const idSet = new Set(ids)
         const idx = order.map((c, i) => (idSet.has(c.id) ? i : -1)).filter((i) => i >= 0)
         // 限定房:對手只看得到張數(§7)→ 電腦出的牌也用隨機位置
-        foeSelection = engine.mode ? fakeSel(pickKey(engine, picker), order.length, ids) : { total: order.length, idx }
+        foeSelection = hidesPushPos(engine.mode) ? fakeSel(pickKey(engine, picker), order.length, ids) : { total: order.length, idx }
       }
       const next = applyPick(engine, picker, ids)
       // 送出本身是按鈕 click(已在 UI 觸發);牌的落地聲由對手放牌(placeAt→place)收尾,
@@ -1655,38 +1678,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sfx.click()
       set({ specialTargeting: id, specialTrayOpen: false })
     } else if (id === 'refresh') {
-      // 強迫更新:對手手牌洗回牌堆重抽。guest 端只看得到牌堆張數 → 先擋空牌堆,其餘交給 host 判。
-      if (online?.role === 'guest' ? engine.deck.length === 0 : !canRefresh(engine, me)) {
+      // 強迫更新(2026-11-02):先問洗自己還是洗對手 → resolveRefresh。牌堆空 = 兩邊都不能洗。
+      if (engine.deck.length === 0) {
         sfx.error()
-        useToastStore.getState().show(engine.deck.length === 0 ? '牌堆已空，無法重洗' : '對手沒有可重洗的牌')
+        useToastStore.getState().show('牌堆已空，無法重洗')
         return
       }
-      sfx.special()
-      set({ specialTrayOpen: false })
-      if (online?.role === 'guest') {
-        online.send({ type: 'special', card: id })
-        set({ refreshFx: { target: otherPlayer(me), n: Date.now() } }) // 對手(host)手牌的重抽動畫,本機先播
-        get().flashStatus(`你已使用了「${def.name}」`)
-        return
-      }
-      const foe = otherPlayer(me)
-      const rec = recordingRng() // §6:重洗是隨機的 → 錄下種子,回放照吐即重現
-      const next = applySpecial(engine, me, id, { rng: rec.rng })
-      const n = Date.now()
-      get().recordMove({ t: 'special', by: me, card: id, rng: rec.out })
-      // 對手若是 boss/人機且偷看過自己下次補牌 → 牌堆重洗後作廢(合法資訊已過期)
-      const aiBoss = get().aiBoss
-      set({
-        engine: next,
-        specFx: { by: me, card: id, n },
-        refreshFx: { target: foe, n },
-        ...(aiBoss?.peekDraw ? { aiBoss: { ...aiBoss, peekDraw: null } } : {}),
-      })
-      _bcast?.onEngine(next)
-      pushCasualExtras()
-      persistLocalMatch(get())
-      get().flashStatus(`你已使用了「${def.name}」`)
-      if (online?.role === 'host') online.sendFx(`對手對你使用了「${def.name}」，你的手牌已重抽`, { card: id, target: foe })
+      sfx.click()
+      set({ refreshChoice: true, specialTrayOpen: false })
     } else if (id === 'explode') {
       // 爆破:隨機炸掉對手一張(開局空白/鬼牌除外)。guest 看不到對手是哪些牌 → 交給 host 判,
       // host 回 fx 告訴 guest 炸到哪張(雙方都看得到炸掉的牌,使用者定案)。
@@ -1788,20 +1787,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   activateSpecialTarget: (cardId) => {
-    const { engine, me, specialTargeting, online } = get()
+    const { engine, me, specialTargeting, specialPicks } = get()
     if (!engine || !specialTargeting) return
     const def = getSpecialCard(specialTargeting)
+    if (!def?.suit) {
+      get().applySpecialTargets([cardId]) // 偷天換日:點一張就生效
+      return
+    }
+    // 花色卡(2026-11-02 一次改 1~2 張):點選 / 再點取消,最多 2 張,按「確定」才生效
+    if (specialPicks.includes(cardId)) {
+      sfx.click()
+      set({ specialPicks: specialPicks.filter((id) => id !== cardId) })
+      return
+    }
+    if (!suitTargets(engine, me, def.suit).some((c) => c.id === cardId)) return
+    if (specialPicks.length >= SUIT_MAX_TARGETS) {
+      sfx.error()
+      useToastStore.getState().show(`最多選 ${SUIT_MAX_TARGETS} 張`)
+      return
+    }
+    sfx.click()
+    set({ specialPicks: [...specialPicks, cardId] })
+  },
+
+  confirmSpecialTarget: () => {
+    const picks = get().specialPicks
+    if (picks.length) get().applySpecialTargets(picks)
+  },
+
+  applySpecialTargets: (ids) => {
+    const { engine, me, specialTargeting, online } = get()
+    if (!engine || !specialTargeting || !ids.length) return
+    const def = getSpecialCard(specialTargeting)
+    const suitIds = def?.suit ? ids : undefined
+    const cardId = ids[0]
     if (online?.role === 'guest') {
       // host applies it and syncs the result back (hand + specialUsed).
-      online.send({ type: 'special', card: specialTargeting, targetId: cardId })
+      online.send(suitIds ? { type: 'special', card: specialTargeting, targetIds: suitIds } : { type: 'special', card: specialTargeting, targetId: cardId })
       sfx.special()
       // 本機先播演出:花色卡變成什麼是確定的;偷天換日抽到哪張要等 host 同步(after 留空,演出最後揭曉真牌)
-      const before = engine.hands[me].find((c) => c.id === cardId)
+      const targets = ids.flatMap((id) => {
+        const before = engine.hands[me].find((c) => c.id === id)
+        return before ? [{ before, after: def?.suit ? { ...before, suit: def.suit } : undefined }] : []
+      })
       set({
-        specialTargeting: null,
-        ...(before
-          ? { cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets: [{ before, after: def?.suit ? { ...before, suit: def.suit } : undefined }], n: Date.now() } }
-          : {}),
+        specialTargeting: null, specialPicks: [], refreshChoice: false,
+        // 用完花色卡,選取全部放下(使用者 2026-11-02:不要還翹著)
+        ...(def?.suit ? { selected: [] } : {}),
+        ...(targets.length ? { cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets, n: Date.now() } } : {}),
       })
       get().flashStatus(`你已使用了「${def?.name}」`)
       return
@@ -1809,26 +1842,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // §6 棋譜:偷天換日(swap)是唯一非決定性效果 → 用 recordingRng 包 Math.random,實際隨機
     //   照舊,但把兩次輸出記進 move.rng,回放照吐一次即可完全重現。花色類是決定性,不需 rng。
     const rec = def?.suit ? null : recordingRng()
-    const next = applySpecial(engine, me, specialTargeting, { targetId: cardId, rng: rec?.rng })
+    const next = applySpecial(engine, me, specialTargeting, { targetId: cardId, targetIds: suitIds, rng: rec?.rng })
     if (next === engine) return // illegal target → ignore
     sfx.special()
-    get().recordMove({ t: 'special', by: me, card: specialTargeting, targetId: cardId, rng: rec?.out })
+    get().recordMove(suitMove(me, specialTargeting, suitIds, cardId, rec?.out))
     // Swap removes the target and draws a new card → drop the now-gone card from
-    // the pick selection so the 送出 count stays correct (clubs keeps the id).
+    // the pick selection so the 送出 count stays correct. 花色卡:選取全部放下(2026-11-02,牌不要還翹著)。
     const validIds = new Set(next.hands[me].map((c) => c.id))
     // 演出用:哪張牌變成什麼(花色卡同一張 id 換花色;偷天換日 = 新抽到、原本手上沒有的那張)
-    const before = engine.hands[me].find((c) => c.id === cardId)!
     const oldIds = new Set(engine.hands[me].map((c) => c.id))
-    const after = def?.suit ? next.hands[me].find((c) => c.id === cardId) : next.hands[me].find((c) => !oldIds.has(c.id))
+    const targets = ids.map((id) => ({
+      before: engine.hands[me].find((c) => c.id === id)!,
+      after: def?.suit ? next.hands[me].find((c) => c.id === id) : next.hands[me].find((c) => !oldIds.has(c.id)),
+    }))
     const n = Date.now()
     // §特殊牌:記通知(觀戰跳 toast + 牌面同步)。⚠️ 這條原本用 set({engine}) 直接改,沒經過
     // applyEngine → casual 廣播端不會鏡射給觀戰(玩家換了牌、觀戰卻沒更新的 bug)。改成也呼廣播。
     set({
       engine: next,
-      specialTargeting: null,
-      selected: get().selected.filter((id) => validIds.has(id)),
+      specialTargeting: null, specialPicks: [], refreshChoice: false,
+      selected: def?.suit ? [] : get().selected.filter((id) => validIds.has(id)),
       specFx: { by: me, card: specialTargeting, n },
-      cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets: [{ before, after }], n },
+      cardFx: { kind: def?.suit ? 'suit' : 'swap', by: me, card: specialTargeting, targets, n },
     })
     _bcast?.onEngine(next) // casual:牌面變了 → 鏡射
     pushCasualExtras() // casual:送出通知 + 更新後的推牌狀態
@@ -1838,8 +1873,58 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (online?.role === 'host') online.sendFx('對方似乎使用了特殊牌')
   },
 
-  cancelSpecialTarget: () => set({ specialTargeting: null }),
+  cancelSpecialTarget: () => set({ specialTargeting: null, specialPicks: [] }),
   closeSpecialInfo: () => set({ specialInfo: null }),
+
+  resolveRefresh: (self) => {
+    const { engine, me, online } = get()
+    set({ refreshChoice: false })
+    if (self === null || !engine) return
+    const id: SpecialCardId = 'refresh'
+    const def = getSpecialCard(id)!
+    const foe = otherPlayer(me)
+    // 洗自己:自己的第一手 + 手上有普通牌(選擇視窗已擋,這裡防萬一)。洗對手:guest 看不到對手的牌 → 只擋空牌堆,其餘交給 host 判。
+    const ok = self ? canRefresh(engine, me, true) : online?.role === 'guest' ? engine.deck.length > 0 : canRefresh(engine, me)
+    if (!ok) {
+      sfx.error()
+      useToastStore.getState().show(
+        engine.deck.length === 0 ? '牌堆已空，無法重洗' : self ? (canRefreshSelf(engine, me) ? '手上沒有可重洗的牌' : REFRESH_SELF_LOCKED) : '對手沒有可重洗的牌',
+      )
+      return
+    }
+    sfx.special()
+    const target = self ? me : foe
+    if (online?.role === 'guest') {
+      online.send(self ? { type: 'special', card: id, self: true } : { type: 'special', card: id })
+      // 本機先播重抽動畫(洗自己 = 我的手牌,新手牌等 host 同步;洗對手 = host 的牌背)
+      set({ refreshFx: { target, n: Date.now() }, ...(self ? { selected: [] } : {}) })
+      get().flashStatus(`你已使用了「${def.name}」`)
+      return
+    }
+    const rec = recordingRng() // §6:重洗是隨機的 → 錄下種子,回放照吐即重現
+    const next = applySpecial(engine, me, id, { rng: rec.rng, self })
+    if (next === engine) return
+    const n = Date.now()
+    get().recordMove({ t: 'special', by: me, card: id, ...(self ? { self: true } : {}), rng: rec.out })
+    // 對手若是 boss/人機且偷看過自己下次補牌 → 牌堆重洗後作廢(合法資訊已過期)
+    const aiBoss = get().aiBoss
+    set({
+      engine: next,
+      specFx: { by: me, card: id, n, ...(self ? { self: true } : {}) },
+      refreshFx: { target, n },
+      ...(self ? { selected: [] } : {}), // 洗自己:舊手牌的選取全部作廢
+      ...(aiBoss?.peekDraw ? { aiBoss: { ...aiBoss, peekDraw: null } } : {}),
+    })
+    _bcast?.onEngine(next)
+    pushCasualExtras()
+    persistLocalMatch(get())
+    get().flashStatus(`你已使用了「${def.name}」`)
+    if (online?.role === 'host') {
+      // 洗自己沒動到對手 → 只說用了特殊牌(使用者 2026-11-02)
+      if (self) online.sendFx('對方似乎使用了特殊牌')
+      else online.sendFx(`對手對你使用了「${def.name}」，你的手牌已重抽`, { card: id, target: foe })
+    }
+  },
 
   aiMaybeSpecial: () => {
     const { engine, me, special, aiLoadout, aiBoss, online } = get()
@@ -1856,18 +1941,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       decision = bossChooseSpecial(engine, ai, aiLoadout, aiBoss.profile, { signature: aiBoss.signature })
     } else {
       decision = bossChooseSpecial(engine, ai, aiLoadout)
-      if (decision?.targetId && getSpecialCard(decision.card)?.suit) {
-        decision = suitPlayCheck(engine, ai, decision.card, decision.targetId, (after) => aiPick(after, ai))
+      if (decision?.targetIds && getSpecialCard(decision.card)?.suit) {
+        decision = suitPlayCheck(engine, ai, decision.card, decision.targetIds, (after) => aiPick(after, ai))
       }
     }
     if (!decision) return false
     const def = getSpecialCard(decision.card)
     const randomCard = decision.card === 'swap' || decision.card === 'refresh' || decision.card === 'explode'
     const rec = randomCard ? recordingRng() : null // §6:有隨機的才錄 rng
-    const next = applySpecial(engine, ai, decision.card, { targetId: decision.targetId, rng: rec?.rng })
+    const next = applySpecial(engine, ai, decision.card, { targetId: decision.targetId, targetIds: decision.targetIds, rng: rec?.rng })
     if (next === engine) return false // effect was a no-op (illegal target) → don't stall
     sfx.special() // AI 發動特殊卡的那一刻(原本誤用 deal)
-    get().recordMove({ t: 'special', by: ai, card: decision.card, targetId: decision.targetId, rng: rec?.out }) // §6 棋譜
+    get().recordMove(
+      decision.targetIds
+        ? suitMove(ai, decision.card, decision.targetIds, undefined)
+        : { t: 'special', by: ai, card: decision.card, targetId: decision.targetId, rng: rec?.out },
+    ) // §6 棋譜
     // 花色卡:這手要出的牌已經決定好了(就是換出來的同花)→ 出牌時照這個出
     set({ aiForcedPick: decision.thenPick ?? null })
     // 資訊卡強化打法 (#5): record what the boss legitimately learned so its later
@@ -1928,7 +2017,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (ordered.length) ids = [ordered[0].id]
       }
       if (ids.length === 0) return
-      set({ specialTrayOpen: false, specialTargeting: null, specialInfo: null, confirm: null, selected: ids })
+      set({ specialTrayOpen: false, specialTargeting: null, specialPicks: [], refreshChoice: false, specialInfo: null, confirm: null, selected: ids })
       get().confirmPick()
     } else if (engine.phase === 'place' && engine.pendingPick && otherPlayer(engine.pendingPick.by) === me) {
       const empty = emptySlotsFor(engine, engine.pendingPick.by)[0]

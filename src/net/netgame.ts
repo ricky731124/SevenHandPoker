@@ -37,7 +37,7 @@ import {
   removedCard,
 } from '../game/state'
 import { cardFaceText } from '../game/cards'
-import { recordingRng } from '../game/replay'
+import { recordingRng, suitMove } from '../game/replay'
 import type { MatchType } from './replays'
 import type { GameState } from '../game/state'
 import { getSpecialCard, type SpecialCardId } from '../game/specialCards'
@@ -279,21 +279,31 @@ function _attachHost(code: string, opts?: AttachOpts): () => void {
       if (def.needsTarget) {
         // §6 棋譜:swap 錄 rng(唯一非決定性);花色類決定性,不需 rng。host 端錄 guest 這一步。
         const rec = def.suit ? null : recordingRng()
-        const next = applySpecial(e, 'p2', intent.card, { targetId: intent.targetId ?? '', rng: rec?.rng })
+        const suitIds = def.suit ? intent.targetIds ?? (intent.targetId ? [intent.targetId] : []) : undefined
+        const next = applySpecial(e, 'p2', intent.card, { targetId: intent.targetId ?? '', targetIds: suitIds, rng: rec?.rng })
         if (next === e) return // illegal target
         // §特殊牌:記通知(by:p2 guest)→ subscribe 會把 specFx 廣播給觀戰;engine 變動也鏡射新牌面。
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: intent.card, n: Date.now() } })
-        useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: intent.card, targetId: intent.targetId, rng: rec?.out })
+        useGameStore.getState().recordMove(suitMove('p2', intent.card, suitIds, intent.targetId, rec?.out))
         useGameStore.getState().flashStatus('對方似乎使用了特殊牌') // host is the foe
       } else if (intent.card === 'refresh') {
-        // 強迫更新:guest 打 host(我)→ 我的手牌洗回牌堆重抽。不能用(對手沒普通牌/牌堆空)→ 回報 guest。
-        if (!canRefresh(e, 'p2')) {
+        // 強迫更新:guest 打 host(我)→ 我的手牌洗回牌堆重抽;self = guest 洗自己(第一手才行,沒動到我)。
+        // 不能用(沒普通牌/牌堆空/不是第一手)→ 回報 guest。
+        const self = !!intent.self
+        if (!canRefresh(e, 'p2', self)) {
           void dbSet(fxRef(code), { msg: '無法使用「強迫更新」', id: Date.now() })
           return
         }
         const rec = recordingRng()
-        const next = applySpecial(e, 'p2', 'refresh', { rng: rec.rng })
+        const next = applySpecial(e, 'p2', 'refresh', { rng: rec.rng, self })
         const n = Date.now()
+        if (self) {
+          // 洗自己 → 我(host)只知道對方用了特殊牌;guest 的新手牌由 guest-view 同步過去(guest 本機已先播動畫)
+          useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n, self: true } })
+          useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', self: true, rng: rec.out })
+          useGameStore.getState().flashStatus('對方似乎使用了特殊牌')
+          return
+        }
         useGameStore.setState({ engine: next, specFx: { by: 'p2', card: 'refresh', n }, refreshFx: { target: 'p1', n }, selected: [] })
         useGameStore.getState().recordMove({ t: 'special', by: 'p2', card: 'refresh', rng: rec.out })
         useGameStore.getState().flashStatus(`對手對你使用了「${def.name}」，你的手牌已重抽`)

@@ -64,7 +64,7 @@ function play(seed: number, ai: Side, player: Side, st: Stats, tune: FireTune): 
       if (side.cards) {
         const d = fireChooseSpecial(g, me, side.loadout, side.rt, rng, tune)
         if (d) {
-          const next = applySpecial(g, me, d.card, { targetId: d.targetId, rng })
+          const next = applySpecial(g, me, d.card, { targetId: d.targetId, targetIds: d.targetIds, rng })
           if (next !== g) {
             side.rt = fireLearn(side.rt, d.card, next, me)
             if (me === AI) {
