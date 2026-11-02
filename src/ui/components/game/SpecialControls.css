@@ -19,35 +19,19 @@
   justify-content: center;
   gap: 8px;
 }
+/* 偷窺:彈窗要矮,不擋手牌(2026-11-02)→ 標題到牌、牌到「知道了」的間隔縮一點(手機橫向 780×360 實測) */
+.spx-info__cards--peek {
+  margin-top: -8px;
+  margin-bottom: -6px;
+}
+/* 「知道了」小一點點(上下內距縮一點,字不變) */
+.spx-info__cards--peek + .confirm__actions .woodbtn {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
 .spx-info__empty {
   color: var(--parch-muted);
   font-weight: 700;
-}
-
-/* 強迫更新選對象:自己 / 對手兩顆大鈕,下面一行小字說明;不是第一手 → 自己反灰(還是點得到,點了跳原因) */
-.spx-choice {
-  display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin: 6px 0 12px;
-}
-.spx-choice__btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.spx-choice__btn .woodbtn {
-  min-width: 120px;
-}
-.spx-choice__btn small {
-  color: var(--parch-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-.spx-choice__btn.is-locked .woodbtn {
-  filter: grayscale(1);
-  opacity: 0.5;
 }
 
 /* 火力全開:用過的卡蓋在正中間的斜章「🚫 已用」(預設的鎖頭小字在卡片頂端,太不明顯) */

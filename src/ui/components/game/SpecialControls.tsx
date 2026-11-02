@@ -57,35 +57,6 @@ export function SpecialTray() {
   )
 }
 
-/**
- * 強迫更新選對象(使用者 2026-11-02):洗自己 / 洗對手。洗自己只有自己的第一手可以 —— 其他手照樣顯示但反灰,
- * 點了跳原因(onPick 由呼叫端判斷)。洗對手照原本規則任何一手都行。
- */
-export function RefreshChoice({ selfOk, onPick }: { selfOk: boolean; onPick: (self: boolean | null) => void }) {
-  return (
-    <Modal open onClose={() => onPick(null)} title="強迫更新" width={400}>
-      <p className="spx-tray__hint">要重洗誰的手牌？</p>
-      <div className="spx-choice">
-        <span className={`spx-choice__btn${selfOk ? '' : ' is-locked'}`}>
-          <Button variant="secondary" onClick={() => onPick(true)}>
-            自己
-          </Button>
-          <small>{selfOk ? '只有第一手可以' : '已經不是第一手'}</small>
-        </span>
-        <span className="spx-choice__btn">
-          <Button onClick={() => onPick(false)}>對手</Button>
-          <small>任何一手都可以</small>
-        </span>
-      </div>
-      <div className="confirm__actions">
-        <Button variant="ghost" size="sm" onClick={() => onPick(null)}>
-          取消
-        </Button>
-      </div>
-    </Modal>
-  )
-}
-
 export function SpecialInfoModal() {
   const info = useGameStore((s) => s.specialInfo)
   const close = useGameStore((s) => s.closeSpecialInfo)
@@ -102,10 +73,9 @@ export function SpecialInfoModal() {
       width={520}
       scrimClass="modal__scrim--light"
     >
-      <p className="spx-info__hint">
-        {isPeek ? '你下一次補牌會抽到這些牌：' : '對手目前的手牌（對手會被告知你正在查看）：'}
-      </p>
-      <div className="spx-info__cards">
+      {/* 偷窺不放說明那行(2026-11-02 使用者:多餘,省下高度才不會擋到手牌;標題已寫「下次補牌」) */}
+      {!isPeek && <p className="spx-info__hint">對手目前的手牌（對手會被告知你正在查看）：</p>}
+      <div className={`spx-info__cards${isPeek ? ' spx-info__cards--peek' : ''}`}>
         {cards.map((c) => (
           <Card key={c.id} card={c} w={54} />
         ))}

@@ -192,8 +192,8 @@ export const cardFxMs = (k: CardFxRun['kind']): number =>
   k === 'suit' ? SUIT_FX_MS : k === 'swap' ? SWAP_FX_MS : k === 'peek' ? PEEK_FX_MS : SPY_FX_MS
 
 /**
- * 對手對我用了一張「會動到我」、但我自己還沒有的卡 → 上方提示跳一句介紹(6 秒,在狀態列提示之後)。
- * 2026-11-02 使用者:拿掉「你還沒有這張卡 ·」前綴(功能已經寫了,多餘),停留 5 → 6 秒。
+ * 對手對我用了一張「會動到我」、但我自己還沒有的卡 → 上方提示跳一句介紹(5 秒,在狀態列提示之後)。
+ * 2026-11-02 使用者:拿掉「你還沒有這張卡 ·」前綴(功能已經寫了,多餘);字變少,停留維持 5 秒。
  * 朋友房不受共同卡池限制(2026-10-27)後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡。
  * 沒動到我的卡(偷窺、偷天換日、花色卡)本來就不告訴對手是哪張 → 不會走到這裡。
  */
@@ -202,7 +202,7 @@ export function noteFoeCard(card: SpecialCardId | undefined): void {
   if (!def?.foeNote) return
   const ps = usePlatformStore.getState()
   if (ps.username === 'ricky' || ps.profile?.unlocked.specialCards[def.id]) return // 測試帳號全開 / 自己有這張
-  setTimeout(() => useToastStore.getState().show(def.foeNote!, 6000), 600)
+  setTimeout(() => useToastStore.getState().show(def.foeNote!, 5000), 600)
 }
 
 /** §10 回放音效:前進到某幀時放對應音效(以下方 p1 角度)。只在自動播/下一步呼叫,拖拉/上一步不呼叫。 */

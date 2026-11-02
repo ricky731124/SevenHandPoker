@@ -11,6 +11,7 @@ import { LIMITED_INFO, usesSpecials, type LimitedMode } from '../../game/limited
 import { limitedModeNow } from '../../net/limitedClock'
 import Modal from '../components/Modal'
 import Button from '../components/Button'
+import MatchWaitScene from '../components/MatchWaitScene'
 import { sfx } from '../../audio/sfx'
 import './Matchmaking.css'
 
@@ -127,7 +128,8 @@ export default function Matchmaking() {
   return (
     <Modal open locked width={340} title="尋找對手中…">
       <div className="mm">
-        <div className="mm__spinner" aria-hidden="true" />
+        {/* 等待小劇場(2026-11-02,取代轉圈圈) */}
+        <MatchWaitScene />
         <p className="mm__sub">
           {limited ? `限定房・${LIMITED_INFO[limited].name}` : matchType === 'special' ? '特殊房' : '一般房'} · 配對時間：{elapsed} 秒
         </p>

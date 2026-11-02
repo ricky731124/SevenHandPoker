@@ -716,6 +716,15 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }
 /* the 取消 inside is a real wood button (<Button size="sm">) — no extra CSS here */
+/* 強迫更新:取消跟「自己 / 對手」拉開一點 */
+.game__special-cancel {
+  margin-left: 10px;
+}
+/* 強迫更新不是第一手:「自己」反灰(還是點得到,點了跳原因) */
+.game__special-banner .is-locked .woodbtn {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
 
 /* ---- Opponent-disconnected overlay ---- */
 .net-overlay {

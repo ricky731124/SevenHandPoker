@@ -1,0 +1,45 @@
+/* 快速配對等待小劇場(MatchWaitScene.tsx):固定大小的舞台,裡面全部絕對定位 */
+.mws {
+  position: relative;
+  width: 270px;
+  height: 126px;
+  overflow: hidden;
+}
+.mws__item {
+  position: absolute;
+}
+/* 一隻角色:幾張姿勢圖疊在同一格,同時只顯示一張 */
+.mws__actor {
+  position: absolute;
+  display: grid;
+}
+.mws__pose {
+  grid-area: 1 / 1;
+  display: block;
+  width: auto;
+  pointer-events: none;
+  user-select: none;
+}
+/* 腳底的影子 */
+.mws__shadow {
+  position: absolute;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(60, 35, 10, 0.28), transparent);
+}
+.mws__bubble {
+  position: absolute;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: #fff;
+  color: #b0261c;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.mws__mark {
+  font-size: 22px;
+  line-height: 1;
+}

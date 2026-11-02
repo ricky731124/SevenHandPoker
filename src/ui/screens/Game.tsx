@@ -28,7 +28,7 @@ import TopBar from '../components/game/TopBar'
 import CoinToss from '../components/game/CoinToss'
 import VsIntro from '../components/game/VsIntro'
 import PreMatchSpecial from '../components/game/PreMatchSpecial'
-import { RefreshChoice, SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
+import { SpecialTray, SpecialInfoModal } from '../components/game/SpecialControls'
 import StickerProto from '../components/game/StickerProto'
 import DanmakuBar from '../components/game/DanmakuBar'
 import DanmakuLayer from '../components/game/DanmakuLayer'
@@ -764,19 +764,32 @@ export function GameBoard() {
           <Button size="sm" onClick={g.cancelSpecialTarget}>取消</Button>
         </div>
       )}
-      {/* 強迫更新:洗自己還是洗對手(2026-11-02;自己只有第一手能選,其他手反灰、點了說明原因) */}
+      {/* 強迫更新:選更新對象(2026-11-02 使用者:跟花色卡一樣用提示框)。不是第一手 → 「自己」反灰,
+          點了跳原因(第一手限制寫在卡片說明,這裡只負責檢核) */}
       {g.refreshChoice && iPick && !spec && (
-        <RefreshChoice
-          selfOk={canRefreshSelf(engine, me)}
-          onPick={(self) => {
-            if (self && !canRefreshSelf(engine, me)) {
-              sfx.error()
-              useToastStore.getState().show(REFRESH_SELF_LOCKED)
-              return
-            }
-            g.resolveRefresh(self)
-          }}
-        />
+        <div className="game__special-banner">
+          <span>選擇更新對象：</span>
+          <span className={canRefreshSelf(engine, me) ? undefined : 'is-locked'}>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!canRefreshSelf(engine, me)) {
+                  sfx.error()
+                  useToastStore.getState().show(REFRESH_SELF_LOCKED)
+                  return
+                }
+                g.resolveRefresh(true)
+              }}
+            >
+              自己
+            </Button>
+          </span>
+          <Button size="sm" onClick={() => g.resolveRefresh(false)}>對手</Button>
+          {/* 取消跟前面兩個真的選擇拉開一點 */}
+          <span className="game__special-cancel">
+            <Button size="sm" onClick={() => g.resolveRefresh(null)}>取消</Button>
+          </span>
+        </div>
       )}
 
       <div className="game__hand">

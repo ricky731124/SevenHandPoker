@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Card, Rank, Suit } from './cards'
 import { makeBlank, makeJoker } from './cards'
 import { createGame, type GameState, type PlayerId } from './state'
+import { CATEGORY, evaluate } from './evaluate'
 import { bossChooseSpecial, bossPick, bossPlace, rollMain, type BossProfile, type BossRuntime } from './bossAI'
 
 const c = (suit: Suit, rank: Rank): Card => ({ id: `${suit}${rank}`, suit, rank })
@@ -240,12 +241,14 @@ describe('鬼牌 — 只在能升級牌型時才用', () => {
     expect(ids).toHaveLength(4)
   })
 
-  it('鬼牌搜尋最佳組合:能補同花也能湊三條 A → 選 CP 較高的三條 A(非同花)', () => {
+  it('鬼牌搜尋最佳組合:能補同花也能湊三條 A → 一定用鬼湊成三條以上(看棋盤再決定留哪邊)', () => {
     const hand = [c('C', 2), c('C', 5), c('C', 7), c('C', 9), c('S', 14), c('H', 14), makeJoker('p2')]
     const g = handState('p2', hand)
     const ids = bossPick(g, 'p2', RT('attack', 1, { jokerTiming: 0 }), R(0)) // jokerTiming 0 → 不收起,直接看選哪組
     expect(ids).toContain('JOKER_p2')
-    expect(new Set(ids)).toEqual(new Set(['S14', 'H14', 'JOKER_p2'])) // trips A (CP 高), not the flush
+    // 2026-11-02 看棋盤:原本固定選三條 A(CP 高);現在比較「三條 A、留 4 張梅花」和「鬼補同花、留一對 A」
+    // 之後還湊得出什麼,多半選後者(一對 A 之後還能用)。兩種都是用鬼湊成三條以上。
+    expect(evaluate(hand.filter((x) => ids.includes(x.id))).category).toBeGreaterThanOrEqual(CATEGORY.THREE_KIND)
   })
 })
 

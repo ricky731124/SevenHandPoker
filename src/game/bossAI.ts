@@ -21,6 +21,7 @@ import type { Card } from './cards'
 import { isBlank, isJoker, isSpecial } from './cards'
 import { CATEGORY, compareHands, compareValue, evaluate } from './evaluate'
 import {
+  SLOT_COUNT,
   canExplode,
   canRefresh,
   countCoins,
@@ -37,6 +38,7 @@ import {
 } from './state'
 import { getSpecialCard, type SpecialCardId } from './specialCards'
 import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
+import { beatsEntry, blankBoardScores, hasPlaceTable, normalStrength, type PileEntry } from './limitedPlace'
 
 export type PickMain = 'attack' | 'hoard' | 'balance'
 
@@ -416,6 +418,9 @@ function smallPile(cands: Card[][], hand: Card[]): Card[] {
  */
 export const PICK_TUNE = { dumpTwo: true }
 
+/** 手上普通牌至少幾張才送 2 張(junkCards)。使用者舉的第 6 手(手上 5~6 張)也要送 2 張,所以是 5。 */
+const JUNK_TWO_MIN = 5
+
 /** 只有一張鬼牌的那疊(單出鬼 = 白白耗掉鬼牌,使用者 2026-11-02:不准)。 */
 const isLoneJoker = (c: Card[]) => c.length === 1 && isJoker(c[0])
 
@@ -425,8 +430,10 @@ const isLoneJoker = (c: Card[]) => c.length === 1 && isJoker(c[0])
  * 送格才有價值。最沒用 = 沒成對的單張裡:點數低、不是湊同花(同花色 ≥ 3 張)/ 順子(4 連)的料、
  * 有鬼牌時 Q 以上留著(之後跟鬼湊大對)。protect = 不能動的牌(要留的大牌 / 拼牌)。
  */
-function junkCards(hand: Card[], protect: Set<string>, n = PICK_TUNE.dumpTwo ? 2 : 1): Card[] {
+function junkCards(hand: Card[], protect: Set<string>, count?: number): Card[] {
   const reals = hand.filter((c) => !isSpecial(c))
+  // 送 2 張只在手上普通牌還多(≥ 8 張)時;後段牌少了送 1 張,不浪費(使用者 2026-11-02 同意)
+  const n = count ?? (PICK_TUNE.dumpTwo && reals.length >= JUNK_TWO_MIN ? 2 : 1)
   const rankCount = new Map<number, number>()
   const suitCount = new Map<string, number>()
   for (const c of reals) {
@@ -462,7 +469,193 @@ function noMadeHandPick(hand: Card[], state: GameState, me: PlayerId, rt: BossRu
   return junk.length ? junk : fallbackPile(hand)
 }
 
+// ---- 看棋盤 + 反推(一般牌組,2026-11-02 使用者定) ------------------------------------------
+//
+// 原本出牌只看自己的牌:鬼牌一用就被升到最大(第 1 手 45~48% 出葫蘆)、後段沒牌(第 6~7 手一半是散牌)。
+// 改成跟空城計 / 撲朔迷離一樣看棋盤(limitedPlace.blankBoardScores,一般牌組用 NORMAL_TABLE):
+//   每種出法 → 對手等著的牌照「張數 → 分布表」抽 → 對手會把這疊放哪 → 這手的期望(格子價值)
+//   + 看未來(剩下的牌之後還湊得出多少)× 打法比重 − 用鬼的成本 + 打法自己選的那手加分。
+// 第二段(反推):我出強牌時,對手沒拿去撞的那幾疊 → 大概打不過我那疊(使用者:「他 5 不敢撞我 5,頂多小葫 / 同花」)。
+
+/** 看棋盤可調參數(模擬調過;on = false 回到舊打法,模擬比較用)。 */
+export const BOARD_TUNE = {
+  on: true,
+  samples: 10,
+  /** 看未來比重:強攻最看現在、囤牌最看以後 */
+  gamma: { attack: 0.45, balance: 0.75, hoard: 0.95 } as Record<PickMain, number>,
+  /** 每用一張鬼扣的分(鬼牌是最萬用的資源,不要第一手就隨便升到最大) */
+  jokerCost: 0.3,
+  /** 打法自己選的那手加分(保住打法個性:強攻還是會強攻) */
+  styleBonus: 0.2,
+  noise: 0.06,
+  /** 調參用:每次看棋盤把各選項的分數丟出來(遊戲裡是 null) */
+  debug: null as null | ((rows: { pile: string; now: number; future: number; joker: number; use: number; style: number; total: number }[]) => void),
+  /** 之後的手只是「送格」也有一點點價值 */
+  sacWin: 0.05,
+  /** 每種(牌型, 有沒有用鬼)最多留幾個候選 */
+  perKind: 2,
+  /** 鬼牌用途效益(使用者定:葫蘆 / 三條 / 鐵支最划算 > 同花 > 順子):用鬼湊成這些牌型的加分 */
+  jokerUse: { [CATEGORY.THREE_KIND]: 0.25, [CATEGORY.FULL_HOUSE]: 0.25, [CATEGORY.FOUR_KIND]: 0.25, [CATEGORY.STRAIGHT_FLUSH]: 0.25, [CATEGORY.STRAIGHT]: -0.1 } as Record<number, number>,
+  /** 反推:我那疊至少這麼強(贏隨便一疊的機率)才算「對手不敢撞」 */
+  readMin: 0.55,
+  /** 反推:對手沒拿去撞的那疊裡「打得過我那疊」的可能 × 這個 */
+  avoid: 0.4,
+}
+
+/** 看未來算幾手。 */
+const FUTURE_HANDS = 3
+
+/** 前幾手出 5 張大牌時才交給看棋盤重新考慮(後段出大牌本來就該出)。 */
+const BOARD_EARLY_HANDS = 3
+
+/** 這手出的牌 + 當時對手等著的牌(第二段反推用)。 */
+interface LastPick {
+  cards: Card[]
+  waiting: { slot: number; count: number }[]
+}
+/** 反推讀到的:第 slot 格對手那疊(count 張)大概打不過 cards。 */
+interface FoeRead {
+  slot: number
+  count: number
+  cards: Card[]
+}
+const lastPicks = new WeakMap<BossRuntime, LastPick>()
+const foeReads = new WeakMap<BossRuntime, FoeRead[]>()
+
+/** 測試用:目前反推讀到的(唯讀)。 */
+export const bossReadsOf = (rt: BossRuntime): readonly FoeRead[] => foeReads.get(rt) ?? []
+
+/** 對手那邊還在等對決的格子(我這邊還空著、他那邊有牌)。 */
+function foeWaiting(state: GameState, me: PlayerId): { slot: number; count: number }[] {
+  const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+  return state.slots
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.owner === null && s[me].length === 0 && s[foe].length > 0)
+    .map(({ s, i }) => ({ slot: i, count: s[foe].length }))
+}
+
+function rememberPick(state: GameState, me: PlayerId, rt: BossRuntime, ids: string[]): void {
+  if (!BOARD_TUNE.on || hasPlaceTable(state.mode)) return
+  lastPicks.set(rt, { cards: state.hands[me].filter((c) => ids.includes(c.id)), waiting: foeWaiting(state, me) })
+}
+
+/**
+ * 第二段:上一手我出的牌被對手放進第 j 格。那時對手等著、他卻沒拿來撞的那幾疊 →
+ * 如果我那疊夠強,代表他不敢撞:那幾疊「打得過我那疊」的可能打折(FoeRead,看棋盤時套用)。
+ */
+function observeLastPick(state: GameState, me: PlayerId, rt: BossRuntime): void {
+  const last = lastPicks.get(rt)
+  if (!last) return
+  lastPicks.delete(rt)
+  const ids = new Set(last.cards.map((c) => c.id))
+  const j = state.slots.findIndex((s) => s[me].length === ids.size && s[me].every((c) => ids.has(c.id)))
+  if (j < 0 || normalStrength(last.cards) < BOARD_TUNE.readMin) return
+  const add = last.waiting.filter((w) => w.slot !== j).map((w) => ({ ...w, cards: last.cards }))
+  if (add.length) foeReads.set(rt, [...(foeReads.get(rt) ?? []), ...add])
+}
+
+/** 看棋盤時,對手第 slot 格那疊的分布套用反推(那疊沒變、還在等才算)。 */
+function readAdjust(state: GameState, me: PlayerId, rt: BossRuntime): ((slot: number, dist: PileEntry[]) => PileEntry[]) | undefined {
+  const foe: PlayerId = me === 'p1' ? 'p2' : 'p1'
+  const reads = (foeReads.get(rt) ?? []).filter((r) => state.slots[r.slot].owner === null && state.slots[r.slot][foe].length === r.count)
+  foeReads.set(rt, reads)
+  if (!reads.length) return undefined
+  return (slot, dist) => {
+    const mine = reads.filter((r) => r.slot === slot)
+    if (!mine.length) return dist
+    const out = dist.map((e): PileEntry => {
+      let p = e[3]
+      for (const r of mine) if (!beatsEntry(r.cards, e)) p *= BOARD_TUNE.avoid
+      return [e[0], e[1], e[2], p, e[4]]
+    })
+    const tot = out.reduce((s, e) => s + e[3], 0)
+    return tot > 0 ? out.map((e): PileEntry => [e[0], e[1], e[2], e[3] / tot, e[4]]) : dist
+  }
+}
+
+/** 看未來:剩下的牌一手一手挑最強的(貪心),前 slots 手的強弱加總。 */
+function futureValue(rest: Card[], slots: number): number {
+  let cards = rest
+  let v = 0
+  for (let k = 0; k < slots; k++) {
+    const cs = candidatePiles(cards).filter((c) => !isLoneJoker(c))
+    if (!cs.length) break
+    let best = cs[0]
+    let bs = -1
+    for (const c of cs) {
+      const s = normalStrength(c)
+      if (s > bs) {
+        bs = s
+        best = c
+      }
+    }
+    v += 2 * (bs - BOARD_TUNE.sacWin)
+    const used = new Set(best.map((c) => c.id))
+    cards = cards.filter((c) => !used.has(c.id))
+  }
+  return v
+}
+
+function boardRefine(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, hand: Card[], cands: Card[][], stylePile: Card[]): Card[] {
+  if (!BOARD_TUNE.on || hasPlaceTable(state.mode)) return stylePile
+  const left = SLOT_COUNT - state.placementsDone[me]
+  if (left <= 1) return stylePile
+  const T = BOARD_TUNE
+  const reals = hand.filter((c) => !isSpecial(c))
+
+  // 候選:打法選的那手 + 每種(牌型, 有沒有用鬼)最強的幾個 + 送格(2 張或 1 張最沒用的)
+  const opts: Card[][] = [stylePile]
+  const byKind = new Map<number, Card[][]>()
+  for (const c of cands) {
+    const k = evaluate(c).category * 2 + (usesJoker(c) ? 1 : 0)
+    byKind.set(k, [...(byKind.get(k) ?? []), c])
+  }
+  for (const cs of byKind.values()) opts.push(...cs.sort((a, b) => normalStrength(b) - normalStrength(a)).slice(0, T.perKind))
+  const junk = junkCards(hand, new Set())
+  if (junk.length) opts.push(junk)
+  const seen = new Set<string>()
+  const uniq = opts.filter((o) => {
+    const id = o.map((c) => c.id).sort().join()
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+  if (uniq.length <= 1) return stylePile
+
+  const now = blankBoardScores(state, me, uniq, T.samples, rng, 0, readAdjust(state, me, rt))
+  // 看未來:現在留著的牌,之後(最多 FUTURE_HANDS 手)還湊得出多少。補到的牌多半湊不成牌型,不算進來
+  // (第一版用「補 2.5 張湊一手」扣掉,前幾手算出來是 0 手 → 看未來整個沒作用)
+  const slotsForRest = Math.min(left - 1, FUTURE_HANDS)
+  const gamma = T.gamma[rt.main]
+  let best = 0
+  let top = -Infinity
+  const rows: NonNullable<Parameters<NonNullable<typeof T.debug>>[0]> = []
+  uniq.forEach((o, k) => {
+    const used = new Set(o.map((c) => c.id))
+    const rest = hand.filter((c) => !used.has(c.id))
+    const fut = slotsForRest > 0 && reals.length ? futureValue(rest, slotsForRest) : 0
+    const jokers = o.filter(isJoker).length
+    const use = jokers ? (T.jokerUse[evaluate(o).category] ?? 0) : 0
+    const style = o === stylePile ? T.styleBonus : 0
+    const s = now[k] + gamma * fut - T.jokerCost * jokers + use + style + rng() * T.noise
+    if (T.debug) rows.push({ pile: o.map((c) => (isJoker(c) ? '鬼' : `${c.suit}${c.rank}`)).join(' '), now: now[k], future: gamma * fut, joker: -T.jokerCost * jokers, use, style, total: s })
+    if (s > top) {
+      top = s
+      best = k
+    }
+  })
+  T.debug?.(rows)
+  return uniq[best]
+}
+
 export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng = Math.random): string[] {
+  observeLastPick(state, me, rt) // 第二段:上一手的牌被對手放到哪 → 反推對手等著的牌
+  const ids = pickCore(state, me, rt, rng)
+  rememberPick(state, me, rt, ids)
+  return ids
+}
+
+function pickCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): string[] {
   const hand = state.hands[me]
   // 單出一張鬼不當候選(使用者 2026-11-02:把鬼耗掉不合理)。拿掉後沒候選 = 手上沒任何成牌 → noMadeHandPick。
   const all = candidatePiles(hand)
@@ -473,7 +666,8 @@ export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: R
 
   // Under-execution (blunder): fall back to the naive strongest pile.
   let pile: Card[]
-  if (!sharp(rt.execution, rng)) {
+  const sharpPick = sharp(rt.execution, rng)
+  if (!sharpPick) {
     pile = strongest(cands)
   } else {
     pile =
@@ -486,11 +680,15 @@ export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: R
 
   // 拼牌 / peek: hold pieces of a better next-turn hand and send filler — UNLESS we're
   // cashing out (behind / late), when we tempo up instead of building.
+  let holding = false // 偷窺 / 拼牌決定留牌 → 看棋盤不蓋掉這個計畫
   if (!cashOut) {
     let held: Card[] | null = null
     if (rt.peekDraw) held = peekHoldPick(hand, rt.peekDraw) // 偷窺:一般化留牌(任何升級)
     if (!held && lowLeverage(state, me) && fires(rt.profile.draw, rng)) held = drawHoldPick(hand)
-    if (held && held.length) pile = held
+    if (held && held.length) {
+      pile = held
+      holding = true
+    }
   }
 
   // 鬼牌:必須「升級牌型」才用(禁跳張、禁高牌→一對);用時搜尋所有鬼牌擺法,挑升最多階、又
@@ -510,6 +708,15 @@ export function bossPick(state: GameState, me: PlayerId, rt: BossRuntime, rng: R
       if (bestNoJoker && jump < 4 && lowLeverage(state, me) && fires(rt.profile.jokerTiming, rng)) pile = bestNoJoker
     }
   }
+
+  // 看棋盤(一般牌組,2026-11-02):打法選的那手 vs 其他出法(不用鬼 / 鬼只升一點 / 送格…),
+  // 依對手等著的牌(張數 → 分布表)和他會怎麼放,挑期望最高的;打法自己的選擇有加分,強攻還是強攻。
+  // 只管兩種情況(使用者要解決的「前強後超弱」):這手要用鬼、或前 3 手要出 5 張大牌。
+  // 打法自己的其他決定(囤牌留同花、偷窺留牌…)不碰。
+  // 三種打法都看棋盤(看對手等著的牌決定要不要出大牌 / 升級);打法個性靠 BOARD_TUNE.gamma(強攻最看現在)+ styleBonus 保住。
+  // 2026-11-02 模擬:只讓平衡考慮時,強攻 / 囤牌對舊打法 47~49%(比舊的還弱);三種都考慮 51~54%、打基本 AI 強攻 61% / 囤牌 67%。
+  const bigEarly = pile.length >= 5 && state.placementsDone[me] < BOARD_EARLY_HANDS
+  if (sharpPick && !holding && (usesJoker(pile) || bigEarly)) pile = boardRefine(state, me, rt, rng, hand, cands, pile)
 
   // 死神之眼:看過對手翻開的牌堆 → 打得過就出剛好打得過的,打不過就忍(有停損)。
   pile = eyeAdjust(pile, cands, hand, state, me, rt, rng)

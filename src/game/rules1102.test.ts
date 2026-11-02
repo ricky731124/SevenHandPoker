@@ -16,7 +16,7 @@ import {
   type PlayerId,
 } from './state'
 import { buildFrames, suitMove, type Move } from './replay'
-import { bossPick, type BossRuntime } from './bossAI'
+import { bossPick, bossReadsOf, type BossRuntime } from './bossAI'
 import { aiPick } from './ai'
 import { CAMPAIGN } from './campaign'
 import { hidesPushPos, LIMITED_INFO } from './limited'
@@ -167,6 +167,52 @@ describe('人機不單出鬼 / 送格送 2 張(2026-11-02)', () => {
   it('對戰電腦(一般房)沒成牌又有鬼 → 鬼 + 最大那張,不單出鬼', () => {
     const g = withHand('p2', [JOKER, card('S', 14), card('H', 10), card('C', 3)])
     expect(aiPick(g, 'p2').sort()).toEqual([JOKER.id, 'S14'].sort())
+  })
+})
+
+describe('看棋盤 + 反推(一般牌組,2026-11-02 第二輪)', () => {
+  const brain = (main: BossRuntime['main']): BossRuntime => ({ profile: { ...CAMPAIGN[0].profile, jokerTiming: 0, draw: 0 }, main, execution: 1 })
+  // 兩對(KK、55)+ 鬼 + 散牌:舊打法鬼一用就升到葫蘆(5 張)
+  const hand = [card('S', 13), card('H', 13), card('D', 5), card('C', 5), card('H', 9), card('S', 3), JOKER]
+  /** 對手第 slot 格放了 n 張等著(牌本身 boss 看不到,只看張數) */
+  const withFoe = (piles: Record<number, number>): GameState => {
+    const g = withHand('p2', hand)
+    const slots = g.slots.map((s, i) => (piles[i] ? { ...s, p1: Array.from({ length: piles[i] }, (_, k) => card((['S', 'H', 'D', 'C'] as Suit[])[k % 4], (2 + k) as Rank)) } : s))
+    return { ...g, slots, placementsDone: { p1: Object.keys(piles).length, p2: 0 } }
+  }
+  const fullHouseRate = (g: GameState, main: BossRuntime['main']) => {
+    let fh = 0
+    for (let i = 0; i < 60; i++) {
+      let s = i * 7919 + 1
+      const rng = () => ((s = (s * 48271) % 2147483647) / 2147483647)
+      if (bossPick(g, 'p2', brain(main), rng).length === 5) fh++
+    }
+    return fh / 60
+  }
+
+  it('對手等著的都是 2 張的小牌:平衡打法不會每次都用鬼升到葫蘆', () => {
+    expect(fullHouseRate(withFoe({ 1: 2, 4: 2 }), 'balance')).toBeLessThan(0.9)
+  })
+
+  it('反推:我出強牌,對手沒拿他等著的那疊來撞 → 記下「那疊大概打不過我」', () => {
+    const rt = brain('attack')
+    // 對手第 2 格等著 5 張;我出一疊鐵支 9
+    const quads = [card('S', 9), card('H', 9), card('D', 9), card('C', 9)]
+    const g0 = withHand('p2', [...quads, card('S', 3), card('H', 4)])
+    const five = [card('S', 2), card('H', 4), card('D', 6), card('C', 8), card('S', 10)]
+    const a: GameState = { ...g0, slots: g0.slots.map((s, i) => (i === 2 ? { ...s, p1: five } : s)), placementsDone: { p1: 1, p2: 0 } }
+    const ids = bossPick(a, 'p2', rt, () => 0.5)
+    const sent = a.hands.p2.filter((c) => ids.includes(c.id))
+    // 對手把我這疊放到第 4 格(空的),沒拿第 2 格那疊來撞
+    const b: GameState = {
+      ...a,
+      hands: { ...a.hands, p2: a.hands.p2.filter((c) => !ids.includes(c.id)) },
+      slots: a.slots.map((s, i) => (i === 4 ? { ...s, p2: sent } : s)),
+    }
+    bossPick(b, 'p2', rt, () => 0.5)
+    const reads = bossReadsOf(rt)
+    if (sent.length >= 4) expect(reads.some((r) => r.slot === 2 && r.count === 5)).toBe(true)
+    else expect(reads.length).toBe(0) // 沒出強牌就不算讀到
   })
 })
 

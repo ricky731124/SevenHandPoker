@@ -246,13 +246,13 @@ function SuitRun({ it, cardW, dir }: { it: Item; cardW: number; dir: number }) {
     <motion.div
       className="card-fx__card"
       style={{ left: it.from.x, top: it.from.y, width: cardW, height: h }}
-      initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+      initial={{ x: 0, y: 0, scale: 1 }}
       animate={{
         x: [0, 0, 0, 0, dx, dx],
         y: [0, L, L, L, dy, dy],
         scale: [1, 1.14, 1.14, 1.14, 1, 1],
-        opacity: [1, 1, 1, 1, 1, 0],
       }}
+      // 落回手牌位置後就停在那裡(不淡出),演出結束時跟真牌同一刻換掉 → 不會「消失一下再出現」(使用者 2026-11-02)
       transition={{ duration: SUIT_DUR, times: [0, 0.12, 0.5, 0.74, 0.9, 1], ease: 'easeInOut' }}
     >
       <Flip before={<Card card={it.before} w={cardW} />} after={<Card card={after} w={cardW} />} at={[0.5, 0.6, 0.7]} dur={SUIT_DUR} delay={0} />
@@ -395,15 +395,16 @@ const HEART_T = { bowIn: 0.1, first: 0.3, gap: 0.45, fly: 0.4 }
 
 /**
  * 正中紅心:同一把弓依序射出箭(1~2 支),射中的牌最後同時爆愛心(使用者 2026-11-02)。
- * 1 張:弓在牌的左邊平射;2 張:弓在兩張牌中間、往牌桌中間那一側,分別斜射兩張,箭不會交叉疊到。
+ * 弓一律在被射的牌中間、往牌桌中間那一側(1 張 = 正對那張往下射;2 張 = 兩張中間分別斜射,箭不會交叉疊到)。
+ * 2026-11-02 使用者:1 張 / 2 張做法要一致(原本 1 張是從左邊平射)。
  */
 function HeartsTheme({ centers, cardW, dir }: { centers: Pt[]; cardW: number; dir: number }) {
   const h = cardW * 1.4
   const A = cardW * 1.2 // 箭長
   const B = cardW * 0.75 // 弓大小
   const midX = centers.reduce((s, c) => s + c.x, 0) / centers.length
-  // 2 張:弓在卡名標籤再過去一點(標籤在浮起的牌上方約 0.95 張牌高),不疊到標籤
-  const bow: Pt = centers.length === 1 ? { x: centers[0].x - cardW * 3.2, y: centers[0].y } : { x: midX, y: centers[0].y + dir * h * 1.75 }
+  // 弓在卡名標籤再過去一點(標籤在浮起的牌上方約 0.95 張牌高),不疊到標籤
+  const bow: Pt = { x: midX, y: centers[0].y + dir * h * 1.75 }
   const shots = centers.map((c, i) => {
     const ang = Math.atan2(c.y - bow.y, c.x - bow.x)
     const ux = Math.cos(ang)
@@ -481,7 +482,8 @@ function HeartsTheme({ centers, cardW, dir }: { centers: Pt[]; cardW: number; di
 function DuckTheme({ cx, cy, cardW, k }: { cx: number; cy: number; cardW: number; k: number }) {
   const h = cardW * 1.4
   // 兩隻鴨(改 2 張)時第二隻跑低一點,對話泡泡才不會疊在一起
-  const y = cy + h * 0.42 + k * cardW * 0.45
+  // 整體往上提一點(使用者 2026-11-02:下方玩家第二隻太貼底)
+  const y = cy + h * 0.42 - cardW * 0.22 + k * cardW * 0.45
   const x0 = cx - cardW * 2.4
   const x1 = cx + cardW * 2.4
   const hops = 8
@@ -560,13 +562,14 @@ function SwapRun({ it, deck, cardW, delay, dir }: { it: Item; deck: Pt | null; c
         animate={{ x: [fromDeck.x, fromDeck.x, 0, 0], y: [fromDeck.y, fromDeck.y, dir * h * 0.3, 0], opacity: [0, 1, 1, 1], scale: [0.85, 0.85, 1.1, 1] }}
         transition={{ delay: delay + D * 0.6, duration: D * 0.22, times: [0, 0.05, 0.8, 1], ease: 'easeOut' }}
       >
-        <motion.div initial={{ opacity: 1 }} animate={{ opacity: [1, 1, 0] }} transition={{ delay: delay + D * 0.82, duration: D * 0.18, times: [0, 0.75, 1] }}>
+        {/* 落定後停在手牌位置不淡出,演出結束時跟真牌同一刻換掉(不會消失一下再出現) */}
+        <div>
           {it.after ? (
             <Flip before={<CardBack w={cardW} />} after={<Card card={it.after} w={cardW} />} at={[0.05, 0.3, 0.55]} dur={D * 0.18} delay={delay + D * 0.82} />
           ) : (
             <CardBack w={cardW} />
           )}
-        </motion.div>
+        </div>
       </motion.div>
     </>
   )
@@ -600,20 +603,12 @@ function PeekRun({ deck, count, cards, cardW }: { deck: Pt; count: number; cards
         const delay = 0.5 + i * 0.18
         const dur = PEEK_DUR - delay
         const face = cards?.[i]
-        return (
-          <motion.div
-            key={`pk-${i}`}
-            className="card-fx__card"
-            style={{ left: deck.x - cardW / 2, top: deck.y - h / 2, width: cardW, height: h }}
-            initial={{ opacity: 0, x: 0, y: 0, rotate: 0, scale: 0.9 }}
-            animate={{ opacity: [0, 1, 1, 1, 0], x: [0, off * 0.4, off, off, off], y: [0, -h * 0.12, h * 0.05, h * 0.05, h * 0.05], rotate: [0, 0, tilt, tilt, 0], scale: [0.9, 1, 1.05, 1.05, 1] }}
-            transition={{ delay, duration: dur, times: [0, 0.2, 0.45, 0.8, 1], ease: 'easeOut' }}
-          >
-            {/* 還沒掀:整張牌背 */}
+        // 牌背:先整張 → 掀起來時右上角缺一塊 + 往內折的白色牌角
+        const back = (
+          <>
             <motion.div className="card-fx__face" initial={{ opacity: 1 }} animate={{ opacity: [1, 1, 0, 0] }} transition={{ delay, duration: dur, times: [0, 0.4, 0.401, 1] }}>
               <CardBack w={cardW} />
             </motion.div>
-            {/* 掀起來:右上角缺一塊 + 往內折的白色牌角 */}
             <motion.div className="card-fx__face" initial={{ opacity: 0 }} animate={{ opacity: [0, 0, 1, 1] }} transition={{ delay, duration: dur, times: [0, 0.4, 0.401, 1] }}>
               <div style={{ clipPath: cut, width: cardW, height: h }}>
                 <CardBack w={cardW} />
@@ -626,12 +621,19 @@ function PeekRun({ deck, count, cards, cardW }: { deck: Pt; count: number; cards
                 transition={{ delay, duration: dur, times: [0, 0.4, 0.5, 1], ease: 'easeOut' }}
               />
             </motion.div>
-            {/* 回放:翻開給觀眾看 */}
-            {face && (
-              <motion.div className="card-fx__face" initial={{ opacity: 0 }} animate={{ opacity: [0, 0, 1, 1] }} transition={{ delay, duration: dur, times: [0, 0.58, 0.66, 1] }}>
-                <Card card={face} w={cardW} />
-              </motion.div>
-            )}
+          </>
+        )
+        return (
+          <motion.div
+            key={`pk-${i}`}
+            className="card-fx__card"
+            style={{ left: deck.x - cardW / 2, top: deck.y - h / 2, width: cardW, height: h }}
+            initial={{ opacity: 0, x: 0, y: 0, rotate: 0, scale: 0.9 }}
+            animate={{ opacity: [0, 1, 1, 1, 0], x: [0, off * 0.4, off, off, off], y: [0, -h * 0.12, h * 0.05, h * 0.05, h * 0.05], rotate: [0, 0, tilt, tilt, 0], scale: [0.9, 1, 1.05, 1.05, 1] }}
+            transition={{ delay, duration: dur, times: [0, 0.2, 0.45, 0.8, 1], ease: 'easeOut' }}
+          >
+            {/* 回放(有 face):掀角之後整張翻過來給觀眾看(2026-11-02:原本淡入疊在切角牌上,看起來怪) */}
+            {face ? <Flip before={back} after={<Card card={face} w={cardW} />} at={[0.5, 0.56, 0.62]} dur={dur} delay={delay} /> : back}
           </motion.div>
         )
       })}

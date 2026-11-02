@@ -14,7 +14,7 @@ import {
   type PlayerId,
 } from './state'
 import { buildFrames, type Move } from './replay'
-import { bossChooseSpecial, bossPick, bossPlace, deathEyeTrigger, knownFoePiles, type BossProfile, type BossRuntime } from './bossAI'
+import { BOARD_TUNE, bossChooseSpecial, bossPick, bossPlace, deathEyeTrigger, knownFoePiles, type BossProfile, type BossRuntime } from './bossAI'
 import { bossCardPool, getStage, rollBossRuntime } from './campaign'
 import { SPECIAL_CARDS } from './specialCards'
 import { deserializeForGuest, serializeForGuest } from '../net/sync'
@@ -198,7 +198,13 @@ describe('boss 看牌後怎麼出(eyeAdjust)', () => {
     const hand = [c('C', 6), c('D', 6), c('S', 9), c('H', 9), c('D', 9), c('C', 2), c('H', 4)]
     const g = board({ piles: { 1: [c('S', 5), c('H', 5)] }, bossHand: hand })
     expect(knownFoePiles(g, 'p2')).toEqual([])
-    expect(bossPick(g, 'p2', rt(), R(0)).length).toBe(5) // 強攻 → 葫蘆
+    // 這裡只驗 eyeAdjust 沒插手 → 關掉看棋盤(2026-11-02 起會看對手只有 2 張而改出一對,那是看棋盤的事)
+    BOARD_TUNE.on = false
+    try {
+      expect(bossPick(g, 'p2', rt(), R(0)).length).toBe(5) // 強攻 → 葫蘆
+    } finally {
+      BOARD_TUNE.on = true
+    }
   })
 
   it('打得過最強那堆 → 出剛好打得過的(一對 5 → 出一對 6,不砸葫蘆)', () => {

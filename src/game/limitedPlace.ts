@@ -11,7 +11,7 @@ import { isBlank, isJoker } from './cards'
 import { CATEGORY, compareHands, compareLimitedWith, evaluate, type HandValue } from './evaluate'
 import type { BossRuntime } from './bossAI'
 import type { LimitedMode } from './limited'
-import { SLOT_COUNT, countCoins, emptySlotsFor, otherPlayer, ownsSlot, type GameState, type PlayerId } from './state'
+import { SLOT_COUNT, countCoins, emptySlotsFor, exposedSlots, otherPlayer, ownsSlot, type GameState, type PlayerId } from './state'
 
 type Rng = () => number
 
@@ -93,6 +93,20 @@ const MIXED_PLAYER_WAYS: Way[][] = [
 const MIXED_PLAYER_TABLE = flatten(MIXED_PLAYER_WAYS)
 const MIXED_COUNT_MIX: readonly number[] = [0.15, 0.2, 0.25, 0.25, 0.15]
 
+/**
+ * 一般牌組(一般房 / 特殊房 / 主線 / 火力全開,2026-11-02):快配人機互打 3000 場的「張數 → 牌型分布」,index = 張數 − 1。
+ * 由 `GENN=1 npx vitest run src/game/dump.sim.test.ts` 產生;出牌邏輯大改要重產。點數 2~14、開局各 1 張鬼 / 空白。
+ * 給看棋盤(出牌前模擬對手會把這疊放哪)用;一般牌組的 boss 放牌還是 bossAI.bossPlace,不走 placeByTable。
+ */
+const NORMAL_TABLE: readonly (readonly Entry[])[] = [
+[[0,5,0,0.167], [0,2,0,0.167], [0,14,0,0.111], [0,4,0,0.111], [0,3,0,0.111], [0,7,0,0.111], [0,6,0,0.111], [0,8,0,0.056], [0,12,0,0.056]],
+  [[0,14,0,0.118], [0,13,0,0.076], [1,2,0,0.057], [1,3,0,0.051], [1,7,0,0.049], [1,4,0,0.049], [1,8,0,0.048], [1,12,0,0.048], [1,9,0,0.048], [1,11,0,0.047], [1,14,0,0.046], [1,13,0,0.046], [1,5,0,0.045], [1,10,0,0.044], [0,12,0,0.044], [1,6,0,0.042], [0,11,0,0.032], [0,10,0,0.024], [0,9,0,0.017], [0,8,0,0.015], [0,7,0,0.013], [0,6,0,0.011], [0,4,0,0.009], [0,3,0,0.009], [0,5,0,0.009]],
+  [[1,14,0,0.044], [1,2,0,0.043], [1,7,0,0.042], [1,3,0,0.042], [1,11,0,0.042], [1,13,0,0.040], [1,8,0,0.040], [1,9,0,0.039], [1,12,0,0.036], [1,10,0,0.035], [1,4,0,0.034], [1,6,0,0.031], [1,5,0,0.031], [3,2,0,0.028], [3,4,0,0.026], [3,3,0,0.025], [3,14,0,0.025], [3,2,1,0.025], [3,13,0,0.025], [3,12,0,0.025], [3,3,1,0.024], [3,11,0,0.023], [3,5,0,0.022], [3,4,1,0.022], [3,6,1,0.021], [3,6,0,0.021], [3,7,0,0.021], [3,10,1,0.020], [3,9,0,0.019], [3,5,1,0.018], [3,10,0,0.017], [3,8,0,0.017], [3,8,1,0.014], [3,11,1,0.012], [3,12,1,0.011], [3,13,1,0.011], [3,14,1,0.011], [3,9,1,0.011], [3,7,1,0.010]],
+  [[2,14,0,0.135], [2,13,0,0.125], [2,12,0,0.113], [2,11,0,0.098], [2,10,0,0.089], [2,9,0,0.086], [2,8,0,0.076], [2,7,0,0.070], [2,6,0,0.055], [2,5,0,0.043], [2,4,0,0.030], [2,3,0,0.020], [7,2,1,0.006], [7,9,1,0.005], [3,10,0,0.005], [3,14,0,0.005], [3,2,1,0.004], [7,7,1,0.004], [3,2,0,0.004], [3,13,0,0.004], [3,12,0,0.004], [3,4,1,0.004], [3,3,0,0.004], [3,11,0,0.004], [3,9,0,0.003], [3,4,0,0.003]],
+  [[5,14,0,0.098], [5,13,0,0.067], [6,14,1,0.061], [6,13,1,0.051], [6,12,1,0.044], [5,12,0,0.043], [6,11,1,0.036], [4,14,0,0.033], [6,10,1,0.030], [4,6,0,0.028], [6,9,1,0.027], [5,11,0,0.027], [4,7,0,0.023], [4,9,0,0.023], [4,5,0,0.022], [4,8,0,0.022], [5,14,1,0.021], [4,11,0,0.020], [4,10,0,0.019], [6,3,0,0.019], [6,8,1,0.019], [4,13,0,0.018], [6,2,0,0.018], [6,5,0,0.017], [4,12,0,0.017], [6,6,0,0.016], [6,7,1,0.016], [6,4,0,0.015], [6,6,1,0.014], [6,7,0,0.014], [6,9,0,0.013], [5,10,0,0.013], [6,10,0,0.013], [6,8,0,0.012], [6,14,0,0.012], [6,13,0,0.011], [6,12,0,0.011], [6,11,0,0.011], [6,5,1,0.009], [6,4,1,0.007], [5,9,0,0.006], [6,3,1,0.003]],
+]
+const NORMAL_COUNT_MIX: readonly number[] = [0.02, 0.38, 0.1, 0.15, 0.35]
+
 interface ModeTable {
   byCount: readonly (readonly Entry[])[]
   countMix: readonly number[]
@@ -105,13 +119,19 @@ interface ModeTable {
   jokers: number
   /** 撲朔迷離:算牌用「對手手上大概有幾張」的機率打折;空城計是一刀切(空白不夠就不可能) */
   holdOdds?: boolean
+  /** 牌組最小點數:限定房 2~6 換掉了 = 7;一般牌組 = 2(算牌、合成假牌用) */
+  minRank: number
 }
 /** 有表的玩法才走這裡。 */
 const TABLES: Partial<Record<LimitedMode, ModeTable>> = {
-  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX, jokerTie: true, blanks: 2, jokers: 22 },
-  blank: { byCount: BLANK_PLAYER_TABLE, countMix: BLANK_COUNT_MIX, readBluff: true, jokerTie: false, blanks: 22, jokers: 2 },
-  mixed: { byCount: MIXED_PLAYER_TABLE, countMix: MIXED_COUNT_MIX, readBluff: true, jokerTie: true, blanks: 12, jokers: 12, holdOdds: true },
+  ghost: { byCount: GHOST_TABLE, countMix: GHOST_COUNT_MIX, jokerTie: true, blanks: 2, jokers: 22, minRank: 7 },
+  blank: { byCount: BLANK_PLAYER_TABLE, countMix: BLANK_COUNT_MIX, readBluff: true, jokerTie: false, blanks: 22, jokers: 2, minRank: 7 },
+  mixed: { byCount: MIXED_PLAYER_TABLE, countMix: MIXED_COUNT_MIX, readBluff: true, jokerTie: true, blanks: 12, jokers: 12, holdOdds: true, minRank: 7 },
 }
+/** 一般牌組(沒有限定房玩法 / 火力全開)。 */
+const NORMAL: ModeTable = { byCount: NORMAL_TABLE, countMix: NORMAL_COUNT_MIX, jokerTie: false, blanks: 2, jokers: 2, minRank: 2 }
+/** 這局用哪張表:有表的限定房用自己的,其他(一般牌組)用 NORMAL。 */
+const tableOf = (state: GameState): ModeTable => (state.mode && TABLES[state.mode]) || NORMAL
 export const hasPlaceTable = (mode: LimitedMode | undefined): boolean => !!mode && !!TABLES[mode]
 
 interface Key {
@@ -183,10 +203,10 @@ const choose = (n: number, k: number): number => (k < 0 || k > n ? 0 : k === 0 ?
  * 算牌(點數):每個點數還沒看到幾張(全場各 4 張,2 張鬼可以補)→ 這疊是「某牌型 + 某點數」的機會
  * 照「還湊得出的組合數 ÷ 四張都在時的組合數」打折;湊不出來的 = 0(例:A 看到 3 張、鬼也都看到了 → 不會是 A 三條)。
  */
-function rankOdds(seen: Card[], wild: number): (cat: number, top: number) => number {
+function rankOdds(seen: Card[], wild: number, minRank = 7): (cat: number, top: number) => number {
   if (!PLACE_TUNE.rankCount) return () => 1
   const unseen = new Map<number, number>()
-  for (let r = 7; r <= 14; r++) unseen.set(r, 4)
+  for (let r = minRank; r <= 14; r++) unseen.set(r, 4)
   for (const c of seen) if (!isBlank(c) && !isJoker(c)) unseen.set(c.rank, (unseen.get(c.rank) ?? 0) - 1)
   const of = (r: number, k: number) => choose(Math.min(4, Math.max(0, unseen.get(r) ?? 0) + wild), k) / choose(4, k)
   return (cat, top) => {
@@ -204,7 +224,7 @@ function rankOdds(seen: Card[], wild: number): (cat: number, top: number) => num
       case CATEGORY.STRAIGHT:
       case CATEGORY.STRAIGHT_FLUSH: {
         let x = 1
-        for (let r = top - 4; r <= top; r++) x *= r >= 7 ? of(r, 1) : 1
+        for (let r = top - 4; r <= top; r++) x *= r >= minRank ? of(r, 1) : 1
         return x
       }
       default:
@@ -251,7 +271,7 @@ function blankDist(state: GameState, me: PlayerId, t: ModeTable, n: number): Ent
   const seen = [...state.hands[me], ...state.slots.flatMap((s) => s[me]), ...shown.flat()]
   const unseenB = Math.max(0, t.blanks - seen.filter(isBlank).length)
   const unseenJ = Math.max(0, t.jokers - seen.filter(isJoker).length)
-  const odds = rankOdds(seen, Math.min(2, unseenJ))
+  const odds = rankOdds(seen, Math.min(2, unseenJ), t.minRank)
   let hold: (blanks: number, jokers: number) => number
   if (t.holdOdds) {
     // 對手手上 + 等著(沒翻開)的牌 H 張;沒看到的牌 = 牌堆 + H
@@ -298,7 +318,7 @@ const LATER_DISCOUNT = 0.9 // 之後的事不一定發生
 
 /** 限定房放牌:把對手剛出的牌放進哪一格(對手那邊還空著的格子)。 */
 export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): number {
-  const t = TABLES[state.mode!]!
+  const t = tableOf(state)
   const foe = otherPlayer(me)
   const empties = emptySlotsFor(state, foe)
   if (empties.length <= 1) return empties[0] ?? 0
@@ -361,8 +381,9 @@ export function placeByTable(state: GameState, me: PlayerId, rt: BossRuntime, rn
 
 let synthId = 0
 /** 照分布表的一種可能合成一疊具體的牌(只給模擬用;牌型 + 點數 + 鬼數對就好,花色隨便)。 */
-function synthPile([cat, top, j]: Entry, n: number): Card[] {
-  const card = (rank: number, suit: Card['suit'] = 'S'): Card => ({ id: `SYN${++synthId}`, suit, rank: rank as Card['rank'] })
+function synthPile([cat, top, j]: Entry, n: number, minRank = 7): Card[] {
+  // 點數超出牌組範圍(一般牌組 5 高順子往下算到 1)→ 當 A
+  const card = (rank: number, suit: Card['suit'] = 'S'): Card => ({ id: `SYN${++synthId}`, suit, rank: (rank < minRank ? 14 : rank) as Card['rank'] })
   const blank = (): Card => ({ id: `SYNB${++synthId}`, suit: 'C', rank: 2, kind: 'blank' })
   const low = top > 7 ? top - 1 : top + 1
   const suits: Card['suit'][] = ['S', 'H', 'D', 'C']
@@ -375,7 +396,7 @@ function synthPile([cat, top, j]: Entry, n: number): Card[] {
     case CATEGORY.FOUR_KIND: cards = suits.map((s) => card(top, s)); break
     case CATEGORY.FULL_HOUSE: cards = [...[0, 1, 2].map((k) => card(top, suits[k])), card(low, 'S'), card(low, 'H')]; break
     case CATEGORY.STRAIGHT: cards = [0, 1, 2, 3, 4].map((k) => card(top - k, suits[k % 2])); break
-    case CATEGORY.FLUSH: cards = [top, top - 2, top - 3, top - 5, top - 6].map((r) => card(Math.max(7, r), 'H')); break
+    case CATEGORY.FLUSH: cards = [top, top - 2, top - 3, top - 5, top - 6].map((r) => card(Math.max(minRank, r), 'H')); break
     case CATEGORY.STRAIGHT_FLUSH: cards = [0, 1, 2, 3, 4].map((k) => card(top - k, 'H')); break
     default: cards = []
   }
@@ -393,6 +414,13 @@ function drawEntry(dist: readonly Entry[], rng: Rng): Entry {
   return dist[dist.length - 1]
 }
 
+/** 一般牌組:這疊牌的強弱(贏「隨便一疊」的機率,0~1),boss 看棋盤 / 看未來用。 */
+export const normalStrength = (cards: Card[]): number => (cards.length ? strength(keyOf(cards), NORMAL) : 0)
+/** 一張分布表的一種可能(牌型, 最大點數, 鬼數, 機率);給 boss 第二段反推調權重用。 */
+export type PileEntry = Entry
+/** `cards` 這疊會不會贏分布裡的這一種(平手當不會)。 */
+export const beatsEntry = (cards: Card[], [cat, top, j]: Entry): boolean => cmpKey(keyOf(cards), { cat, top, j }, false) > 0
+
 /** 空城計 / 撲朔迷離:這疊牌的強弱(贏「隨便一疊」的機率),出牌看未來用。 */
 export const blankStrength = (cards: Card[], mode: LimitedMode = 'blank'): number => (cards.length ? strength(keyOf(cards), TABLES[mode]!) : 0)
 /** 同上,直接給牌型 / 點數 / 鬼數(撲朔迷離估「之後補到的鬼」湊出來的牌,手上還沒有那張鬼)。 */
@@ -402,23 +430,41 @@ export const keyStrength = (mode: LimitedMode, cat: number, top: number, j: numb
  * 看棋盤(空城計 §11.5d / 撲朔迷離 §11.6a):每個候選出牌 → 對手會放哪格 → 我這手的期望(格子價值為單位)。
  * 對手等著的牌只知道張數,照分布表抽 samples 次;對手用同一套放牌、站在他那邊挑(他只看得到張數)。
  */
-export function blankBoardScores(state: GameState, me: PlayerId, options: Card[][], samples: number, rng: Rng, drain = 0): number[] {
-  const t = TABLES[state.mode === 'mixed' ? 'mixed' : 'blank']!
+export function blankBoardScores(
+  state: GameState,
+  me: PlayerId,
+  options: Card[][],
+  samples: number,
+  rng: Rng,
+  drain = 0,
+  /** 一般牌組第二段(從對手放牌反推):第 i 格對手那疊的分布再調一次權重 */
+  adjust?: (slot: number, dist: Entry[]) => Entry[],
+): number[] {
+  // 空城計 / 撲朔迷離 / 一般牌組(2026-11-02 起一般牌組也看棋盤)各用自己的表
+  const t = tableOf(state)
   // 每疊只 evaluate 一次(鬼牌估值很貴):我的候選先算好,對手抽出來的牌每次抽完算一次
   const mineV = options.map((p) => evaluate(p))
   const later = options.map((p) => Math.max(0, strength(keyOf(p), t) - LATER_EDGE))
   const cmp = (o: number, b: Card[], vb: HandValue) => (t.jokerTie ? compareLimitedWith(options[o], mineV[o], b, vb).cmp : compareHands(options[o], b))
   const foe = otherPlayer(me)
   const targets = emptySlotsFor(state, me)
-  const waiting = targets.filter((i) => state.slots[i][foe].length > 0)
+  // 對手等著的牌:被死神之眼翻開的照真牌,其他只知道張數 → 照表抽
+  const shown = new Set(exposedSlots(state, foe))
+  const waiting = targets.filter((i) => state.slots[i][foe].length > 0 && !shown.has(i))
   const foeRt: BossRuntime = { profile: { pickMain: { attack: 0, hoard: 0, balance: 100 }, bluff: 50, draw: 0, jokerTiming: 0, insight: 0 }, main: 'balance', execution: 1 }
   const value = (who: PlayerId, i: number) => (winsIfOwns(state, who, i) ? WIN_SLOT : 1 + 0.4 * adjacent(state, who, i))
   const totals = options.map(() => 0)
-  const dists = new Map(waiting.map((i) => [i, blankDist(state, me, t, Math.min(5, state.slots[i][foe].length))]))
+  const dists = new Map(
+    waiting.map((i) => {
+      const d = blankDist(state, me, t, Math.min(5, state.slots[i][foe].length))
+      return [i, adjust ? adjust(i, d) : d]
+    }),
+  )
+  const known = new Map(targets.filter((i) => shown.has(i) && state.slots[i][foe].length > 0).map((i) => [i, evaluate(state.slots[i][foe])]))
   for (let k = 0; k < samples; k++) {
-    const slots = state.slots.map((s, i) => (dists.has(i) ? { ...s, [foe]: synthPile(drawEntry(dists.get(i)!, rng), s[foe].length) } : s))
+    const slots = state.slots.map((s, i) => (dists.has(i) ? { ...s, [foe]: synthPile(drawEntry(dists.get(i)!, rng), s[foe].length, t.minRank) } : s))
     const hyp: GameState = { ...state, slots, hands: { ...state.hands, [foe]: [] }, phase: 'place' }
-    const theirV = new Map<number, HandValue>()
+    const theirV = new Map<number, HandValue>(known)
     const theirS = new Map<number, number>()
     for (const i of dists.keys()) {
       const v = evaluate(slots[i][foe])
