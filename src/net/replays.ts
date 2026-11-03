@@ -21,7 +21,13 @@ export interface ReplayPlayer {
   avatar: string
   uid: string | null
   isBot?: boolean
+  /** 人機當場抽到的打法 + 執行力(例:"hoard 0.75"),只存資料、畫面不顯示 —— 之後查回放「這手為什麼這樣出」用(2026-11-03)。 */
+  brain?: string
 }
+
+/** 人機打法 → 回放存的那一小段字。 */
+export const brainTag = (b: { main: string; execution: number } | null | undefined): string | undefined =>
+  b ? `${b.main} ${b.execution}` : undefined
 
 export interface ReplayRecord {
   v: 1

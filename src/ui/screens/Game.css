@@ -847,6 +847,8 @@
 .showdown__label { font-size: 13px; color: var(--parch-muted); }
 .showdown__hand { font-size: 18px; font-weight: 800; }
 .showdown__wild { font-size: 12px; color: var(--parch-muted); margin-top: 1px; }
+/* 改花色那行永遠一行(改幾張都不換行撐高這列) */
+.showdown__resuit { white-space: nowrap; }
 .showdown__won {
   margin-left: auto;
   display: flex;

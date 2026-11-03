@@ -46,7 +46,7 @@ export function startBroadcast(opts: {
   /** 觀戰人數變動回呼(#7:讓廣播端玩家知道自己被幾個人監控)。 */
   onWatchers?: (n: number) => void
   /** §6 賽事回放:取這場的棋譜(+房型/配對方式)→ push。回 null / 空 → 不 push。 */
-  buildReplay?: () => { special: boolean; matchType: MatchType; moves: Move[] } | null
+  buildReplay?: () => { special: boolean; matchType: MatchType; moves: Move[]; brain?: string } | null
 }): Broadcaster {
   const code = opts.code ?? randomCode()
   const db = getDb()
@@ -112,7 +112,7 @@ export function startBroadcast(opts: {
             matchType: r.matchType,
             ...(lastEngine.mode ? { mode: lastEngine.mode } : {}),
             p1:{ name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
-            p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },
+            p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot, ...(r.brain ? { brain: r.brain } : {}) },
             winner,
             moves: r.moves,
           }
@@ -139,7 +139,7 @@ export function startBroadcast(opts: {
         ...(lastEngine.mode ? { mode: lastEngine.mode } : {}),
         abandoned: true,
         p1: { name: opts.p1.name, avatar: opts.p1.avatar, uid: opts.p1.uid },
-        p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot },
+        p2: { name: opts.p2.name, avatar: opts.p2.avatar, uid: opts.p2.uid, isBot: !!opts.p2.isBot, ...(r.brain ? { brain: r.brain } : {}) },
         winner,
         moves: r.moves,
       }

@@ -172,6 +172,12 @@ function attackPick(cands: Card[][], hand: Card[]): Card[] {
   return best
 }
 
+/** 收手期(落後 / 後段)出什麼:修正前 = 直接出最大;2026-11-03 起照強攻挑(大牌裡挑出完還留得下一手的),
+ *  不要一落後就一手接一手砸到沒牌(使用者:後段散牌多是前面被逼著狂扔大牌)。 */
+function cashOutPick(cands: Card[][], hand: Card[]): Card[] {
+  return PICK_TUNE.fix1103 ? attackPick(cands, hand) : strongest(cands)
+}
+
 /** CP(效益)分數:選「這手要領什麼」時用,不是比牌大小(那用 pileStrength)。
  *  依使用者定的效益觀:三條最高;中強對(≥7)高;弱對/兩對/順子略扣(耗多張、易被看穿);
  *  單張高牌 = 這格認輸。只在囤牌/平衡挑便宜牌領時使用。 */
@@ -228,7 +234,7 @@ function shouldCashOut(state: GameState, me: PlayerId, rt: BossRuntime): boolean
 /** 囤牌: 收手期→兌現最強;囤牌期→優先三條、其次中強對(7~10/JQKA),不領弱對/高牌;
  *  沒有中強成牌就丟低散牌保留成對牌(不拆同花/順)。 */
 function hoardPick(cands: Card[][], hand: Card[], state: GameState, me: PlayerId, rt: BossRuntime): Card[] {
-  if (shouldCashOut(state, me, rt)) return strongest(cands) // 收手轉攻:兌現最強成牌
+  if (shouldCashOut(state, me, rt)) return cashOutPick(cands, hand) // 收手轉攻:兌現強牌
 
   const trips = cands.filter((c) => evaluate(c).category === CATEGORY.THREE_KIND)
   if (trips.length) return trips.reduce((b, c) => (c[0].rank > b[0].rank ? c : b), trips[0]) // 最高三條
@@ -250,7 +256,7 @@ function hoardPick(cands: Card[][], hand: Card[], state: GameState, me: PlayerId
  *  在其餘候選裡挑「本手效益(cpValue) + 保留了拼牌潛力(剩牌還有 4 張同花/順的活抽)」最高的領牌
  *  → 常常寧可出中強對而不是馬上砸順子/同花,留著牌去等升更強(對應使用者「出AA留順子牌」)。 */
 function balancePick(cands: Card[][], hand: Card[], state: GameState, me: PlayerId, rt: BossRuntime): Card[] {
-  if (shouldCashOut(state, me, rt)) return strongest(cands)
+  if (shouldCashOut(state, me, rt)) return cashOutPick(cands, hand)
   const nonMonster = cands.filter((c) => evaluate(c).category < CATEGORY.FLUSH)
   const pool = nonMonster.length ? nonMonster : cands
   const reals = hand.filter((c) => !isSpecial(c))
@@ -269,14 +275,27 @@ function balancePick(cands: Card[][], hand: Card[], state: GameState, me: Player
 /** 拼牌: if a strong draw (4-flush / open straight) exists, keep those cards and
  *  send filler this turn instead of cashing the current best. Returns null if no
  *  worthwhile draw to protect. */
-function drawHoldPick(hand: Card[]): Card[] | null {
+function drawHoldPick(hand: Card[], main: PickMain): Card[] | null {
   const reals = hand.filter((c) => !isSpecial(c))
-  const draw = flushDrawCards(reals) ?? straightDrawCards(reals)
+  const fix = PICK_TUNE.fix1103
+  // 已經湊得出順子以上(不用鬼)→ 沒什麼好「拼」的
+  if (fix && candidatePiles(reals).some((c) => evaluate(c).category >= CATEGORY.STRAIGHT)) return null
+  // 聽牌只用落單的牌(使用者 2026-11-03:為了留 ♥A 8 7 2 拆掉 AA / 88 / 777 不合理)
+  const counts = rankCounts(hand)
+  const loose = fix ? reals.filter((c) => counts.get(c.rank) === 1) : reals
+  const draw = flushDrawCards(loose) ?? straightDrawCards(loose)
   if (!draw) return null
   const drawSet = new Set(draw.map((c) => c.id))
   const spare = reals.filter((c) => !drawSet.has(c.id))
-  const sp = candidatePiles(spare)
-  if (sp.length) return weakest(sp)
+  const sp = noTripSplits(candidatePiles(spare), hand)
+  // 留著聽牌、這手出「有戰力」的成牌(使用者 2026-11-03:有主動權就出有戰力的,強一對也行):
+  // 強攻 / 平衡出最大的;囤牌出 CP 最高的便宜牌(三條 > 強一對),大牌照樣留著
+  if (sp.length) {
+    if (!fix) return weakest(sp)
+    if (main !== 'hoard') return strongest(sp)
+    const cheap = sp.filter((c) => evaluate(c).category < CATEGORY.STRAIGHT)
+    return cheap.length ? cheap.reduce((b, c) => (cpValue(c) > cpValue(b) ? c : b), cheap[0]) : weakest(sp)
+  }
   const junk = junkCards(hand, drawSet)
   if (junk.length) return junk
   if (spare.length) return [[...spare].sort((a, b) => a.rank - b.rank)[0]]
@@ -323,7 +342,7 @@ function peekHoldPick(hand: Card[], peek: Card[]): Card[] | null {
 
   const protect = new Set(target.filter((c) => !peekIds.has(c.id)).map((c) => c.id))
   const spare = reals.filter((c) => !protect.has(c.id))
-  const sp = candidatePiles(spare)
+  const sp = noTripSplits(candidatePiles(spare), hand)
   if (sp.length) return weakest(sp)
   const junk = junkCards(hand, protect)
   if (junk.length) return junk
@@ -407,6 +426,11 @@ function eyeAdjust(pile: Card[], cands: Card[][], hand: Card[], state: GameState
 
 /** 忍的時候出的小牌:最沒用的沒成對散牌(不拆大牌,見 junkCards);沒有就出最弱的候選。 */
 function smallPile(cands: Card[][], hand: Card[]): Card[] {
+  // 手上有 7 以上的對子 → 出最小的那對,不送格(使用者 2026-11-03:有牌出就別讓自己陷入被動);三條以上是要忍的大牌,不出
+  if (PICK_TUNE.fix1103) {
+    const decent = cands.filter((c) => !usesJoker(c) && isDecent(c) && evaluate(c).category === CATEGORY.PAIR)
+    if (decent.length) return weakest(decent)
+  }
   const junk = junkCards(hand, monsterCards(cands))
   if (junk.length) return junk
   return weakest(cands)
@@ -416,13 +440,53 @@ function smallPile(cands: Card[][], hand: Card[]): Card[] {
  * 送格調整(模擬比較用;遊戲裡永遠是 true)。dumpTwo = 2026-11-02 使用者定的送格打法:
  * 不單出鬼、送格送 2 張最沒用的牌、沒成牌時收手期出「鬼 + 最大那張」。false = 舊打法(送 1 張、沒成牌就單出鬼 / 最大兩張)。
  */
-export const PICK_TUNE = { dumpTwo: true }
+export const PICK_TUNE = {
+  dumpTwo: true,
+  /** 2026-11-03 回放檢討的修正(不拆三條、拼牌不拆對、有成牌不送格、弱五張扣分、鬼牌不退回順子 / 同花)。false = 修正前(模擬比較用) */
+  fix1103: true,
+}
 
 /** 手上普通牌至少幾張才送 2 張(junkCards)。使用者舉的第 6 手(手上 5~6 張)也要送 2 張,所以是 5。 */
 const JUNK_TWO_MIN = 5
 
 /** 只有一張鬼牌的那疊(單出鬼 = 白白耗掉鬼牌,使用者 2026-11-02:不准)。 */
 const isLoneJoker = (c: Card[]) => c.length === 1 && isJoker(c[0])
+
+/** 手上每個點數有幾張(普通牌)。 */
+function rankCounts(hand: Card[]): Map<number, number> {
+  const m = new Map<number, number>()
+  for (const c of hand) if (!isSpecial(c)) m.set(c.rank, (m.get(c.rank) ?? 0) + 1)
+  return m
+}
+
+/**
+ * 這疊把手上的三條拆成一對(出 2 張、留 1 張落單)。使用者 2026-11-03:握 KKK 出 KK、握 777 出 77 不合理
+ * ——要嘛三條、要嘛三條 + 鬼 / 配對子成葫蘆,要嘛出別的。
+ */
+function splitsTrips(pile: Card[], counts: Map<number, number>): boolean {
+  const inPile = rankCounts(pile)
+  for (const [r, n] of inPile) if (n === 2 && counts.get(r) === 3) return true
+  return false
+}
+
+/** 像樣的便宜牌:三條,或 7 以上的對子。 */
+function isDecent(pile: Card[]): boolean {
+  const v = evaluate(pile)
+  return v.category === CATEGORY.THREE_KIND || (v.category === CATEGORY.PAIR && (v.rankSeq[0] ?? 0) >= 7)
+}
+
+/** 手上(不用鬼)湊得出像樣的便宜牌嗎。 */
+function hasDecent(hand: Card[]): boolean {
+  return [...rankCounts(hand)].some(([r, n]) => n >= 3 || (n === 2 && r >= 7))
+}
+
+/** 拿掉拆三條的那幾疊(拿完沒東西就照舊)。 */
+function noTripSplits(cands: Card[][], hand: Card[]): Card[][] {
+  if (!PICK_TUNE.fix1103) return cands
+  const counts = rankCounts(hand)
+  const ok = cands.filter((c) => !splitsTrips(c, counts))
+  return ok.length ? ok : cands
+}
 
 /**
  * 送格要送「最沒用的 2 張」(使用者 2026-11-02):送 1 張 = 對手一看就知道最多是單張,拿最便宜的牌就吃掉,
@@ -461,6 +525,12 @@ function noMadeHandPick(hand: Card[], state: GameState, me: PlayerId, rt: BossRu
   const joker = hand.find(isJoker)
   if (!reals.length) return fallbackPile(hand)
   if (shouldCashOut(state, me, rt) || !sharp(rt.execution, rng)) {
+    // 沒鬼:最大兩張高牌只在最後一手出;其他時候詐唬也是送兩張小的(使用者 2026-11-03:兩張大高牌詐唬不合理)
+    const last = SLOT_COUNT - state.placementsDone[me] <= 1
+    if (!joker && PICK_TUNE.fix1103 && !last) {
+      const junk = junkCards(hand, new Set())
+      if (junk.length) return junk
+    }
     if (!joker) return fallbackPile(hand)
     const top = reals.reduce((b, c) => (c.rank > b.rank ? c : b), reals[0])
     return [top, joker]
@@ -496,6 +566,9 @@ export const BOARD_TUNE = {
   perKind: 2,
   /** 鬼牌用途效益(使用者定:葫蘆 / 三條 / 鐵支最划算 > 同花 > 順子):用鬼湊成這些牌型的加分 */
   jokerUse: { [CATEGORY.THREE_KIND]: 0.25, [CATEGORY.FULL_HOUSE]: 0.25, [CATEGORY.FOUR_KIND]: 0.25, [CATEGORY.STRAIGHT_FLUSH]: 0.25, [CATEGORY.STRAIGHT]: -0.1 } as Record<number, number>,
+  /** 前段出弱五張(順子 / 同花)扣的分(手上有三條 / 7 以上對子可出時;沒有就同花不扣、順子扣一半):
+   *  一次燒 5 張,後段就沒牌(使用者 2026-11-03:「牌變少的元兇」,順子優先權最低) */
+  fiveCost: { [CATEGORY.STRAIGHT]: 0.3, [CATEGORY.FLUSH]: 0.15 } as Record<number, number>,
   /** 反推:我那疊至少這麼強(贏隨便一疊的機率)才算「對手不敢撞」 */
   readMin: 0.55,
   /** 反推:對手沒拿去撞的那疊裡「打得過我那疊」的可能 × 這個 */
@@ -610,8 +683,14 @@ function boardRefine(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, 
     const k = evaluate(c).category * 2 + (usesJoker(c) ? 1 : 0)
     byKind.set(k, [...(byKind.get(k) ?? []), c])
   }
-  for (const cs of byKind.values()) opts.push(...cs.sort((a, b) => normalStrength(b) - normalStrength(a)).slice(0, T.perKind))
-  const junk = junkCards(hand, new Set())
+  // 同一種牌型只考慮最大的(使用者 2026-11-03:握 AA + 1010 + 鬼出 1010 很怪 —— 之後補 A 跟補 10 機率一樣,
+  // AA 鬼 / 1010 鬼 留到後面都很強,不如現在出 AA;一對比鐵支容易成,強一對現在出更有價值)
+  const perKind = PICK_TUNE.fix1103 ? 1 : T.perKind
+  for (const cs of byKind.values()) opts.push(...cs.sort((a, b) => normalStrength(b) - normalStrength(a)).slice(0, perKind))
+  // 送格只在手上沒有像樣的牌(三條、7 以上的對子)時才考慮(使用者 2026-11-03:握 AA / 1010 / 88 / 77
+  // 第一手送 6 3 高牌 不合理 —— 跟囤牌一樣,有中強成牌就領成牌)
+  const decent = PICK_TUNE.fix1103 && hasDecent(hand)
+  const junk = decent ? [] : junkCards(hand, new Set())
   if (junk.length) opts.push(junk)
   const seen = new Set<string>()
   const uniq = opts.filter((o) => {
@@ -637,7 +716,10 @@ function boardRefine(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng, 
     const jokers = o.filter(isJoker).length
     const use = jokers ? (T.jokerUse[evaluate(o).category] ?? 0) : 0
     const style = o === stylePile ? T.styleBonus : 0
-    const s = now[k] + gamma * fut - T.jokerCost * jokers + use + style + rng() * T.noise
+    // 弱五張扣分:手上有三條 / 7 以上對子可出時才扣滿;沒對沒三條時同花不扣、順子扣一半(使用者 2026-11-03:
+    // 「同花沒那麼差,完全沒對沒三條又要出強牌時,同花就是考量點」)
+    const five = PICK_TUNE.fix1103 && o.length >= 5 ? (T.fiveCost[evaluate(o).category] ?? 0) * (decent ? 1 : evaluate(o).category === CATEGORY.FLUSH ? 0 : 0.5) : 0
+    const s = now[k] + gamma * fut - T.jokerCost * jokers + use + style - five + rng() * T.noise
     if (T.debug) rows.push({ pile: o.map((c) => (isJoker(c) ? '鬼' : `${c.suit}${c.rank}`)).join(' '), now: now[k], future: gamma * fut, joker: -T.jokerCost * jokers, use, style, total: s })
     if (s > top) {
       top = s
@@ -659,7 +741,7 @@ function pickCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): st
   const hand = state.hands[me]
   // 單出一張鬼不當候選(使用者 2026-11-02:把鬼耗掉不合理)。拿掉後沒候選 = 手上沒任何成牌 → noMadeHandPick。
   const all = candidatePiles(hand)
-  const cands = PICK_TUNE.dumpTwo ? all.filter((c) => !isLoneJoker(c)) : all
+  const cands = noTripSplits(PICK_TUNE.dumpTwo ? all.filter((c) => !isLoneJoker(c)) : all, hand)
   if (cands.length === 0) return (PICK_TUNE.dumpTwo ? noMadeHandPick(hand, state, me, rt, rng) : fallbackPile(hand)).map((c) => c.id)
 
   const cashOut = shouldCashOut(state, me, rt)
@@ -684,7 +766,7 @@ function pickCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): st
   if (!cashOut) {
     let held: Card[] | null = null
     if (rt.peekDraw) held = peekHoldPick(hand, rt.peekDraw) // 偷窺:一般化留牌(任何升級)
-    if (!held && lowLeverage(state, me) && fires(rt.profile.draw, rng)) held = drawHoldPick(hand)
+    if (!held && lowLeverage(state, me) && fires(rt.profile.draw, rng)) held = drawHoldPick(hand, rt.main)
     if (held && held.length) {
       pile = held
       holding = true
@@ -705,7 +787,9 @@ function pickCore(state: GameState, me: PlayerId, rt: BossRuntime, rng: Rng): st
     } else {
       pile = bestJokerCombo(jUp, hand)
       const jump = tierScore(pile) - baseTier
-      if (bestNoJoker && jump < 4 && lowLeverage(state, me) && fires(rt.profile.jokerTiming, rng)) pile = bestNoJoker
+      // 鬼牌留著等高槓桿 —— 但不退回順子 / 同花(使用者 2026-11-03:有 ♠Q J 10 8 + 鬼的同花順,先手卻出順子)
+      const weakFive = PICK_TUNE.fix1103 && bestNoJoker && bestNoJoker.length >= 5 && evaluate(bestNoJoker).category <= CATEGORY.FLUSH
+      if (bestNoJoker && !weakFive && jump < 4 && lowLeverage(state, me) && fires(rt.profile.jokerTiming, rng)) pile = bestNoJoker
     }
   }
 
@@ -1017,10 +1101,13 @@ export function bossChooseSpecial(
   // suit-bloom → ONLY to complete/keep a real 5-card flush(規則在 suitVictims)。
   // 2026-11-02 花色卡一次改 1~2 張 → 握 3 張同花色就能換 2 張湊成同花(suitVictims)。
   let bloom: { card: SpecialCardId; targetIds: string[]; suited: number } | null = null
-  for (const id of loadout) {
+  // 招牌就是花色卡的 boss(四花色關)照舊,其他人手上有強牌就多半先不用
+  const ownSuit = !!(opts.signature && getSpecialCard(opts.signature)?.suit)
+  const holdOff = !ownSuit && loadout.some((id) => getSpecialCard(id)?.suit) && suitHoldOff(state, me, rng)
+  for (const id of holdOff ? [] : loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const victims = suitVictims(state, me, def.suit)
+    const victims = suitVictims(state, me, def.suit, rng)
     if (!victims) continue
     const suited = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
     if (!bloom || suited > bloom.suited) bloom = { card: id, targetIds: victims.map((c) => c.id), suited }
@@ -1055,9 +1142,11 @@ export function bossChooseSpecial(
  *  - 握 3 張該花色 → 換 2 張沒成對的低散牌,湊成 5 張同花(沒有 2 張沒成對的散牌就不換)。
  *  - 握 4 張 → 換 1 張(第 5 張)。
  *  - 已是同花(≥5):只有「某張同花牌同時能跟別張湊對(雙用)、且有多餘散牌可換」時換 1 張,同花與對子兼得。
+ * 落單的散牌不夠時(2026-11-03 起,有給 rng 才會):對子照強弱擲機率決定能不能拆(PAIR_BREAK:強一對多半不拆、
+ * 中一對一半、弱一對多半可拆);要拆就同一對兩張一起換(QQ 都變方塊、KK 留著),不會兩對各拆一張。
  * 回傳 null = 這張卡現在沒用。
  */
-export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit']): Card[] | null {
+export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], rng?: Rng): Card[] | null {
   const hand = state.hands[me]
   const rankCount = new Map<number, number>()
   for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
@@ -1066,11 +1155,52 @@ export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit']):
   const unpaired = (cards: Card[]) => cards.filter((c) => (rankCount.get(c.rank) ?? 0) === 1)
   const lowest = (cards: Card[], n: number): Card[] | null =>
     cards.length >= n ? [...cards].sort((a, b) => a.rank - b.rank).slice(0, n) : null
-  if (suited.length === 3) return lowest(unpaired(others), 2)
+  // 落單的優先;不夠再用「擲到可以拆」的對子(由小到大、同一對排在一起)
+  const pool = (n: number): Card[] | null => {
+    const free = lowest(unpaired(others), unpaired(others).length) ?? []
+    if (free.length >= n || !rng || !PICK_TUNE.fix1103) return lowest(free, n)
+    const pairRanks = [...new Set(others.filter((c) => rankCount.get(c.rank) === 2).map((c) => c.rank))].sort((a, b) => a - b)
+    const ok = pairRanks.filter((r) => rng() < pairBreakChance(r))
+    const need = n - free.length
+    for (const r of ok) {
+      const cards = others.filter((c) => c.rank === r)
+      if (cards.length >= need) return [...free, ...cards.slice(0, need)]
+    }
+    return null
+  }
+  if (suited.length === 3) return pool(2) // 要換 2 張:落單的優先,不夠才用(一對)
   if (suited.length === 4) {
-    const free = unpaired(others)
-    return lowest(free.length ? free : others, 1)
+    if (!PICK_TUNE.fix1103) {
+      const free = unpaired(others)
+      return lowest(free.length ? free : others, 1)
+    }
+    return pool(1)
   }
   if (suited.length >= 5 && suited.some((s) => (rankCount.get(s.rank) ?? 0) >= 2)) return lowest(unpaired(others), 1)
   return null
+}
+
+/** 花色卡拆對子的機率(使用者 2026-11-03):強一對(J 以上)多半不拆、中一對(7~10)一半、弱一對(≤6)多半可拆。 */
+export const PAIR_BREAK = { strong: 0.15, mid: 0.5, weak: 0.85 }
+function pairBreakChance(rank: number): number {
+  return rank >= 11 ? PAIR_BREAK.strong : rank >= 7 ? PAIR_BREAK.mid : PAIR_BREAK.weak
+}
+
+/** 手上已經有強牌時,花色卡還是照用的機率(使用者 2026-11-03:「有強一對或其他牌就不用變花色」,寫成機率)。 */
+export const SUIT_WITH_STRONG = { strong: 0.25, mid: 0.5 }
+
+/**
+ * 花色卡這手先別用:手上不用卡就有好牌時多半先不用 —— 三條或 J 以上的對子 = 強(只有 25% 照用),
+ * 7~10 的對子 = 中(50%),只有弱對 / 散牌 = 照用。例:♦♦♦ + QQ + KK + 鬼 → 直接出葫蘆就好,不用為了同花拆對子。
+ */
+export function suitHoldOff(state: GameState, me: PlayerId, rng: Rng = Math.random): boolean {
+  if (!PICK_TUNE.fix1103) return false
+  const hand = state.hands[me]
+  let level: 'strong' | 'mid' | null = null
+  for (const [r, n] of rankCounts(hand)) {
+    const lv = n >= 3 || (n === 2 && r >= 11) ? 'strong' : n === 2 && r >= 7 ? 'mid' : null
+    if (lv === 'strong') level = 'strong'
+    else if (lv === 'mid' && !level) level = 'mid'
+  }
+  return level !== null && rng() >= SUIT_WITH_STRONG[level]
 }

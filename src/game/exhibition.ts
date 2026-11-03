@@ -15,7 +15,7 @@ import {
   writeLiveEntry, flipLiveEnded, removeLiveEntry, writeSpectatorCount, fetchBotRecord,
   patchLivePlayerRecord, subscribeLiveIndex, type LivePlayer, type LiveEntry,
 } from '../net/liveIndex'
-import { pushHighlight, type ReplayRecord } from '../net/replays'
+import { brainTag, pushHighlight, type ReplayRecord } from '../net/replays'
 import type { Move } from './replay'
 
 /**
@@ -483,8 +483,8 @@ async function finishExhibition(code: string, engine: GameState, moves: Move[], 
     firstPicker: s.firstPicker,
     special: false,
     matchType: 'casual',
-    p1: { name: s.p1.name, avatar: s.p1.avatarId, uid: s.p1.botId, isBot: true },
-    p2: { name: s.p2.name, avatar: s.p2.avatarId, uid: s.p2.botId, isBot: true },
+    p1: { name: s.p1.name, avatar: s.p1.avatarId, uid: s.p1.botId, isBot: true, brain: brainTag(s.p1.boss) },
+    p2: { name: s.p2.name, avatar: s.p2.avatarId, uid: s.p2.botId, isBot: true, brain: brainTag(s.p2.boss) },
     winner: engine.winner!,
     moves,
   }

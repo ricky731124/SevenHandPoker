@@ -3,7 +3,7 @@ import type { Card, Rank, Suit } from './cards'
 import { makeBlank, makeJoker } from './cards'
 import { createGame, type GameState, type PlayerId } from './state'
 import { CATEGORY, evaluate } from './evaluate'
-import { bossChooseSpecial, bossPick, bossPlace, rollMain, type BossProfile, type BossRuntime } from './bossAI'
+import { bossChooseSpecial, bossPick, bossPlace, rollMain, suitHoldOff, suitVictims, type BossProfile, type BossRuntime } from './bossAI'
 
 const c = (suit: Suit, rank: Rank): Card => ({ id: `${suit}${rank}`, suit, rank })
 const R = (v: number) => () => v // constant rng
@@ -241,14 +241,15 @@ describe('鬼牌 — 只在能升級牌型時才用', () => {
     expect(ids).toHaveLength(4)
   })
 
-  it('鬼牌搜尋最佳組合:能補同花也能湊三條 A → 一定用鬼湊成三條以上(看棋盤再決定留哪邊)', () => {
+  it('鬼牌搜尋最佳組合:能補同花也能湊三條 A → 用鬼就至少湊成三條,不拆 AA', () => {
     const hand = [c('C', 2), c('C', 5), c('C', 7), c('C', 9), c('S', 14), c('H', 14), makeJoker('p2')]
     const g = handState('p2', hand)
     const ids = bossPick(g, 'p2', RT('attack', 1, { jokerTiming: 0 }), R(0)) // jokerTiming 0 → 不收起,直接看選哪組
-    expect(ids).toContain('JOKER_p2')
-    // 2026-11-02 看棋盤:原本固定選三條 A(CP 高);現在比較「三條 A、留 4 張梅花」和「鬼補同花、留一對 A」
-    // 之後還湊得出什麼,多半選後者(一對 A 之後還能用)。兩種都是用鬼湊成三條以上。
-    expect(evaluate(hand.filter((x) => ids.includes(x.id))).category).toBeGreaterThanOrEqual(CATEGORY.THREE_KIND)
+    // 2026-11-02 看棋盤:比較「三條 A」「鬼補同花、留 AA」「先出 AA、留鬼 + 4 梅花」之後還湊得出什麼。
+    // 2026-11-03 弱五張扣分後多半先出 AA(鬼和梅花留著)。不管哪個:A 一起出、用了鬼就至少三條。
+    const pile = hand.filter((x) => ids.includes(x.id))
+    expect(ids.includes('S14') === ids.includes('H14')).toBe(true)
+    if (ids.includes('JOKER_p2')) expect(evaluate(pile).category).toBeGreaterThanOrEqual(CATEGORY.THREE_KIND)
   })
 })
 
@@ -286,5 +287,77 @@ describe('x-3 特殊牌 — EV 排序選卡', () => {
     const g = handState('p2', [c('C', 9), c('C', 13), c('D', 4), c('H', 8)])
     const d = bossChooseSpecial(g, 'p2', ['swap', 'spy', 'clubs'], PROFILE({ insight: 70 }))
     expect(d).toEqual({ card: 'spy' })
+  })
+})
+
+describe('2026-11-03 回放檢討(使用者挑出的怪手)', () => {
+  const mains = ['attack', 'hoard', 'balance'] as const
+  const seeds = Array.from({ length: 40 }, (_, i) => i)
+  const lcg = (s: number) => {
+    let x = s * 7919 + 1
+    return () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648
+  }
+  const pickOf = (hand: Card[], main: (typeof mains)[number], s: number) => {
+    const g = handState('p2', hand)
+    g.firstPicker = 'p2'
+    const ids = bossPick(g, 'p2', RT(main, 0.9, { draw: 60, bluff: 30, jokerTiming: 40 }), lcg(s))
+    return hand.filter((x) => ids.includes(x.id))
+  }
+
+  it('握 KKK 不出 KK(今天辛棄疾第 2 手)', () => {
+    const hand = [c('D', 14), c('S', 14), makeJoker('p2'), c('D', 13), c('C', 13), c('H', 13), c('S', 12), c('H', 8), c('S', 7), c('D', 6), c('C', 5), c('H', 5), makeBlank('p2')]
+    for (const m of mains) for (const s of seeds) expect(pickOf(hand, m, s).filter((x) => x.rank === 13 && !x.kind).length).not.toBe(2)
+  })
+
+  it('握 AA + 1010 + 鬼,先手不出 1010 一對(今天辛棄疾第 1 手:一對比鐵支容易成,強一對現在出更值)', () => {
+    const hand = [c('D', 14), c('S', 14), makeJoker('p2'), c('D', 13), c('S', 12), c('D', 10), c('C', 10), c('H', 8), c('S', 7), c('D', 6), c('C', 5), makeBlank('p2')]
+    for (const m of mains)
+      for (const s of seeds) {
+        const v = evaluate(pickOf(hand, m, s))
+        expect(v.category === CATEGORY.PAIR && v.rankSeq[0] === 10).toBe(false)
+      }
+  })
+
+  it('握 AA / 1010 / 88 / 77 不送高牌(玉皇Daddy 第 1 手)', () => {
+    const hand = [c('S', 14), c('H', 14), makeJoker('p2'), c('C', 10), c('S', 10), c('H', 8), c('S', 8), c('H', 7), c('C', 7), c('D', 6), c('D', 3), makeBlank('p2')]
+    for (const m of mains) for (const s of seeds) expect(evaluate(pickOf(hand, m, s)).category).toBeGreaterThanOrEqual(CATEGORY.PAIR)
+  })
+
+  it('握 777 不為了 4 張紅心聽牌出 77(玉皇Daddy 第 2 手)', () => {
+    const hand = [c('S', 14), c('H', 14), makeJoker('p2'), c('D', 13), c('C', 10), c('S', 10), c('H', 8), c('S', 8), c('H', 7), c('C', 7), c('D', 7), makeBlank('p2'), c('H', 2)]
+    for (const m of mains) for (const s of seeds) expect(pickOf(hand, m, s).filter((x) => x.rank === 7 && !x.kind).length).not.toBe(2)
+  })
+
+  it('有 ♠Q J 10 8 + 鬼的同花順,先手不出順子(金色狂蜂第 1 手)', () => {
+    const hand = [makeJoker('p2'), c('C', 13), c('S', 12), c('H', 12), c('S', 11), c('S', 10), c('H', 9), c('S', 8), c('H', 7), c('D', 6), c('H', 6), makeBlank('p2')]
+    for (const m of mains) for (const s of seeds) expect(evaluate(pickOf(hand, m, s)).category).not.toBe(CATEGORY.STRAIGHT)
+  })
+
+  it('花色卡拆對子照強弱擲機率:強一對多半不拆、弱一對多半可拆,要拆就同一對兩張一起換', () => {
+    // 握 4 張方塊,其他都是強對(QQ KK):擲 0.5 → 強對不拆 → 不換;擲 0.1(< 15%)→ 拆最小那對的一張
+    const g4 = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('D', 3), c('C', 12), c('S', 12), c('C', 13), c('S', 13)])
+    expect(suitVictims(g4, 'p2', 'D', R(0.5))).toBeNull()
+    expect(suitVictims(g4, 'p2', 'D', R(0.1))?.map((x) => x.rank)).toEqual([12])
+    // 握 3 張方塊 + 22 + KK、沒有落單:擲 0.5 → 22 可拆(85%)、KK 不拆(15%)→ 兩張 2 一起換,KK 留著
+    const g3 = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('C', 2), c('S', 2), c('C', 13), c('S', 13)])
+    expect(suitVictims(g3, 'p2', 'D', R(0.5))?.map((x) => x.id).sort()).toEqual(['C2', 'S2'])
+    // 沒給 rng(對戰電腦)= 照舊只換落單的
+    expect(suitVictims(g3, 'p2', 'D')).toBeNull()
+  })
+
+  it('花色卡:手上有強牌多半先不用、中一對一半、弱對照用', () => {
+    const strong = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('C', 4), c('H', 2), c('C', 12), c('S', 12)])
+    expect(suitHoldOff(strong, 'p2', R(0.3))).toBe(true) // 0.3 ≥ 25% → 先不用
+    const mid = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('C', 4), c('H', 2), c('C', 8), c('S', 8)])
+    expect(suitHoldOff(mid, 'p2', R(0.3))).toBe(false) // 0.3 < 50% → 照用
+    expect(suitHoldOff(mid, 'p2', R(0.6))).toBe(true)
+    const weak = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('C', 4), c('H', 2), c('C', 3), c('S', 3)])
+    expect(suitHoldOff(weak, 'p2', R(0.99))).toBe(false)
+  })
+
+  it('花色卡:手上已有強牌(鬼 + 對子)→ 多半先不用', () => {
+    const g = handState('p2', [c('D', 14), c('D', 9), c('D', 6), c('C', 4), c('H', 2), c('C', 12), c('S', 12), makeJoker('p2')])
+    expect(bossChooseSpecial(g, 'p2', ['diamonds'], PROFILE(), { rng: R(0.5) })).toBeNull() // 0.5 ≥ 25% → 不用
+    expect(bossChooseSpecial(g, 'p2', ['diamonds'], PROFILE(), { rng: R(0.1) })?.card).toBe('diamonds') // 25% 內照用
   })
 })

@@ -125,8 +125,10 @@ const NOTE_TEXT: Record<NonNullable<Showdown['note']>, string> = {
 }
 
 function Row({ label, name, cards, won, wildAs }: { label: string; name: string; cards: TCard[]; won: boolean; wildAs: TCard[] }) {
-  // A card whose suit was changed by a suit-bloom special (at most one per match).
-  const resuited = cards.find((c) => c.resuitFrom)
+  // 被花色卡改過花色的牌:同一個目標花色併成一行「♥6 ♠10 → ♣」(點數不變只換花色)→ 一張花色卡改幾張都只佔一行,
+  // 不會把這列撐高、擠到牌(之後若能改 3 張也一樣);火力全開用了不同花色卡才會多一行。
+  const resuited = cards.filter((c) => c.resuitFrom)
+  const bySuit = [...new Set(resuited.map((c) => c.suit))].map((s) => ({ suit: s, from: resuited.filter((c) => c.suit === s) }))
   return (
     <div className={`showdown__row${won ? ' showdown__row--win' : ''}`}>
       <div className="showdown__meta">
@@ -143,19 +145,18 @@ function Row({ label, name, cards, won, wildAs }: { label: string; name: string;
             ))}
           </span>
         )}
-        {resuited && (
-          <span className="showdown__wild">
-            <span style={{ color: SUIT_IS_RED[resuited.resuitFrom!] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
-              {SUIT_SYMBOL[resuited.resuitFrom!]}
-              {rankLabel(resuited.rank)}
-            </span>
+        {bySuit.map((g) => (
+          <span key={g.suit} className="showdown__wild showdown__resuit">
+            {g.from.map((r, i) => (
+              <span key={r.id} style={{ color: SUIT_IS_RED[r.resuitFrom!] ? '#d21a3b' : '#1b1b1f', fontWeight: 800, marginLeft: i ? 3 : 0 }}>
+                {SUIT_SYMBOL[r.resuitFrom!]}
+                {rankLabel(r.rank)}
+              </span>
+            ))}
             →
-            <span style={{ color: SUIT_IS_RED[resuited.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>
-              {SUIT_SYMBOL[resuited.suit]}
-              {rankLabel(resuited.rank)}
-            </span>
+            <span style={{ color: SUIT_IS_RED[g.suit] ? '#d21a3b' : '#1b1b1f', fontWeight: 800 }}>{SUIT_SYMBOL[g.suit]}</span>
           </span>
-        )}
+        ))}
       </div>
       <div className="showdown__cards">
         {cards.map((c) => (
