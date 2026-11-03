@@ -27,6 +27,9 @@ export function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {
  * turns it into whatever maximises the pile — plus a lone-joker option (= ♠A).
  * The blank never improves a hand, so it's never built with here.
  */
+/** 候選牌補漏(模擬比較用;遊戲裡永遠是 true)。sf = 2026-11-04:同花色 ≥ 5 張時藏著的同花順、鬼補的同花順原本不在候選裡。 */
+export const CAND_TUNE = { sf: true }
+
 export function candidatePiles(hand: Card[]): Card[][] {
   const reals = hand.filter((c) => !isSpecial(c))
   const joker = hand.find(isJoker)
@@ -57,6 +60,18 @@ export function candidatePiles(hand: Card[]): Card[][] {
   const straight = findStraight(reals)
   if (straight) out.push(straight)
 
+  // 同花順(使用者 2026-11-04 回報):同花色 ≥ 5 張時上面只取最大 5 張當同花,裡面的同花順會漏掉
+  const same = (a: Card[], b: Card[]) => a.length === b.length && a.every((c) => b.includes(c))
+  const add = (p: Card[]) => {
+    if (!out.some((o) => same(o, p))) out.push(p)
+  }
+  if (CAND_TUNE.sf) {
+    for (const cards of bySuit.values()) {
+      const sf = cards.length >= 5 ? findStraight(cards) : null
+      if (sf) add(sf)
+    }
+  }
+
   if (joker) {
     for (const cand of [...out]) {
       if (cand.length < 5) out.push([...cand, joker])
@@ -68,6 +83,14 @@ export function candidatePiles(hand: Card[]): Card[][] {
     }
     const sDraw = straightDrawFour(reals)
     if (sDraw) out.push([...sDraw, joker])
+    // 鬼補同花順:同花色裡有 4 張連得起來(例:♦A Q J 10 + 鬼)。原本只看「剛好 4 張同花色」補成同花,
+    // 同花色 6 張時就看不到(死神之眼看到對手同花順,只有這手壓得過)
+    if (CAND_TUNE.sf) {
+      for (const cards of bySuit.values()) {
+        const d = cards.length >= 4 ? straightDrawFour(cards) : null
+        if (d) add([...d, joker])
+      }
+    }
     out.push([joker])
   }
 

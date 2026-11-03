@@ -11,3 +11,6 @@ _art_src
 
 # 章節大地圖母檔(AI 原圖 3MB+/張),只在本機跑 scripts/chapter-art.mjs 用;網頁只部署 public/chapters/*.webp
 art/chapters/
+
+# 人機回報抓下來的回放(scripts/fetch-replays.ps1)
+_replays/

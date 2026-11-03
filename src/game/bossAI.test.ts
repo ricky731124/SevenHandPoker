@@ -106,7 +106,8 @@ describe('boss 特殊牌 — bossChooseSpecial', () => {
 
   it('踏雪尋梅:3 張同花但只有 1 張沒成對的散牌 → 不拆對子,不用', () => {
     const g = handState('p2', [c('C', 9), c('C', 13), c('C', 5), c('D', 4), c('H', 8), c('S', 8)])
-    expect(bossChooseSpecial(g, 'p2', ['clubs'])).toBeNull()
+    // 88 是中對,D10 有 50% 會拆(PAIR_BREAK.mid);這裡固定擲到「不拆」,不然測試會隨機失敗
+    expect(bossChooseSpecial(g, 'p2', ['clubs'], undefined, { rng: () => 0.99 })).toBeNull()
   })
 
   it('踏雪尋梅:只有 2 張同花→換 2 張也湊不出同花,不亂用', () => {

@@ -144,7 +144,7 @@ function beginCasualBroadcast(
     p2,
     initial: engine,
     onWatchers: (n) => useGameStore.setState({ broadcastWatchers: n }),
-    buildReplay: () => ({ special: useGameStore.getState().special, matchType: 'casual' as const, moves: useGameStore.getState().moveLog, brain: brainTag(useGameStore.getState().aiBoss) }), // §6 快速配對 vs 人機
+    buildReplay: () => ({ special: useGameStore.getState().special, matchType: 'casual' as const, moves: useGameStore.getState().moveLog, brain: brainTag(useGameStore.getState().aiBoss, useGameStore.getState().aiLoadout) }), // §6 快速配對 vs 人機
   })
   const code = _bcast.code
   useGameStore.setState({ broadcastCode: code, broadcastWatchers: 0 }) // #8:廣播端訂 danmaku/notice 用;#7:觀戰人數

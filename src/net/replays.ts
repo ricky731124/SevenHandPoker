@@ -3,6 +3,7 @@ import { getDb } from './firebase'
 import type { PlayerId } from '../game/state'
 import type { Move } from '../game/replay'
 import type { LimitedMode } from '../game/limited'
+import { CAMPAIGN } from '../game/campaign'
 
 /**
  * 賽事回放(§6.1)。存的是**棋譜**(move-log),不是影片:回放時 `createGame(seed, firstPicker)`
@@ -21,13 +22,20 @@ export interface ReplayPlayer {
   avatar: string
   uid: string | null
   isBot?: boolean
-  /** 人機當場抽到的打法 + 執行力(例:"hoard 0.75"),只存資料、畫面不顯示 —— 之後查回放「這手為什麼這樣出」用(2026-11-03)。 */
+  /** 人機當場抽到的打法 + 執行力 + 技能參數用哪關 boss + 帶的卡(例:"hoard 0.75 s3 卡:peek,suitClub"),
+   *  只存資料、畫面不顯示 —— 之後查回放「這手為什麼這樣出」用(2026-11-03,人機回報 skill 讀這欄)。 */
   brain?: string
 }
 
 /** 人機打法 → 回放存的那一小段字。 */
-export const brainTag = (b: { main: string; execution: number } | null | undefined): string | undefined =>
-  b ? `${b.main} ${b.execution}` : undefined
+export const brainTag = (
+  b: { main: string; execution: number; profile?: object } | null | undefined,
+  loadout: readonly string[] = [],
+): string | undefined => {
+  if (!b) return undefined
+  const stage = CAMPAIGN.find((s) => s.profile === b.profile)
+  return `${b.main} ${b.execution}${stage ? ` ${stage.id}` : ''}${loadout.length ? ` 卡:${loadout.join(',')}` : ''}`
+}
 
 export interface ReplayRecord {
   v: 1

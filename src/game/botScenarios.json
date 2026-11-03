@@ -1,0 +1,887 @@
+{
+ "scenarios": [
+  {
+   "id": "S001",
+   "date": "2026-11-03",
+   "from": "鼓山金城武 vs 今天辛棄疾 -P5SEneJborb-ltApWhr",
+   "title": "先手 AA + 1010 + 鬼,不出 1010",
+   "who": "p2",
+   "kind": "出",
+   "hand": 1,
+   "severity": "不行",
+   "expect": {
+    "avoid": [
+     "10 10"
+    ]
+   },
+   "reason": "一對 A 比一對 10 有價值;10 鐵支跟 A 鐵支幾乎等值,要留就留小的 → 同牌型只看最大的。",
+   "replay": {
+    "seed": 1866635607,
+    "firstPicker": "p2",
+    "mode": "fire",
+    "moves": [
+     {
+      "by": "p2",
+      "ids": [
+       "D10",
+       "C10"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "peek",
+      "t": "special"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H12",
+       "C12"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D13",
+       "C13"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "JOKER_p1",
+       "C14"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "explode",
+      "rng": [
+       0.5829952203028769
+      ],
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D14",
+       "S14",
+       "S7",
+       "H7",
+       "JOKER_p2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "clubs",
+      "t": "special",
+      "targetIds": [
+       "H6",
+       "S10"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H6",
+       "C7",
+       "C8",
+       "C9",
+       "S10"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "spy",
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "H13",
+       "H8",
+       "H5",
+       "H4",
+       "H3"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "D2",
+       "C2",
+       "BLANK_p1"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "diamonds",
+      "t": "special",
+      "targetIds": [
+       "S2",
+       "C5"
+      ]
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D12",
+       "D9",
+       "D6",
+       "C5",
+       "S2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 1,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "spades",
+      "t": "special",
+      "targetIds": [
+       "H14",
+       "H10"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H14",
+       "H10",
+       "S9",
+       "S5",
+       "S4"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 1,
+      "t": "place"
+     }
+    ]
+   }
+  },
+  {
+   "id": "S002",
+   "date": "2026-11-03",
+   "from": "鼓山金城武 vs 今天辛棄疾 -P5SEneJborb-ltApWhr",
+   "title": "握 KKK 不拆成 KK",
+   "who": "p2",
+   "kind": "出",
+   "hand": 2,
+   "severity": "不行",
+   "expect": {
+    "avoid": [
+     "K K",
+     "K K 空"
+    ]
+   },
+   "reason": "有三條就出三條(或三條 + 鬼 / 三條配一對),拆成一對浪費。",
+   "replay": {
+    "seed": 1866635607,
+    "firstPicker": "p2",
+    "mode": "fire",
+    "moves": [
+     {
+      "by": "p2",
+      "ids": [
+       "D10",
+       "C10"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "peek",
+      "t": "special"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H12",
+       "C12"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D13",
+       "C13"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "JOKER_p1",
+       "C14"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "explode",
+      "rng": [
+       0.5829952203028769
+      ],
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D14",
+       "S14",
+       "S7",
+       "H7",
+       "JOKER_p2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "clubs",
+      "t": "special",
+      "targetIds": [
+       "H6",
+       "S10"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H6",
+       "C7",
+       "C8",
+       "C9",
+       "S10"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "spy",
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "H13",
+       "H8",
+       "H5",
+       "H4",
+       "H3"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "D2",
+       "C2",
+       "BLANK_p1"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "diamonds",
+      "t": "special",
+      "targetIds": [
+       "S2",
+       "C5"
+      ]
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D12",
+       "D9",
+       "D6",
+       "C5",
+       "S2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 1,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "spades",
+      "t": "special",
+      "targetIds": [
+       "H14",
+       "H10"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H14",
+       "H10",
+       "S9",
+       "S5",
+       "S4"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 1,
+      "t": "place"
+     }
+    ]
+   }
+  },
+  {
+   "id": "S003",
+   "date": "2026-11-04",
+   "from": "鼓山金城武 vs 穹道穗宮原 -P5XJ171lBsNyIvKf7is",
+   "title": "握三條 10,不拆一張去湊 K 高同花",
+   "who": "p2",
+   "kind": "出",
+   "hand": 1,
+   "severity": "不划算",
+   "expect": {
+    "avoid": [
+     "類:同花"
+    ]
+   },
+   "reason": "對手那疊只有 2 張(最大一對 A),三條 10 已穩贏;同花燒 5 張又拿走一張 10 把三條拆掉。要出 5 張也該出 10 10 10 3 3(使用者 2026-11-04)",
+   "replay": {
+    "seed": 1631965032,
+    "firstPicker": "p1",
+    "mode": "fire",
+    "moves": [
+     {
+      "by": "p1",
+      "card": "peek",
+      "t": "special"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H7",
+       "C7"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "S13",
+       "S10",
+       "S6",
+       "S3",
+       "S2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "clubs",
+      "t": "special",
+      "targetIds": [
+       "H11",
+       "D13"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "C10",
+       "H11",
+       "C12",
+       "D13",
+       "C14"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 6,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "peek",
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "C3",
+       "C8"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 2,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "D4",
+       "H4",
+       "S4"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D12",
+       "D11",
+       "D10",
+       "D7",
+       "D6"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "D14",
+       "H14",
+       "JOKER_p1"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 1,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "spades",
+      "t": "special",
+      "targetIds": [
+       "C4",
+       "H5"
+      ]
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "S14",
+       "S9",
+       "S8",
+       "H5",
+       "C4"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "BLANK_p1",
+       "H2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 2,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "explode",
+      "rng": [
+       0.8437748839895371
+      ],
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "C13",
+       "H13",
+       "BLANK_p2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 1,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "explode",
+      "rng": [
+       0.11520617568830993
+      ],
+      "t": "special"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "H8",
+       "D8",
+       "H6",
+       "C6"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 0,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "C2",
+       "D2",
+       "JOKER_p2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "D9",
+       "C9",
+       "S5",
+       "D5",
+       "S12"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 5,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "S11",
+       "H9"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 5,
+      "t": "place"
+     }
+    ]
+   }
+  },
+  {
+   "id": "S004",
+   "date": "2026-11-04",
+   "from": "鼓山金城武 vs 穹道穗宮原 -P5XJd0U6HPf7o2HdMBS",
+   "title": "死神之眼看到對手同花順 + QQ,要出鬼補的皇家同花順,不出 10 一對",
+   "who": "p2",
+   "kind": "出",
+   "hand": 2,
+   "severity": "不划算",
+   "expect": {
+    "avoid": [
+     "10 10"
+    ],
+    "prefer": [
+     "類:同花順"
+    ]
+   },
+   "reason": "出的牌由對手決定放哪,10 一對會被放去輸給 QQ / 同花順;只有 ♦A Q J 10 + 鬼 壓得過全部(使用者 2026-11-04)",
+   "replay": {
+    "seed": 2533706624,
+    "firstPicker": "p1",
+    "mode": "fire",
+    "moves": [
+     {
+      "by": "p1",
+      "card": "peek",
+      "t": "special"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "S12",
+       "H12"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D13",
+       "H13",
+       "BLANK_p2"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 4,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "clubs",
+      "t": "special",
+      "targetIds": [
+       "D4",
+       "D7"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "C2",
+       "C3",
+       "D4",
+       "C5",
+       "C6"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 2,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "deathEye",
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "C10",
+       "D10"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 3,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "C7",
+       "C8",
+       "C9",
+       "C11",
+       "JOKER_p1"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 1,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "spy",
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "D14",
+       "C14"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 2,
+      "t": "place"
+     },
+     {
+      "by": "p1",
+      "card": "spades",
+      "t": "special",
+      "targetIds": [
+       "H9",
+       "D7"
+      ]
+     },
+     {
+      "by": "p1",
+      "ids": [
+       "S3",
+       "D7",
+       "S8",
+       "H9",
+       "S13"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p2",
+      "slot": 5,
+      "t": "place"
+     },
+     {
+      "by": "p2",
+      "card": "explode",
+      "rng": [
+       0.8890668826211677
+      ],
+      "t": "special"
+     },
+     {
+      "by": "p2",
+      "ids": [
+       "S5",
+       "D5",
+       "H5",
+       "D11",
+       "S11"
+      ],
+      "t": "pick"
+     },
+     {
+      "by": "p1",
+      "slot": 1,
+      "t": "place"
+     }
+    ]
+   }
+  }
+ ]
+}

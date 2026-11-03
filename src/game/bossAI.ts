@@ -444,6 +444,8 @@ export const PICK_TUNE = {
   dumpTwo: true,
   /** 2026-11-03 回放檢討的修正(不拆三條、拼牌不拆對、有成牌不送格、弱五張扣分、鬼牌不退回順子 / 同花)。false = 修正前(模擬比較用) */
   fix1103: true,
+  /** 2026-11-04 回報:五張牌型也不拆三條。false = 修正前(模擬比較用) */
+  fix1104: true,
 }
 
 /** 手上普通牌至少幾張才送 2 張(junkCards)。使用者舉的第 6 手(手上 5~6 張)也要送 2 張,所以是 5。 */
@@ -465,7 +467,12 @@ function rankCounts(hand: Card[]): Map<number, number> {
  */
 function splitsTrips(pile: Card[], counts: Map<number, number>): boolean {
   const inPile = rankCounts(pile)
-  for (const [r, n] of inPile) if (n === 2 && counts.get(r) === 3) return true
+  for (const [r, n] of inPile) {
+    if (counts.get(r) !== 3) continue
+    if (n === 2) return true
+    // 拿一張去湊同花 / 順子也算拆(使用者 2026-11-04:握 10 10 10 出 ♠K 10 6 3 2 同花);同花順以上才值得
+    if (n === 1 && PICK_TUNE.fix1104 && evaluate(pile).category < CATEGORY.STRAIGHT_FLUSH) return true
+  }
   return false
 }
 
