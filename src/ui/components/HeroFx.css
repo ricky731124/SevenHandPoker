@@ -1,0 +1,202 @@
+/* 主圖特效層(HeroFx.tsx,開場頁 + 大廳)。整層疊在背景圖實際畫出來的那一塊上,子元素用圖的百分比定位,
+   大小用 --ah(圖的高度)換算 → 跟著圖縮放。 */
+.sfx {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sfx {
+    display: none;
+  }
+}
+
+/* ---- 1. 貓鳥頭上冒符號 ---- */
+.sfx-bub {
+  position: absolute;
+  width: calc(var(--ah) * 0.125);
+  height: calc(var(--ah) * 0.125);
+  animation: sfx-pop 1.5s ease-out forwards;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+.sfx-bub svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+@keyframes sfx-pop {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  14% { transform: translate(-50%, -60%) scale(1.18); opacity: 1; }
+  26% { transform: translate(-50%, -60%) scale(1); }
+  78% { transform: translate(-50%, -72%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -88%) scale(0.92); opacity: 0; }
+}
+
+/* ---- 2. 牌堆的光粒子 ---- */
+.sfx-deck {
+  position: absolute;
+  width: calc(var(--ah) * 0.14);
+  margin-left: calc(var(--ah) * -0.07); /* 以牌堆中心為準 */
+  height: 0;
+}
+.sfx-mote {
+  position: absolute;
+  bottom: 0;
+  width: calc(var(--ah) * 0.011);
+  height: calc(var(--ah) * 0.011);
+  border-radius: 50%;
+  background: #fff3c4;
+  box-shadow: 0 0 calc(var(--ah) * 0.012) calc(var(--ah) * 0.004) rgba(255, 214, 102, 0.9);
+  opacity: 0;
+  animation: sfx-rise ease-out infinite;
+}
+@keyframes sfx-rise {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--ah) * -0.2)) scale(1); opacity: 0; }
+}
+
+/* ---- 3. Logo 火焰:暖光忽明忽暗 + 火星 ---- */
+.sfx-fire {
+  position: absolute;
+  width: calc(var(--ah) * 0.5);
+  margin-left: calc(var(--ah) * -0.25); /* 以火焰中心為準 */
+  height: 0;
+}
+.sfx-fire__glow {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: calc(var(--ah) * 0.64);
+  height: calc(var(--ah) * 0.26);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 176, 64, 0.55), rgba(255, 120, 30, 0.18) 55%, rgba(255, 120, 30, 0) 100%);
+  mix-blend-mode: screen;
+  animation: sfx-flicker 2.3s ease-in-out infinite;
+}
+@keyframes sfx-flicker {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.55; }
+  18% { transform: translate(-50%, -52%) scale(1.04, 1.08); opacity: 0.85; }
+  31% { transform: translate(-50%, -50%) scale(0.98); opacity: 0.5; }
+  52% { transform: translate(-50%, -53%) scale(1.05, 1.1); opacity: 0.9; }
+  68% { transform: translate(-50%, -51%) scale(1); opacity: 0.6; }
+  84% { transform: translate(-50%, -52%) scale(1.03, 1.06); opacity: 0.78; }
+}
+.sfx-ember {
+  position: absolute;
+  top: calc(var(--ah) * 0.05);
+  width: calc(var(--ah) * 0.009);
+  height: calc(var(--ah) * 0.009);
+  border-radius: 50%;
+  background: #ffcf6a;
+  box-shadow: 0 0 calc(var(--ah) * 0.01) rgba(255, 140, 40, 0.95);
+  opacity: 0;
+  animation: sfx-ember ease-out infinite;
+}
+.sfx-ember:nth-child(odd) {
+  background: #ff9a3c;
+}
+@keyframes sfx-ember {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--ah) * -0.16)); opacity: 0; }
+}
+
+/* ---- 4. 空中細小光點 ---- */
+.sfx-speck {
+  position: absolute;
+  width: calc(var(--ah) * 0.007);
+  height: calc(var(--ah) * 0.007);
+  border-radius: 50%;
+  background: #fffbe8;
+  box-shadow: 0 0 calc(var(--ah) * 0.008) rgba(255, 244, 200, 0.9);
+  opacity: 0;
+  animation: sfx-drift ease-in-out infinite;
+}
+@keyframes sfx-drift {
+  0% { transform: translate(0, 0); opacity: 0; }
+  25% { opacity: 0.85; }
+  50% { transform: translate(calc(var(--ah) * 0.02), calc(var(--ah) * -0.04)); opacity: 0.4; }
+  75% { opacity: 0.8; }
+  100% { transform: translate(calc(var(--ah) * -0.01), calc(var(--ah) * -0.08)); opacity: 0; }
+}
+
+/* ---- 5. Logo 掃光:一道斜的白光從左掃到右(1 秒),每 12 秒一次;遮罩讓光只落在字和籌碼上 ---- */
+.sfx-logo {
+  position: absolute;
+  overflow: hidden;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.sfx-logo__band {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 30%;
+  background: linear-gradient(90deg, rgba(255, 250, 230, 0), rgba(255, 250, 230, 0.28) 28%, rgba(255, 252, 240, 0.8) 50%, rgba(255, 250, 230, 0.28) 72%, rgba(255, 250, 230, 0));
+  opacity: 0;
+  animation: sfx-shine 12s ease-in-out 1.2s infinite;
+}
+@keyframes sfx-shine {
+  0% { transform: translateX(-120%) skewX(-20deg); opacity: 1; }
+  8.5% { transform: translateX(420%) skewX(-20deg); opacity: 1; }
+  8.6%, 100% { transform: translateX(420%) skewX(-20deg); opacity: 0; }
+}
+
+/* ---- 6. 點牌堆抽一張:點了彈出一張牌(正面)→ 停 1 秒 → 淡掉,共 3 秒;能不能點看牌堆上的光粒子 ---- */
+/* 牌堆外框 = 點擊範圍(不畫東西) */
+.sfx-deckbox {
+  position: absolute;
+  border-radius: 28%;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 點擊範圍比牌堆大一圈,手機好點 */
+.sfx-deckbox::before {
+  content: '';
+  position: absolute;
+  inset: -30% -20%;
+}
+.sfx-deckbox.is-ready {
+  cursor: pointer;
+}
+.sfx-draw {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  pointer-events: none;
+  opacity: 0;
+  animation: sfx-draw 3s forwards;
+  filter: drop-shadow(0 calc(var(--ah) * 0.008) calc(var(--ah) * 0.01) rgba(0, 0, 0, 0.4));
+}
+.sfx-draw svg {
+  display: block;
+}
+/* 彈 1 秒(稍微放大回彈)/ 停 1 秒 / 淡掉 1 秒 */
+@keyframes sfx-draw {
+  0% { transform: translate(-50%, -60%) scale(0.7); opacity: 0; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1.25); }
+  33.3% { transform: translate(-50%, calc(-100% - var(--ah) * 0.05)) scale(1); opacity: 1; }
+  66.7% { transform: translate(-50%, calc(-100% - var(--ah) * 0.05)) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, calc(-104% - var(--ah) * 0.05)) scale(1); opacity: 0; }
+}
+
+/* ---- 7. 吊燈光暈:以燈上方的電線為軸,慢慢、輕輕地晃 ---- */
+.sfx-lamp {
+  position: absolute;
+  width: calc(var(--ah) * 0.3);
+  height: calc(var(--ah) * 0.26);
+  margin-left: calc(var(--ah) * -0.15);
+  margin-top: calc(var(--ah) * -0.13);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 222, 150, 0.5), rgba(255, 200, 110, 0.18) 55%, rgba(255, 200, 110, 0) 100%);
+  mix-blend-mode: screen;
+  transform-origin: 50% -80%;
+  animation: sfx-sway 8s ease-in-out infinite;
+}
+@keyframes sfx-sway {
+  0%, 100% { transform: rotate(-3deg); opacity: 0.8; }
+  50% { transform: rotate(3deg); opacity: 1; }
+}

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from './state/appStore'
 import { usePlatformStore } from './state/platformStore'
 import { tryReconnect, reconcileAbandonedMatch } from './net/netgame'
@@ -24,10 +24,21 @@ import TableBackground from './ui/components/TableBackground'
 import Toast from './ui/components/Toast'
 import AchievementToast from './ui/components/AchievementToast'
 import UpgradePrompt from './ui/components/UpgradePrompt'
-import InstallGuide from './ui/components/InstallGuide'
 import InAppBrowserGate from './ui/components/InAppBrowserGate'
-import OrientationTip from './ui/components/OrientationTip'
+import Splash from './ui/splash/Splash'
+import TypingRotateTip from './ui/splash/TypingRotateTip'
+import { INSTALL_TEXT } from './ui/splash/guides'
+import { isInAppBrowser, isStandalone, usePwaStore } from './platform/pwa'
+import { useToastStore } from './state/toastStore'
 import { useStageMapPreload } from './ui/hooks/useStageMapPreload'
+
+/** 冷開(從零打開、重整)先看開場頁。內建瀏覽器看的是導出教學,不給開場頁。
+ *  截圖工具(scripts/layout)開發模式下可用 window.__shpNoSplash 跳過。 */
+function showSplashAtBoot(): boolean {
+  if (isInAppBrowser() && !isStandalone()) return false
+  if (import.meta.env.DEV && (window as unknown as { __shpNoSplash?: boolean }).__shpNoSplash) return false
+  return true
+}
 
 const screens = {
   menu: Menu,
@@ -68,6 +79,20 @@ export default function App() {
   const Current = screens[screen]
   const uid = usePlatformStore((s) => s.uid)
   useStageMapPreload() // 關卡地圖：先載接下來要打的那關，其他已解鎖的進主線才慢慢載
+
+  const [splash, setSplash] = useState(showSplashAtBoot)
+  // 開場頁還開著就被帶去別的畫面(斷線重連、本地局續玩)→ 直接收起,不擋著正在進行的牌局
+  useEffect(() => {
+    if (splash && (screen !== 'menu' || spectateCode || replayData)) setSplash(false)
+  }, [splash, screen, spectateCode, replayData])
+
+  // 安卓裝好了(appinstalled):瀏覽器分頁還停在原地,提醒改從桌面圖示開
+  const justInstalled = usePwaStore((s) => s.justInstalled)
+  useEffect(() => {
+    if (!justInstalled) return
+    useToastStore.getState().show(INSTALL_TEXT.done)
+    usePwaStore.setState({ justInstalled: false })
+  }, [justInstalled])
 
   // Report this client as online while it holds a uid (anonymous included), so
   // the owner-only 線上人數 counter reflects everyone. Cleaned up on uid change.
@@ -127,11 +152,13 @@ export default function App() {
       <AchievementToast />
       <UpgradePrompt />
 
-      <InstallGuide />
+      {/* 開場頁:點擊開始、安卓全螢幕鎖橫、加主畫面 / 自動旋轉的提示卡(取代原本的橫幅和大廳小框) */}
+      {splash && <Splash onStart={() => setSplash(false)} />}
+      {/* iOS 假橫向打字時,提醒開自動旋轉(鍵盤才不會直著跳出來) */}
+      <TypingRotateTip />
       {/* In-app webview 路由門:LINE 靜默轉外部瀏覽器、安卓 FB 跳 Chrome、iOS FB 顯示手動引導。
           一般瀏覽器/全螢幕/電腦版不受影響(見 InAppBrowserGate)。 */}
       <InAppBrowserGate />
-      <OrientationTip />
       {/* 在線人數只在主畫面顯示(全體可見,見 OnlineCount) */}
       {screen === 'menu' && !spectateCode && !replayData && <OnlineCount />}
     </>

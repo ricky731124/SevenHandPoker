@@ -29,6 +29,8 @@ m.short_name = '七手測試'
 m.related_applications = [{ platform: 'webapp', url: `https://ricky731124.github.io${BASE}manifest.webmanifest` }]
 fs.writeFileSync(mf, JSON.stringify(m, null, 2))
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '')
+// 主畫面圖示換成鳥鳥頭像(正式版是貓貓),兩個都加到主畫面時才分得出來
+for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) fs.copyFileSync(path.join(ROOT, 'art/test-icons', f), path.join(OUT, f))
 
 const stamp = new Date().toLocaleString('zh-TW', { hour12: false })
 const g = (cmd) => run(cmd, { cwd: OUT })

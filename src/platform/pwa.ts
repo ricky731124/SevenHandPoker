@@ -42,9 +42,22 @@ export function isInAppBrowser(): boolean {
   if (/\bLine\//i.test(ua)) return true // LINE
   if (/FBAN|FBAV|FB_IAB|FBIOS|Messenger/i.test(ua)) return true // Facebook / Messenger
   if (/Instagram/i.test(ua)) return true // Instagram
+  if (/Barcelona|Threads/i.test(ua)) return true // Threads(內部代號 Barcelona)
   if (/MicroMessenger/i.test(ua)) return true // WeChat
   if (/\bGSA\//i.test(ua)) return true // Google App in-app browser
   return false
+}
+
+/** 內建瀏覽器是哪個 App(導出畫面的標題要寫出來;Threads / IG 要先比對,它們的 UA 可能也帶 FB 字樣) */
+export function inAppName(): string {
+  if (/Barcelona|Threads/i.test(ua)) return 'Threads'
+  if (/Instagram/i.test(ua)) return 'Instagram'
+  if (/Messenger|FB_IAB\/MESSENGER/i.test(ua) && !/MicroMessenger/i.test(ua)) return 'Messenger'
+  if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return 'Facebook'
+  if (/MicroMessenger/i.test(ua)) return '微信'
+  if (/\bGSA\//i.test(ua)) return 'Google'
+  if (/\bLine\//i.test(ua)) return 'LINE'
+  return 'App'
 }
 
 /** Running as an installed PWA (home-screen icon), not a browser tab. */

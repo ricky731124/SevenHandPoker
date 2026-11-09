@@ -39,13 +39,22 @@ export function subscribeCanvas(cb: () => void): () => void {
 }
 
 /** 手機 = 觸控 + 螢幕短邊 < 600(iPad 短邊 ≥ 744,算電腦)。 */
-function isPhone(): boolean {
+export function isPhone(): boolean {
   const coarse = !!window.matchMedia?.('(pointer: coarse)').matches
   return coarse && typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 600
 }
 
-function compute(): CanvasState {
-  const vv = window.visualViewport
+/** 螢幕現在是不是直的(不受鍵盤影響);讀不到回 null。 */
+function screenPortrait(): boolean | null {
+  const t = screen.orientation?.type
+  if (t) return t.startsWith('portrait')
+  const o = (window as unknown as { orientation?: number }).orientation // 舊版 iOS
+  return typeof o === 'number' ? o === 0 || o === 180 : null
+}
+
+/** layout = true:用版面視窗(不扣鍵盤)量,打字中轉向時用 */
+function compute(layout = false): CanvasState {
+  const vv = layout ? null : window.visualViewport
   // 看得到的範圍(網址列、鍵盤扣掉之後)。visualViewport 剛載入可能回 0 → 退回 inner。
   const pw = vv?.width || window.innerWidth
   const ph = vv?.height || window.innerHeight
@@ -93,7 +102,15 @@ function readInsets(): { t: number; r: number; b: number; l: number } {
 function apply(): void {
   const root = document.getElementById('root')
   if (!root) return
-  if (!frozen()) state = compute() // 打字中(鍵盤開著)不重算:鍵盤吃掉的高度交給彈窗的 --vvh 處理,整塊畫面不跟著縮
+  // 打字中(鍵盤開著)不重算:鍵盤吃掉的高度交給彈窗的 --vvh 處理,整塊畫面不跟著縮。
+  // 但打字中手機轉了方向(假橫向 ↔ 真橫向)一定要重算,不然畫面卡在舊方向(縮在角落)→
+  // 先照新方向(不扣鍵盤)排好,再收起鍵盤;玩家在新方向再點一次輸入框就好。
+  //   方向要看「螢幕本身」(screen.orientation),不能看可視範圍:小手機直拿跳鍵盤後可視範圍會變得比寬還矮,會被誤判成轉向。
+  if (!frozen()) state = compute()
+  else if (isPhone() && screenPortrait() !== null && screenPortrait() !== (state.rot === 90)) {
+    state = compute(true)
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+  }
   const { w, h, s, rot, cx, cy } = state
   const lw = window.innerWidth
   const lh = window.innerHeight

@@ -10,6 +10,9 @@ import Modal from '../components/Modal'
 import AccountButton from '../components/AccountButton'
 import LiveBoard from '../components/LiveBoard'
 import LobbyChat from '../components/LobbyChat'
+import HeroArt from '../components/HeroArt'
+import HeroFx from '../components/HeroFx'
+import RoomKeypad from '../components/RoomKeypad'
 import { sfx } from '../../audio/sfx'
 import { LIMITED_INFO, LIMITED_TEST_MODE } from '../../game/limited'
 import { limitedDayNow, limitedModeNow } from '../../net/limitedClock'
@@ -60,9 +63,13 @@ export default function Menu() {
     launchGame({ mode: 'guest', roomId: code })
   }
   const [joinCode, setJoinCode] = useState('')
-  const [heroOk, setHeroOk] = useState(true)
   // A code awaiting the join-confirm popup (peeks type/time/host before joining).
   const [joinConfirmCode, setJoinConfirmCode] = useState<string | null>(null)
+  const submitJoin = () => {
+    if (joinCode.length !== 3) return
+    setDialog(null)
+    setJoinConfirmCode(joinCode)
+  }
 
   const openStart = () => {
     sfx.unlock()
@@ -88,20 +95,10 @@ export default function Menu() {
       <LiveBoard />
       <LobbyChat />
 
-      {/* Full-bleed hero art (title baked in) */}
-      {heroOk && <img className="menu__hero-blur" src={`${import.meta.env.BASE_URL}title.webp`} alt="" aria-hidden />}
-      {heroOk ? (
-        <img
-          className="menu__hero"
-          src={`${import.meta.env.BASE_URL}title.webp`}
-          alt="Seven Hand Poker"
-          onError={() => setHeroOk(false)}
-        />
-      ) : (
-        <div className="menu__hero-fallback">
-          <h1 className="menu__fallback-title">Seven Hand Poker</h1>
-        </div>
-      )}
+      {/* Full-bleed hero art (title baked in);圖從主題讀,開場頁共用 */}
+      <HeroArt />
+      {/* 主圖特效(點牌堆抽牌、Logo 掃光、吊燈…),開場頁同一層;貓鳥冒符號只在開場頁 */}
+      <HeroFx bubbles={false} />
 
       {/* Buttons: vertical stack, lower-center over the felt */}
       {/* x:'-50%' is animated by framer so it isn't clobbered like a CSS transform would be */}
@@ -133,7 +130,14 @@ export default function Menu() {
         <Button full icon={<IconDice />} onClick={() => setDialog('create')}>
           建立房間
         </Button>
-        <Button full icon={<IconKey />} onClick={() => setDialog('join')}>
+        <Button
+          full
+          icon={<IconKey />}
+          onClick={() => {
+            setJoinCode('') // 每次打開都從空白開始(上次輸入的不留著)
+            setDialog('join')
+          }}
+        >
           加入房間
         </Button>
       </Modal>
@@ -232,22 +236,9 @@ export default function Menu() {
       {/* Join room */}
       <Modal open={dialog === 'join'} onClose={() => setDialog('start')} onBack={() => setDialog('start')} title="加入房間" panelClass="menu-dialog">
         <p className="menu__hint">輸入朋友給你的 3 碼房號：</p>
-        <input
-          className="menu__input"
-          inputMode="numeric"
-          maxLength={3}
-          placeholder="000"
-          value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
-        />
-        <Button
-          full
-          disabled={joinCode.length !== 3}
-          onClick={() => {
-            setDialog(null)
-            setJoinConfirmCode(joinCode)
-          }}
-        >
+        {/* 遊戲內數字鍵盤(不叫系統鍵盤,假橫向也能按);電腦可直接打數字 */}
+        {dialog === 'join' && <RoomKeypad value={joinCode} onChange={setJoinCode} onEnter={submitJoin} />}
+        <Button full disabled={joinCode.length !== 3} onClick={submitJoin}>
           加入房間
         </Button>
       </Modal>

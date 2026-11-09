@@ -1,0 +1,86 @@
+/* 房號數字鍵盤(RoomKeypad.tsx)。木紋按鍵,跟遊戲裡的按鈕同一套顏色。 */
+.rkey {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 12px;
+}
+.rkey__slots {
+  display: flex;
+  gap: 10px;
+}
+.rkey__slot {
+  width: 46px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 2px solid var(--parch-edge);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--parch-text);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 900;
+}
+/* 下一個要填的格子:邊框亮起來 + 底部一條會閃的游標 */
+.rkey__slot.is-cur {
+  border-color: #b4410f;
+  box-shadow: 0 0 0 2px rgba(180, 65, 15, 0.25);
+  position: relative;
+}
+.rkey__slot.is-cur::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  bottom: 9px;
+  height: 3px;
+  border-radius: 2px;
+  background: #b4410f;
+  animation: rkey-blink 1s steps(2) infinite;
+}
+@keyframes rkey-blink {
+  50% { opacity: 0; }
+}
+.rkey__pad {
+  display: grid;
+  grid-template-columns: repeat(5, 44px) 52px;
+  grid-template-rows: 40px 40px;
+  gap: 6px;
+}
+.rkey__key {
+  border: 2px solid var(--wood-edge);
+  border-radius: 10px;
+  background:
+    radial-gradient(115% 78% at 50% -14%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 48%),
+    var(--wood-tex);
+  background-size: cover, cover;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.45), 0 2.5px 0 var(--wood-edge);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.rkey__key:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.45), 0 0.5px 0 var(--wood-edge);
+}
+.rkey__key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* 刪除鍵:最右邊,跨兩排 */
+.rkey__key--back {
+  grid-column: 6;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}

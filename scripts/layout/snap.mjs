@@ -141,7 +141,7 @@ async function shootOne(browser, dev, scene, name, dir) {
     page.on('request', (r) => { pending.set(r, Date.now()); if (r.url().includes('/deps/framer-motion.js')) page.__framerUrl = r.url() })
     page.on('requestfinished', (r) => pending.delete(r))
     page.on('requestfailed', (r) => pending.delete(r))
-    await page.addInitScript(initScript, { standalone: !!dev.standalone, ios: dev.os === 'ios', profile: scene.guest ? null : PROFILE })
+    await page.addInitScript(initScript, { standalone: !!dev.standalone, ios: dev.os === 'ios', profile: scene.guest ? null : PROFILE, splash: !!scene.splash })
     // 時鐘暫停:只有 settle 的 runFor 會讓時間前進 → 每次跑的累計時間都一樣。
     // 留 10 分鐘緩衝:同時拍好幾張時電腦忙,install 到 pauseAt 之間可能過好幾秒(頁面還沒載,不影響結果)
     await page.clock.install({ time: FIXED_TIME - 600000 })
@@ -158,11 +158,7 @@ async function shootOne(browser, dev, scene, name, dir) {
         await page.waitForLoadState('load')
       }
     }
-    // 加主畫面提示卡:第 2 階段會整個拿掉,留著會蓋住底下、也讓前後比對全是它 → 先按掉(a2hs 畫面除外)
-    if (!scene.keepA2hs) {
-      await page.evaluate(() => document.querySelector('.a2hs__close')?.click())
-      await settle(page, 400)
-    }
+    await settle(page, 400) // 原本按掉加主畫面小框的等待;留著讓前後比對的時間點一致
     await page.evaluate(() => window.__snapReseed())
     await scene.run(page, { dev, settle: (ms) => settle(page, ms), click: (text, o) => clickText(page, text, o), clickSel: (sel) => clickSel(page, sel) })
     await settle(page, scene.wait ?? 1200)
@@ -266,7 +262,9 @@ async function freeze(page) {
 }
 
 /** 在頁面裡跑(addInitScript):固定亂數、假登入、模擬「從主畫面開」(display-mode: standalone)。 */
-function initScript({ standalone, ios, profile }) {
+function initScript({ standalone, ios, profile, splash }) {
+  // 開場頁會蓋住所有畫面 → 一般場景跳過(src/App.tsx 的 __shpNoSplash,只在開發模式有效);開場頁場景才留著
+  window.__shpNoSplash = !splash
   // platformStore 一掛上 window.__platform 就接手:不跑 Firebase 登入監聽,直接給定登入狀態
   // (profile = null → 訪客,會看到歡迎彈窗)。
   let store

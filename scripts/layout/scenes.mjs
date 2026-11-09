@@ -1,7 +1,7 @@
 // 截圖場景:每個場景從剛載入的首頁開始,用 DEV 的 __app / __game / __campaign 走到指定畫面。
 // 登入狀態由 snap.mjs 的 initScript 在開機時就給好(guest: true → 訪客、會看到歡迎彈窗)。
 // 場景可選:wait(拍照前再等多久遊戲時間)、only(dev) 只在某些裝置拍、ua(dev) 換掉瀏覽器識別字串、
-// quick(快速檢查也拍)、keepA2hs(不要先按掉加主畫面提示卡)。
+// quick(快速檢查也拍)、splash(留著開場頁,其他場景一開機就跳過它)。
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -129,8 +129,12 @@ export const SCENES = [
   // ---------------------------------------------------------------- 大廳
   { id: 'welcome', guest: true, run: async () => {} },
   { id: 'lobby', quick: true, run: async () => {} },
-  // 其他畫面拍照前都會先按掉加主畫面提示卡;這張留著它(只有手機網頁版會出現)
-  { id: 'a2hs', keepA2hs: true, only: (dev) => mobileWeb(dev), run: async () => {} },
+  // 開場頁(其他場景都跳過它):每台都拍,看「最佳體驗設定」看板有沒有出現在對的裝置上
+  { id: 'splash', splash: true, run: async () => {} },
+  // 看板的按鈕 → 圖解彈窗(只有手機網頁版有看板)
+  { id: 'splash-guide', splash: true, only: (dev) => mobileWeb(dev), run: async (page, { clickSel }) => clickSel('.ssetup__btn') },
+  // 進入遊戲 → 淡入大廳(看開場頁有沒有收乾淨)
+  { id: 'splash-start', splash: true, wait: 1500, run: async (page, { clickSel }) => clickSel('.splash__enter') },
   { id: 'ann', run: async (page, { click }) => click('公告', { exact: false }) },
   { id: 'chat', run: async (page, ctx) => { await fakeChat(page); await ctx.clickSel('.lchat-fab') } },
   {
@@ -244,4 +248,19 @@ export const SCENES = [
   // ---------------------------------------------------------------- 內建瀏覽器(只有手機網頁版會遇到)
   // LINE 是無聲轉址、安卓 FB 直接跳 Chrome,都沒有畫面可拍;只有 iOS FB 是手動教學頁
   { id: 'gate-fb', only: (dev) => mobileWeb(dev) && dev.os === 'ios', ua: (dev) => dev.ua + ' [FBAN/FBIOS;FBAV/480.0.0]', run: async () => {} },
+  { id: 'gate-threads', only: (dev) => mobileWeb(dev) && dev.os === 'ios', ua: (dev) => dev.ua + ' Barcelona 289.0.0.77.109 (iPhone15,2; iOS 17_5; zh_TW)', run: async () => {} },
+  // 複製連結失敗時會多一行網址(最長的版面)
+  {
+    id: 'gate-copyfail',
+    only: (dev) => mobileWeb(dev) && dev.os === 'ios',
+    ua: (dev) => dev.ua + ' Instagram 340.0.0.22.109 (iPhone15,2; iOS 17_5)',
+    run: async (page) => {
+      await page.evaluate(() => {
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('blocked')) }, configurable: true })
+        document.execCommand = () => false
+      })
+      await page.click('.iabg__copy')
+      await page.waitForTimeout(200)
+    },
+  },
 ]

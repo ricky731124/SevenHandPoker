@@ -1,0 +1,136 @@
+/* 引導圖解(guides.tsx):開場頁的設定圖解、打字時的「開啟自動旋轉」圖解共用。 */
+
+/* 彈窗要蓋過開場頁(2500)和登入彈窗 */
+.gguide__scrim {
+  z-index: 2600;
+}
+.gguide .modal__body {
+  gap: 10px;
+}
+.gguide__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+/* 一排步驟卡:編號 + 大圖示 + 一兩個字,中間用箭頭接 */
+.gsteps {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+.gsteps__item {
+  display: flex;
+  align-items: center;
+}
+.gsteps__arrow {
+  padding: 0 4px;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--parch-edge, #a6763c);
+}
+.gsteps__card {
+  position: relative;
+  width: 104px;
+  min-height: 96px;
+  padding: 12px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid var(--parch-edge, #a6763c);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.gsteps__no {
+  position: absolute;
+  top: -9px;
+  left: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #b4410f;
+  color: #fff6e6;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 22px;
+  text-align: center;
+}
+.gsteps__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  font-size: 36px;
+  color: #1f6fd6; /* 手機系統按鈕的藍 */
+}
+.gsteps__label {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--wood-text);
+}
+/* 文字按鈕(例如 iOS 右上角的「加入」) */
+.gkey {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1f6fd6;
+  border: 1.5px dashed rgba(31, 111, 214, 0.5);
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.gnote {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #8a4b12;
+}
+.gnote svg {
+  font-size: 1.25em;
+  vertical-align: -0.25em;
+  color: #1f6fd6;
+}
+.gnote--soft {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(90, 42, 12, 0.72);
+}
+
+/* iOS 假橫向打字時的「開啟自動旋轉」小提示(TypingRotateTip.tsx)。
+   假橫向時系統鍵盤從實體下方(= 畫布右側)冒出來 → 放在畫布上緣偏左(= 實體右上),不會被鍵盤蓋住。 */
+.rtip {
+  position: absolute;
+  top: max(8px, var(--sa-t, 0px));
+  left: 22%;
+  z-index: 2700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: rgba(20, 6, 8, 0.9);
+  border: 1.5px solid var(--gold-3, #d79a24);
+  color: var(--cream);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.rtip__btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--gold-2);
+  color: var(--felt-deep);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+}

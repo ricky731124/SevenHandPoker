@@ -1,0 +1,159 @@
+/* 開場頁(Splash.tsx)。蓋在大廳上面(大廳在底下先載好),低於 Toast(3000)讓「安裝完成」之類看得到。 */
+.splash {
+  position: absolute;
+  inset: 0;
+  z-index: 2500;
+  overflow: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.splash__bg,
+.splash__ui {
+  position: absolute;
+  inset: 0;
+}
+.splash__ui {
+  pointer-events: none;
+}
+.splash__ui > * {
+  pointer-events: auto;
+}
+/* 整張圖不壓暗,只在下方墊一層淡淡的漸層,按鈕和看板才看得清楚 */
+.splash__shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34%;
+  background: linear-gradient(to top, rgba(20, 4, 8, 0.55), rgba(20, 4, 8, 0));
+}
+
+/* 「進入遊戲」:木紋大按鈕,慢慢呼吸 + 微微的金光,周圍飄金色光粒子 */
+.senter {
+  position: absolute;
+  left: 50%;
+  bottom: max(7cqh, calc(var(--sa-b, 0px) + 14px));
+  transform: translateX(-50%);
+}
+.splash__enter {
+  position: relative;
+  min-width: clamp(190px, 26cqw, 290px);
+  font-size: clamp(20px, 6cqh, 28px);
+  font-weight: 900;
+  letter-spacing: 4px;
+  padding: clamp(9px, 2.6cqh, 15px) 36px;
+  animation: splash-breathe 2.4s ease-in-out infinite;
+}
+.splash__enter.is-loading {
+  animation: none;
+  letter-spacing: 1px;
+}
+/* 跟 .woodbtn 一樣的陰影,外面多一圈很淡的金光,跟著呼吸 */
+@keyframes splash-breathe {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.5), inset 0 -3px 6px rgba(109, 63, 28, 0.3), 0 2.5px 0 var(--wood-edge), 0 5px 9px rgba(0, 0, 0, 0.38), 0 0 6px 1px rgba(255, 214, 102, 0.25);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.5), inset 0 -3px 6px rgba(109, 63, 28, 0.3), 0 2.5px 0 var(--wood-edge), 0 5px 9px rgba(0, 0, 0, 0.38), 0 0 16px 4px rgba(255, 214, 102, 0.5);
+  }
+}
+.senter__mote {
+  position: absolute;
+  top: 20%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff3c4;
+  box-shadow: 0 0 5px 1.5px rgba(255, 214, 102, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  animation: senter-rise ease-out infinite;
+}
+@keyframes senter-rise {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateY(-34px) scale(1); opacity: 0; }
+}
+/* 右下角「最佳體驗設定」看板(木紋,跟按鈕同一套;放左下會擋到牌堆的光粒子) */
+.ssetup {
+  position: absolute;
+  right: max(12px, calc(var(--sa-r, 0px) + 8px));
+  bottom: max(12px, calc(var(--sa-b, 0px) + 8px));
+  width: clamp(228px, 30cqw, 280px);
+  padding: 7px 9px 9px;
+  border: 2.5px solid var(--wood-edge);
+  border-radius: 12px;
+  background:
+    radial-gradient(115% 78% at 50% -14%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 48%),
+    var(--wood-tex);
+  background-size: cover, cover;
+  color: var(--wood-text);
+  font-family: var(--font-display);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.45),
+    0 2px 0 var(--wood-edge),
+    0 6px 12px rgba(0, 0, 0, 0.45);
+}
+.ssetup__title {
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.ssetup__title::before {
+  content: '⚠';
+  margin-right: 5px;
+  color: #b4410f;
+}
+.ssetup__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 9px;
+  background: rgba(255, 248, 230, 0.55);
+}
+.ssetup__icon {
+  flex: none;
+  display: flex;
+  font-size: 24px;
+}
+.ssetup__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ssetup__label {
+  font-weight: 900;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.ssetup__gain {
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: rgba(90, 42, 12, 0.75);
+}
+.ssetup__btn {
+  flex: none;
+  padding: 6px 9px;
+  white-space: nowrap;
+  border: 2px solid var(--wood-edge);
+  border-radius: 999px;
+  background: #b4410f;
+  color: #fff6e6;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--wood-edge);
+}
+.ssetup__btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
