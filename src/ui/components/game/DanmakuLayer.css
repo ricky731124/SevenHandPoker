@@ -2,8 +2,8 @@
    淺字、圓角小條(§7)。z 很高「永遠在最上面」,但 pointer-events:none → 可穿透點到底下按鈕。 */
 .danmaku-layer {
   position: absolute;
-  top: clamp(120px, 0.335 * var(--stage-h, 100vh), 222px); /* 只比原本往上一些些(#2),仍在對手「N 張」下方 */
-  right: clamp(8px, 2vw, 22px);
+  top: clamp(120px, 0.335 * var(--stage-h, 100cqh), 222px); /* 只比原本往上一些些(#2),仍在對手「N 張」下方 */
+  right: clamp(8px, 2cqw, 22px);
   z-index: 300;
   display: flex;
   flex-direction: column;
@@ -23,7 +23,7 @@
   background: rgba(0, 0, 0, 0.62);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   color: #f6efe0;
-  font-size: clamp(12px, 1.9vw, 15px); /* 改回原本大小(#2) */
+  font-size: clamp(12px, 1.9cqw, 15px); /* 改回原本大小(#2) */
   line-height: 1.25;
 }
 .danmaku-by {

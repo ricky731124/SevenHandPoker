@@ -4,10 +4,10 @@
 .lchat-fab {
   position: fixed;
   /* 對齊 OnlineCount/LiveBoard 的邊界手法：max(14px, env * 0.8)。桌機另見 media。 */
-  left: max(14px, calc(env(safe-area-inset-left) * 0.8));
-  bottom: max(14px, calc(env(safe-area-inset-bottom) * 0.8));
+  left: max(14px, calc(var(--sa-l) * 0.8));
+  bottom: max(14px, calc(var(--sa-b) * 0.8));
   z-index: 40;
-  width: clamp(200px, 30vw, 340px);
+  width: clamp(200px, 30cqw, 340px);
   min-height: 50px;
   display: flex;
   align-items: center;
@@ -24,10 +24,10 @@
   cursor: pointer;
 }
 .lchat-fab:hover { filter: brightness(1.02); }
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .lchat-fab {
-    left: clamp(24px, 4vw, 80px);
-    bottom: clamp(18px, 2.6vw, 50px);
+    left: clamp(24px, 4cqw, 80px);
+    bottom: clamp(18px, 2.6cqw, 50px);
   }
 }
 .lchat-fab__av {
@@ -38,7 +38,7 @@
 .lchat-fab__body {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: clamp(12px, 1.6vw, 14px);
+  font-size: clamp(12px, 1.6cqw, 14px);
   line-height: 1.55; /* 行高放寬 → 貼圖 emoji 上下不被 line-clamp 的 overflow 切到 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -47,7 +47,7 @@
 }
 .lchat-fab__name { color: #9a5a1e; font-weight: 700; }
 .lchat-fab__sticker { display: inline-flex; align-items: center; vertical-align: middle; line-height: 1; }
-.lchat-fab__hint { color: #9a7a55; font-size: clamp(12px, 1.6vw, 14px); }
+.lchat-fab__hint { color: #9a7a55; font-size: clamp(12px, 1.6cqw, 14px); }
 
 /* ---- 彈窗（沿用 Modal；固定高度、內容不撐高）---- */
 .lchat-modal .modal__body { padding-top: 6px; }
@@ -59,7 +59,7 @@
 .lchat-wrap { position: relative; }
 
 .lchat-list {
-  height: min(54vh, 420px); /* 2026-10-28 使用者:再大一些些(原 46vh / 360px),手機仍留上下邊 */
+  height: min(54cqh, 420px); /* 2026-10-28 使用者:再大一些些(原 46cqh / 360px),手機仍留上下邊 */
   overflow-y: auto;
   overscroll-behavior: contain; /* 訊息捲到頂/底不連動到彈窗或背後頁面 */
   padding: 4px 2px;

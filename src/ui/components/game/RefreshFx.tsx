@@ -5,6 +5,7 @@ import type { PlayerId } from '../../../game/state'
 import CardBack from '../CardBack'
 import { sfx } from '../../../audio/sfx'
 import './RefreshFx.css'
+import { canvasRect } from '../../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 /** 動畫總長(ms):飛回牌堆 → 洗牌 → 發回手上。 */
 const DURATION = 1700
@@ -42,10 +43,10 @@ export default function RefreshFx({ me, cardW }: { me: PlayerId; cardW: number }
     const deckEl = root.querySelector('.game__deck .deck__stack') ?? root.querySelector('.game__deck')
     if (!handEl || !deckEl) return
     // .game 可能被 transform: scale(fit) 縮放 → 量到的是螢幕 px,換回 .game 內的座標
-    const rr = root.getBoundingClientRect()
+    const rr = canvasRect(root.getBoundingClientRect())
     const k = root.offsetWidth ? rr.width / root.offsetWidth : 1
-    const hr = handEl.getBoundingClientRect()
-    const dr = deckEl.getBoundingClientRect()
+    const hr = canvasRect(handEl.getBoundingClientRect())
+    const dr = canvasRect(deckEl.getBoundingClientRect())
     const cardH = cardW * 1.4
     const count = Math.max(1, Math.min(12, engine?.hands[fx.target].length ?? 8))
     const left = (hr.left - rr.left) / k

@@ -1,8 +1,9 @@
+import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import Button from '../components/Button'
 import CardBack from '../components/CardBack'
-import useMobileWebScale from '../hooks/useMobileWebScale'
+import useFitHeight from '../hooks/useFitHeight'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 
@@ -32,10 +33,11 @@ export default function Settings() {
   const go = useAppStore((s) => s.go)
   const settings = useAppStore((s) => s.settings)
   const update = useAppStore((s) => s.updateSettings)
-  const mw = useMobileWebScale()
+  const panelRef = useRef<HTMLDivElement>(null)
+  const mw = useFitHeight(panelRef) // 矮螢幕放不下就整塊等比縮(§8.2)
 
   return (
-    <motion.div className="panel" initial={{ opacity: 0, y: 20, scale: mw }} animate={{ opacity: 1, y: 0, scale: mw }}>
+    <motion.div ref={panelRef} className="panel" style={{ ['--fit' as string]: mw }} initial={{ opacity: 0, y: 20, scale: mw }} animate={{ opacity: 1, y: 0, scale: mw }}>
       <h1 className="panel__h1">設定</h1>
       <div className="panel__scroll">
         <div className="settings__row">

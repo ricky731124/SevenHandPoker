@@ -5,7 +5,6 @@ import { subscribeHighlights, subscribeUserReplays, type ReplayEntry, type Match
 import { useAppStore } from '../../state/appStore'
 import { LIMITED_INFO } from '../../game/limited'
 import { usePlatformStore } from '../../state/platformStore'
-import useMobileWebScale from '../hooks/useMobileWebScale'
 import { sfx } from '../../audio/sfx'
 import './Panel.css'
 import './Personalize.css'
@@ -38,7 +37,6 @@ function fmtTime(ms: number): string {
 export default function HighlightList({ open, onClose }: { open: boolean; onClose: () => void }) {
   const openReplay = useAppStore((s) => s.openReplay)
   const uid = usePlatformStore((s) => s.uid)
-  const mw = useMobileWebScale()
   const [tab, setTab] = useState<Tab>('highlights')
   const [list, setList] = useState<ReplayEntry[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -67,8 +65,8 @@ export default function HighlightList({ open, onClose }: { open: boolean; onClos
     <div className="pz-screen rp-overlay" onClick={onClose}>
       <motion.div
         className="panel panel--wide panel--rp"
-        initial={{ opacity: 0, y: 16, scale: mw }}
-        animate={{ opacity: 1, y: 0, scale: mw }}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pz__topbar">

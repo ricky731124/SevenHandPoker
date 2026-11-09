@@ -152,7 +152,18 @@ function subscribeList(
     },
     () => cb([]),
   )
-  return unsub
+  if (import.meta.env.DEV) devListSubs.add(cb)
+  return () => {
+    devListSubs.delete(cb)
+    unsub()
+  }
+}
+
+// DEV:截圖工具離線拍不到清單 → window.__fakeReplays(entries) 直接餵給開著的清單(scripts/layout/scenes.mjs)
+const devListSubs = new Set<(entries: ReplayEntry[]) => void>()
+if (import.meta.env.DEV) {
+  ;(window as unknown as { __fakeReplays: (entries: ReplayEntry[]) => void }).__fakeReplays = (entries) =>
+    devListSubs.forEach((cb) => cb(entries))
 }
 
 if (import.meta.env.DEV) {

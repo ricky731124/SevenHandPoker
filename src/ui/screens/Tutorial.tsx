@@ -18,7 +18,6 @@ import SpecialCard from '../components/SpecialCard'
 import ShowdownModal from '../components/game/ShowdownModal'
 import MagnifierModal from '../components/game/MagnifierModal'
 import useBoardSizes from '../hooks/useBoardSizes'
-import useFitScale from '../hooks/useFitScale'
 import type { SortDir, SortMode } from '../../game/sort'
 import { sfx } from '../../audio/sfx'
 import './Game.css'
@@ -34,7 +33,6 @@ export default function Tutorial() {
   const t = useTutorialStore()
   const engine = t.engine
   const sz = useBoardSizes()
-  const fit = useFitScale(sz.stageW, sz.stageH)
   const [sortMode, setSortMode] = useState<SortMode>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
@@ -128,8 +126,6 @@ export default function Tutorial() {
       style={{
         width: sz.stageW,
         height: sz.stageH,
-        transform: fit < 1 ? `scale(${fit})` : undefined,
-        transformOrigin: 'center center',
         ['--reserve' as string]: `${sz.reserve}px`,
         ['--reserve-r' as string]: `${sz.rightReserve}px`,
         ['--stage-w' as string]: `${sz.stageW}px`,

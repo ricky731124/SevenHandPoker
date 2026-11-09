@@ -38,6 +38,13 @@
   flex: 0 0 30px;
   font-size: 18px;
 }
+/* 窄畫布(手機網頁直拿 / iPhone SE,畫布只有 16:9):外框不動,裡面的字、頭像、播放鈕全部等比小一點點,
+   最長的名字(7 中 1 英)才放得下。全螢幕手機、電腦都比這寬,不受影響。 */
+@container app (max-width: 760px) {
+  .rp-hrow > * {
+    zoom: 0.92;
+  }
+}
 
 .rp-hmatch {
   flex: 1 1 auto;
@@ -62,10 +69,12 @@
   flex: none;
 }
 .rp-hname {
-  flex: 0 0 auto;
-  width: 7.5em; /* 15 bytes ≈ 7 中文 + 1 英(em 隨字級縮,字小→框也小) */
+  /* 寬 7.8em = 15 bytes(7 中文 + 1 英,英文約 0.7em)剛好放得下(原 7.5em 會把最長的名字截成「…」);
+     em 隨字級縮。真的放不下時名字才縮成「…」,右邊頭像不會被裁掉。 */
+  flex: 0 1 7.8em;
+  min-width: 3em;
   font-weight: 800;
-  font-size: clamp(14px, 1.7vw, 17px); /* 名字小一點點(#1) */
+  font-size: clamp(14px, 1.7cqw, 17px); /* 名字小一點點(#1) */
   color: var(--wood-text, #5a2a0c);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -78,7 +87,7 @@
 .rp-hvs {
   flex: none;
   font-weight: 900;
-  font-size: clamp(15px, 1.8vw, 18px);
+  font-size: clamp(15px, 1.8cqw, 18px);
   color: #a06a2e; /* 木金,不跟名字同色 */
   padding: 0 3px;
 }
@@ -87,7 +96,7 @@
   flex: none;
   font-family: var(--font-display, sans-serif);
   font-weight: 900;
-  font-size: clamp(19px, 2.4vw, 25px);
+  font-size: clamp(19px, 2.4cqw, 25px);
   color: #1f9d4d;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 7px rgba(45, 200, 110, 0.4);
   transform: skewX(-9deg);
@@ -97,7 +106,7 @@
   flex: none;
   font-family: var(--font-display, sans-serif);
   font-weight: 900;
-  font-size: clamp(19px, 2.4vw, 25px);
+  font-size: clamp(19px, 2.4cqw, 25px);
   color: #d63a2e;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45), 0 0 7px rgba(230, 70, 55, 0.35);
   transform: skewX(-9deg);
@@ -114,13 +123,13 @@
 }
 .rp-hmode {
   font-weight: 800;
-  font-size: clamp(14px, 1.75vw, 17px); /* 再大一點點 */
+  font-size: clamp(14px, 1.75cqw, 17px); /* 再大一點點 */
   line-height: 1.05;
   color: var(--wood-text, #5a2a0c);
   white-space: nowrap;
 }
 .rp-htime {
-  font-size: clamp(12px, 1.5vw, 15px); /* 再大一點點 */
+  font-size: clamp(12px, 1.5cqw, 15px); /* 再大一點點 */
   font-weight: 700;
   line-height: 1.05;
   color: rgba(90, 42, 12, 0.66);

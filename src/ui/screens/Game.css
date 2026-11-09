@@ -1,6 +1,6 @@
-/* Bounded-fluid board: width is set inline (min(100vw, WCAP)); the parent
+/* Bounded-fluid board: width is set inline (min(100cqw, WCAP)); the parent
    .stage centres it, so on desktop the table sits in the middle with red felt
-   on both sides instead of stretching edge-to-edge. On phones width == 100vw,
+   on both sides instead of stretching edge-to-edge. On phones width == 100cqw,
    so the board fills the viewport exactly as before. */
 .game {
   position: relative;
@@ -10,7 +10,7 @@
   flex-direction: column;
   min-height: 0;
   /* equal left/right reserve zones so the centre is balanced */
-  --reserve: clamp(90px, 14vw, 146px);
+  --reserve: clamp(90px, 14cqw, 146px);
 
   /* Right-side control cluster — 4 same-size round wood buttons, all absolutely
      placed in THIS (.game) coord system so phone & desktop line up identically
@@ -18,17 +18,17 @@
        inner (one gap left): ? (coin-row height) · 花色/大小 field (bottom)
        outer (screen edge):  暫停 pause · 升降冪 dir — each raised by --sbtn-dy so
        the inner↔outer pairs form a 30° diagonal (dy = dx·tan30°). */
-  --sbtn: clamp(48px, calc(0.09 * var(--stage-h, 100vh)), 66px); /* unified size */
-  --sbtn-r-out: clamp(6px, 1.4vw, 20px);
-  --sbtn-col-dx: calc(var(--sbtn) + clamp(8px, 1.4vw, 18px)); /* horizontal column offset */
+  --sbtn: clamp(48px, calc(0.09 * var(--stage-h, 100cqh)), 66px); /* unified size */
+  --sbtn-r-out: clamp(6px, 1.4cqw, 20px);
+  --sbtn-col-dx: calc(var(--sbtn) + clamp(8px, 1.4cqw, 18px)); /* horizontal column offset */
   --sbtn-r-in: calc(var(--sbtn-r-out) + var(--sbtn-col-dx));
-  --sbtn-gap-y: clamp(77px, calc(0.18 * var(--stage-h, 100vh)), 144px); /* vertical gap (×1.2) */
+  --sbtn-gap-y: clamp(77px, calc(0.18 * var(--stage-h, 100cqh)), 144px); /* vertical gap (×1.2) */
   --sbtn-dy: calc(var(--sbtn-col-dx) * 0.7002); /* 35° diagonal drop between columns */
   /* whole cluster nudged DOWN a touch so 暫停 clears the opponent's「N 張」bubble
      (mobile once overlapped it) — kept small so the bottom row stays clear of the
      hand / 送出 (使用者:別移太多)。 */
-  --sbtn-drop: clamp(2px, calc(0.013 * var(--stage-h, 100vh)), 14px);
-  --sbtn-top-q: calc(0.5 * var(--stage-h, 100vh) - var(--sbtn) / 2 + var(--sbtn-drop)); /* inner top (?) */
+  --sbtn-drop: clamp(2px, calc(0.013 * var(--stage-h, 100cqh)), 14px);
+  --sbtn-top-q: calc(0.5 * var(--stage-h, 100cqh) - var(--sbtn) / 2 + var(--sbtn-drop)); /* inner top (?) */
   --sbtn-top-out: calc(var(--sbtn-top-q) - var(--sbtn-dy)); /* outer top (pause) — raised for 35° */
 }
 
@@ -57,18 +57,18 @@
 }
 .topbar__menu {
   position: absolute;
-  top: clamp(8px, 2vh, 16px);
-  left: clamp(8px, 2vw, 16px);
-  width: clamp(44px, 8vh, 58px);
-  height: clamp(44px, 8vh, 58px);
+  top: clamp(8px, 2cqh, 16px);
+  left: clamp(8px, 2cqw, 16px);
+  width: clamp(44px, 8cqh, 58px);
+  height: clamp(44px, 8cqh, 58px);
   z-index: 50;
 }
 
 /* ---- Avatars (corners) ---- */
 .game__foe-avatar {
   position: absolute;
-  top: clamp(6px, 1.5vh, 14px);
-  right: clamp(5px, 1.4vw, 12px); /* hug the right edge a touch more (space to spare there) */
+  top: clamp(6px, 1.5cqh, 14px);
+  right: clamp(5px, 1.4cqw, 12px); /* hug the right edge a touch more (space to spare there) */
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -81,17 +81,25 @@
 .foe-bubble {
   position: absolute;
   /* below the opponent's avatar + name label so it never covers the name */
-  top: clamp(96px, calc(0.27 * var(--stage-h, 100vh)), 168px);
-  right: clamp(10px, 2.2vw, 26px);
+  top: clamp(96px, calc(0.27 * var(--stage-h, 100cqh)), 168px);
+  right: clamp(10px, 2.2cqw, 26px);
   z-index: 47; /* above the pause/sort buttons so the "N 張" is never covered */
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
   font-weight: 800;
-  font-size: clamp(12px, 2vw, 15px);
+  font-size: clamp(12px, 2cqw, 15px);
   padding: 4px 10px;
   border-radius: 12px;
   white-space: nowrap;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+/* 很矮的螢幕(小台安卓 360 高):原位置會貼到暫停鈕 → 改貼在對手名字正下方、字小一點點(§8.2) */
+@container app (max-height: 370px) {
+  .foe-bubble {
+    top: calc(var(--foe-bottom, 88px) + 2px);
+    font-size: 12px;
+    padding: 2px 8px;
+  }
 }
 .foe-bubble::before {
   content: '';
@@ -105,9 +113,9 @@
 /* 玩家端「這局被觀戰」提醒:選單鈕右邊小小的 👁 數(#1/#7),不做大底,避免擋牌。與選單鈕垂直置中。 */
 .game__watch-indicator {
   position: absolute;
-  top: clamp(8px, 2vh, 16px);
-  left: calc(clamp(8px, 2vw, 16px) + clamp(44px, 8vh, 58px) + 8px);
-  height: clamp(44px, 8vh, 58px); /* = 選單鈕高 → 垂直置中對齊 */
+  top: clamp(8px, 2cqh, 16px);
+  left: calc(clamp(8px, 2cqw, 16px) + clamp(44px, 8cqh, 58px) + 8px);
+  height: clamp(44px, 8cqh, 58px); /* = 選單鈕高 → 垂直置中對齊 */
   z-index: 50;
   display: inline-flex;
   align-items: center;
@@ -115,7 +123,7 @@
   color: #ffe9b0;
   font-family: var(--font-display, sans-serif);
   font-weight: 800;
-  font-size: clamp(14px, 2.2vw, 18px);
+  font-size: clamp(14px, 2.2cqw, 18px);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
   pointer-events: none;
   user-select: none;
@@ -125,8 +133,8 @@
 /* 左上:LIVE + 👁 觀戰數(取代選單鈕位置)。 */
 .spec-hud {
   position: absolute;
-  top: clamp(8px, 2vh, 16px);
-  left: clamp(8px, 2vw, 16px);
+  top: clamp(8px, 2cqh, 16px);
+  left: clamp(8px, 2cqw, 16px);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -170,10 +178,10 @@
 /* 觀戰者名字:放在原本「特殊牌」鈕的位置、左靠(用該鈕的對齊),白色,不加 label(#1)。 */
 .spec-watcher {
   position: absolute;
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
-  bottom: clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px);
+  left: calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7);
+  bottom: clamp(146px, calc(0.42 * var(--stage-h, 100cqh)), 238px);
   z-index: 42;
-  max-width: clamp(96px, 16vw, 160px); /* ~8 中文字 */
+  max-width: clamp(96px, 16cqw, 160px); /* ~8 中文字 */
   font-family: var(--font-display, sans-serif);
   font-weight: 800;
   font-size: 16px;
@@ -198,7 +206,7 @@
   background: rgba(0, 0, 0, 0.78);
   color: #fff;
   font-weight: 800;
-  font-size: clamp(11px, 1.8vw, 14px);
+  font-size: clamp(11px, 1.8cqw, 14px);
   padding: 3px 9px;
   border-radius: 11px;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
@@ -208,21 +216,21 @@
 /* 右下:離開觀戰(取代送出鈕位置),樣式同送出、比送出略大但別蓋到牌(#1 縮小 20%)。 */
 .spec-leave {
   position: absolute;
-  right: clamp(4px, 1vw, 18px);
-  bottom: clamp(10px, 2.6vh, 26px);
+  right: clamp(4px, 1cqw, 18px);
+  bottom: clamp(10px, 2.6cqh, 26px);
   z-index: 46;
 }
 .spec-leave .woodbtn {
   padding: 12px 18px; /* 再等比縮 ~6%(#3) */
 }
 .spec-leave .woodbtn__label {
-  font-size: clamp(14px, 2.06vw, 19px);
+  font-size: clamp(14px, 2.06cqw, 19px);
   letter-spacing: -0.5px;
 }
 .game__me-avatar {
   position: absolute;
-  bottom: clamp(6px, 1.5vh, 14px);
-  left: clamp(4px, 0.8vw, 7px); /* hug the left edge more so the name has room before the cards */
+  bottom: clamp(6px, 1.5cqh, 14px);
+  left: clamp(4px, 0.8cqw, 7px); /* hug the left edge more so the name has room before the cards */
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -286,11 +294,11 @@
    buttons stacked in the left column below it (由下到上:頭像→貼圖→特殊牌→發牌).
    Stage-relative so it tracks the board. */
 .game__deck {
-  transform: translateY(calc(-0.16 * var(--stage-h, 100vh)));
+  transform: translateY(calc(-0.16 * var(--stage-h, 100cqh)));
   /* iPhone notch (landscape): nudge the deck + its count clear of the cutout.
      env() is 0 on Android/desktop, so the layout there is untouched.
      使用者:原本推太多,回推一半 → 只吃 0.5× safe-area。 */
-  padding-left: calc(env(safe-area-inset-left) * 0.5);
+  padding-left: calc(var(--sa-l) * 0.5);
 }
 /* Fixed grid: seven fixed-width cells spread across a narrowed band. Adding
    cards to a pile never changes cell size, so the board never reflows/jitters. */
@@ -308,7 +316,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(3px, 1vh, 9px); /* small clearance around the coin */
+  gap: clamp(3px, 1cqh, 9px); /* small clearance around the coin */
 }
 .slot__coin { position: relative; z-index: 30; pointer-events: none; display: flex; align-items: center; justify-content: center; }
 
@@ -444,7 +452,7 @@
   color: rgba(255, 255, 255, 0.98);
   padding: 7px 16px;
   border-radius: 999px;
-  font-size: clamp(16px, 2.7vw, 22px);
+  font-size: clamp(16px, 2.7cqw, 22px);
   font-weight: 800;
   white-space: nowrap;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
@@ -465,8 +473,8 @@
 }
 .game__action {
   position: absolute;
-  right: clamp(4px, 1vw, 18px);
-  bottom: clamp(10px, 2.6vh, 26px);
+  right: clamp(4px, 1cqw, 18px);
+  bottom: clamp(10px, 2.6cqh, 26px);
   z-index: 30;
 }
 /* submit: comfortably tappable, tight text (no wasted whitespace) */
@@ -474,7 +482,7 @@
   padding: 13px 18px;
 }
 .game__action .woodbtn__label {
-  font-size: clamp(15px, 2.1vw, 19px);
+  font-size: clamp(15px, 2.1cqw, 19px);
   letter-spacing: -0.5px;
 }
 
@@ -486,7 +494,7 @@
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  padding: 0 var(--reserve-r) clamp(4px, 1vh, 12px) var(--reserve);
+  padding: 0 var(--reserve-r) clamp(4px, 1cqh, 12px) var(--reserve);
   /* The reserved side-padding (z5) overlaps the sort buttons / deck below it and
      was eating their clicks. Let clicks pass through the padding; the actual
      cards re-enable pointer events. */
@@ -519,8 +527,8 @@
   /* Parked in the clear left-column gap between the deck (above) and the
      bottom-left avatar (below) so the avatar never covers it. Stage-relative so
      it tracks the bounded-fluid board on both phone and desktop. */
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
-  bottom: clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px);
+  left: calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7);
+  bottom: clamp(146px, calc(0.42 * var(--stage-h, 100cqh)), 238px);
   z-index: 42;
   display: inline-flex;
   align-items: center;
@@ -532,7 +540,7 @@
   color: #fff;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(13px, 2vw, 17px);
+  font-size: clamp(13px, 2cqw, 17px);
   cursor: pointer;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
   animation: spx-pulse 2s ease-in-out infinite;
@@ -550,8 +558,8 @@
    just above the bottom-left avatar (由下到上:頭像→貼圖→特殊牌→發牌). ---- */
 .game__emote-trigger {
   position: absolute;
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
-  bottom: clamp(104px, calc(0.31 * var(--stage-h, 100vh)), 190px);
+  left: calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7);
+  bottom: clamp(104px, calc(0.31 * var(--stage-h, 100cqh)), 190px);
   z-index: 42;
   display: inline-flex;
   align-items: center;
@@ -565,7 +573,7 @@
   color: var(--wood-text);
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(13px, 2vw, 17px);
+  font-size: clamp(13px, 2cqw, 17px);
   box-shadow: 0 2px 0 var(--wood-edge), 0 5px 10px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
@@ -582,13 +590,13 @@
    opponent's "N 張" speech bubble. */
 .game__special-tip {
   position: absolute;
-  left: calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7);
-  bottom: calc(clamp(146px, calc(0.42 * var(--stage-h, 100vh)), 238px) + 44px);
+  left: calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7);
+  bottom: calc(clamp(146px, calc(0.42 * var(--stage-h, 100cqh)), 238px) + 44px);
   z-index: 43;
   background: rgba(0, 0, 0, 0.82);
   color: #fff;
   font-weight: 800;
-  font-size: clamp(12px, 2vw, 15px);
+  font-size: clamp(12px, 2cqw, 15px);
   padding: 6px 12px;
   border-radius: 12px;
   white-space: nowrap;
@@ -611,7 +619,7 @@
 
 .game__timer {
   position: absolute;
-  top: clamp(6px, 1.6vh, 14px);
+  top: clamp(6px, 1.6cqh, 14px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000; /* on top of everything, incl. modals */
@@ -625,7 +633,7 @@
   color: var(--gold-1);
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(20px, 3.4vw, 28px);
+  font-size: clamp(20px, 3.4cqw, 28px);
   letter-spacing: 0.5px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
@@ -650,7 +658,7 @@
   color: #ff5252; /* 亮紅色 */
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(24px, 4.2vw, 36px); /* 仍比計時器(20~28)大一點 */
+  font-size: clamp(24px, 4.2cqw, 36px); /* 仍比計時器(20~28)大一點 */
   letter-spacing: 2px;
   white-space: nowrap;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
@@ -684,7 +692,7 @@
   z-index: 46;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(22px, calc(0.048 * var(--stage-h, 100vh)), 32px);
+  font-size: clamp(22px, calc(0.048 * var(--stage-h, 100cqh)), 32px);
   line-height: 1;
   cursor: pointer;
 }
@@ -699,7 +707,7 @@
   left: 50%;
   top: 66%;
   transform: translate(-50%, -50%);
-  z-index: 32;
+  z-index: 48; /* 比花色/大小鈕(46)上層:字長一點時不會被鈕蓋住 */
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -710,7 +718,7 @@
   color: #fff;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(16px, 2.7vw, 21px);
+  font-size: clamp(15px, 2.5cqw, 19px); /* 原 16~21;小一點點,一般長度就碰不到右邊的花色/大小鈕 */
   letter-spacing: 0.5px;
   white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
@@ -741,13 +749,13 @@
   background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
   border: 3px solid var(--parch-edge);
   border-radius: var(--r-lg);
-  padding: clamp(18px, 4vw, 30px) clamp(24px, 6vw, 44px);
+  padding: clamp(18px, 4cqw, 30px) clamp(24px, 6cqw, 44px);
   text-align: center;
   color: var(--parch-text);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
 }
 .net-overlay__title {
-  font-size: clamp(20px, 4vw, 26px);
+  font-size: clamp(20px, 4cqw, 26px);
   font-weight: 900;
   color: var(--wood-text);
   font-family: var(--font-display);
@@ -759,7 +767,7 @@
 }
 .net-overlay__time {
   margin-top: 12px;
-  font-size: clamp(30px, 8vw, 44px);
+  font-size: clamp(30px, 8cqw, 44px);
   font-weight: 900;
   letter-spacing: 2px;
   color: var(--wood-text);
@@ -768,11 +776,7 @@
 
 /* ---- Coin toss ---- */
 .cointoss { display: flex; flex-direction: column; align-items: center; gap: 30px; }
-/* 手機網頁版:整塊上移約 5% 可見高,「先攻」字不再太貼底(同 BATTLE 名字)。 */
-@media (pointer: coarse) and (display-mode: browser) {
-  .cointoss { transform: translateY(calc(-0.05 * var(--vvh, 100dvh))); }
-}
-.cointoss__title { font-size: clamp(24px, 6vw, 34px); font-weight: 900; }
+.cointoss__title { font-size: clamp(24px, 6cqw, 34px); font-weight: 900; }
 .cointoss__coin { position: relative; width: 148px; height: 148px; }
 .cointoss__face {
   position: absolute;
@@ -805,7 +809,7 @@
   transform: rotate(-24deg);
 }
 .cointoss__face--back { transform: rotateY(180deg); }
-.cointoss__result { font-size: clamp(26px, 7vw, 36px); font-weight: 900; }
+.cointoss__result { font-size: clamp(26px, 7cqw, 36px); font-weight: 900; }
 
 /* ---- Confirm / showdown / magnifier ---- */
 .confirm__cards, .showdown__cards { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }

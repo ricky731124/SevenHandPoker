@@ -3,8 +3,8 @@
   position: fixed;
   /* 對齊主畫面右上按鈕列(.acctbar-right)/LiveBoard 的手機瀏海手法:max(14px, env * 0.8)。
      原本全吃 1.0×/10px、比按鈕列更貼邊,現統一 0.8×/14px。env() 在無瀏海裝置為 0。 */
-  right: max(14px, calc(env(safe-area-inset-right) * 0.8));
-  bottom: max(14px, calc(env(safe-area-inset-bottom) * 0.8));
+  right: max(14px, calc(var(--sa-r) * 0.8));
+  bottom: max(14px, calc(var(--sa-b) * 0.8));
   z-index: 60;
   padding: 7px 15px;
   border-radius: 999px;
@@ -22,9 +22,9 @@
 }
 
 /* Desktop: pull inward like the top corner buttons (使用者 #8). */
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .online-count {
-    right: clamp(24px, 4vw, 80px);
-    bottom: clamp(18px, 2.6vw, 50px);
+    right: clamp(24px, 4cqw, 80px);
+    bottom: clamp(18px, 2.6cqw, 50px);
   }
 }

@@ -13,6 +13,37 @@
   object-fit: cover;
   object-position: center 42%;
 }
+/* 網頁版畫布可能比任何手機全螢幕都寬(寬度補滿,見 platform/canvas.ts)。
+   主圖照滿版裁會把 Logo 裁掉、放大到被按鈕蓋住 → 主圖最寬只到 2.25:1(跟最寬的手機全螢幕一樣)置中,
+   兩側用同一張圖放大模糊補滿,接縫用漸層淡掉。一般手機全螢幕到不了這個比例,完全不受影響。 */
+.menu__hero-blur {
+  display: none;
+}
+@container app (min-aspect-ratio: 9 / 4) {
+  .menu__hero-blur {
+    display: block;
+    position: absolute;
+    inset: -24px;
+    width: calc(100% + 48px);
+    height: calc(100% + 48px);
+    object-fit: cover;
+    filter: blur(14px) brightness(0.8);
+  }
+  .menu__hero {
+    left: 50%;
+    width: 225cqh;
+    transform: translateX(-50%);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+  }
+  /* 按鈕本來跟著畫面寬度變大,這裡改以高度為上限(= 2.25:1 時的大小) */
+  .menu__buttons {
+    width: clamp(184px, 58.5cqh, 300px);
+  }
+  .menu__buttons .woodbtn__label {
+    font-size: clamp(17px, 5.85cqh, 25px);
+  }
+}
 
 .menu__hero-fallback {
   position: absolute;
@@ -23,7 +54,7 @@
   background: radial-gradient(circle at 50% 40%, var(--felt-mid), var(--felt-deep));
 }
 .menu__fallback-title {
-  font-size: clamp(34px, 8vw, 64px);
+  font-size: clamp(34px, 8cqw, 64px);
   color: var(--gold-1);
   font-family: var(--font-display);
 }
@@ -33,32 +64,32 @@
 .menu__buttons {
   position: absolute;
   left: 50%;
-  bottom: clamp(10%, 10vh, 17%); /* nudged up a touch */
+  bottom: clamp(10%, 10cqh, 17%); /* nudged up a touch */
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(10px, 2vh, 18px); /* a little more space between buttons */
+  gap: clamp(10px, 2cqh, 18px); /* a little more space between buttons */
   /* mobile smaller; desktop larger (see media query) — all centered */
-  width: clamp(184px, 26vw, 300px);
+  width: clamp(184px, 26cqw, 300px);
   z-index: 2;
 }
 /* Responsive menu button sizing (overrides the size class) */
 .menu__buttons .woodbtn {
-  padding-top: clamp(10px, 1.9vh, 15px);
-  padding-bottom: clamp(10px, 1.9vh, 15px);
+  padding-top: clamp(10px, 1.9cqh, 15px);
+  padding-bottom: clamp(10px, 1.9cqh, 15px);
 }
 /* menu paws sit closer to the edge (away from the label) */
 .menu__buttons .woodbtn__icon {
   left: 16px;
 }
 .menu__buttons .woodbtn__label {
-  font-size: clamp(17px, 2.6vw, 25px);
+  font-size: clamp(17px, 2.6cqw, 25px);
 }
 
 /* Desktop: bigger menu buttons */
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .menu__buttons {
-    width: min(33vw, 420px);
+    width: min(33cqw, 420px);
     gap: 20px;
   }
   .menu__buttons .woodbtn {
@@ -171,10 +202,10 @@
 }
 /* 快速配對標題列右邊的「?」:跟返回鍵同一顆木鈕的樣子、同大小 */
 .modal__panel.menu-dialog .menu__qbtn {
-  width: clamp(30px, 5vw, 34px);
-  height: clamp(30px, 5vw, 34px);
+  width: clamp(30px, 5cqw, 34px);
+  height: clamp(30px, 5cqw, 34px);
   font-family: var(--font-display);
-  font-size: clamp(17px, 2.9vw, 20px);
+  font-size: clamp(17px, 2.9cqw, 20px);
   font-weight: 900;
   line-height: 1;
 }
@@ -221,27 +252,27 @@
 }
 /* 快速配對 dialog: a bit more room under the last button (#4). */
 .modal__panel.menu-free {
-  padding-bottom: clamp(20px, 3.6vw, 28px);
+  padding-bottom: clamp(20px, 3.6cqw, 28px);
 }
 
 /* 開始/快速配對/建立房間/加入房間 的返回鍵(第六批#1)。
    返回鍵大小「跟著標題」→ 大標題(開始遊戲)較大、一般標題較小,且返回鍵高度 ≈ 標題高度 →
    標題列不會被 38px 預設鍵撐高,彈窗高度不變(使用者:版面固定、別動高度)。側欄等寬 → 標題仍置中。 */
 .modal__panel.menu-dialog .modal__titlebar {
-  grid-template-columns: clamp(30px, 5vw, 34px) 1fr clamp(30px, 5vw, 34px);
+  grid-template-columns: clamp(30px, 5cqw, 34px) 1fr clamp(30px, 5cqw, 34px);
 }
 .modal__panel.menu-dialog .modal__back {
-  width: clamp(30px, 5vw, 34px);
-  height: clamp(30px, 5vw, 34px);
+  width: clamp(30px, 5cqw, 34px);
+  height: clamp(30px, 5cqw, 34px);
 }
 .modal__panel.menu-dialog .modal__back svg {
   width: 62%;
   height: 62%;
 }
 .modal__panel.menu-dialog.menu-start .modal__titlebar {
-  grid-template-columns: clamp(38px, 6.6vw, 44px) 1fr clamp(38px, 6.6vw, 44px);
+  grid-template-columns: clamp(38px, 6.6cqw, 44px) 1fr clamp(38px, 6.6cqw, 44px);
 }
 .modal__panel.menu-dialog.menu-start .modal__back {
-  width: clamp(38px, 6.6vw, 44px);
-  height: clamp(38px, 6.6vw, 44px);
+  width: clamp(38px, 6.6cqw, 44px);
+  height: clamp(38px, 6.6cqw, 44px);
 }

@@ -2,12 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(94vw, 680px);
-  transform-origin: center center; /* framer scales these panels by --mw-scale on mobile web */
-  /* real visible height (measured; see platform/viewport.ts). /--mw-scale so the
-     mobile-web shrink still fills ~0.92 of the visible height. No-op fullscreen/desktop. */
-  max-height: calc(var(--vvh, 100dvh) * 0.92 / var(--mw-scale, 1));
-  padding: clamp(14px, 2.6vw, 24px);
+  width: min(94cqw, 680px);
+  transform-origin: center center; /* framer 依 --fit 縮放面板(放不下才縮,useFitHeight) */
+  /* 看得到的高度(platform/viewport.ts)× 0.92;除以 --fit,放不下被縮小時剛好塞滿(--fit 平常 = 1)。 */
+  max-height: calc(var(--vvh, 100cqh) * 0.92 / var(--fit, 1));
+  padding: clamp(14px, 2.6cqw, 24px);
   background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
   border: 3px solid var(--parch-edge);
   border-radius: var(--r-lg);
@@ -18,7 +17,7 @@
 
 .panel__h1 {
   margin: 0;
-  font-size: clamp(20px, 4vw, 28px);
+  font-size: clamp(20px, 4cqw, 28px);
   font-weight: 900;
   color: var(--wood-text);
   font-family: var(--font-display);
@@ -126,7 +125,7 @@
   color: var(--parch-text);
 }
 .settings__row input[type='range'] {
-  width: min(46vw, 180px);
+  width: min(46cqw, 180px);
   accent-color: var(--wood-3);
 }
 .settings__seg {
@@ -155,7 +154,7 @@
 }
 
 /* Mobile landscape (short screens): smaller 返回 button */
-@media (max-height: 480px) {
+@container app (max-height: 480px) {
   .panel > .woodbtn {
     padding: 7px 20px;
   }

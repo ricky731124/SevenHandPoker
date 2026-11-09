@@ -31,7 +31,8 @@ export function SpecialTray() {
       open={open}
       onClose={close}
       title={fire ? `發動特殊牌（剩 ${fireUsesLeft(engine, me)} 次）` : '發動特殊牌'}
-      width={fire ? 460 : 380}
+      // 火力全開帶 5 張:寬到 5 張排一排(5×84 + 間距 4×12 + 內距/框線),不再上 4 下 1、三星不用捲(§8.2)
+      width={fire ? 560 : 380}
       panelClass={fire ? 'spx-tray-panel--fire' : undefined}
     >
       <p className="spx-tray__hint">

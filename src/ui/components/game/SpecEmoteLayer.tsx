@@ -12,8 +12,8 @@ const FLOAT_MS = 3.1
 function StickerView({ id }: { id: string }) {
   const def = getSticker(id)
   if (!def) return null
-  if (def.emoji) return <span style={{ fontSize: 'clamp(56px,11vw,84px)', lineHeight: 1 }}>{def.emoji}</span>
-  return <img src={stickerSrc(def.id)} alt={def.name} style={{ width: 'clamp(120px,22vw,168px)', height: 'auto', display: 'block' }} />
+  if (def.emoji) return <span style={{ fontSize: 'clamp(56px,11cqw,84px)', lineHeight: 1 }}>{def.emoji}</span>
+  return <img src={stickerSrc(def.id)} alt={def.name} style={{ width: 'clamp(120px,22cqw,168px)', height: 'auto', display: 'block' }} />
 }
 
 export default function SpecEmoteLayer() {
@@ -50,8 +50,8 @@ export default function SpecEmoteLayer() {
             pointerEvents: 'none',
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.5))',
             ...(fromP1
-              ? { bottom: 'clamp(30px,6vh,58px)', left: 'clamp(116px,19vw,160px)' }
-              : { top: 'clamp(30px,6vh,58px)', right: 'clamp(96px,18vw,150px)' }),
+              ? { bottom: 'clamp(30px,6cqh,58px)', left: 'clamp(116px,19cqw,160px)' }
+              : { top: 'clamp(30px,6cqh,58px)', right: 'clamp(96px,18cqw,150px)' }),
           }}
           initial={{ opacity: 0, scale: 0.3, y: fromP1 ? 20 : -20 }}
           animate={

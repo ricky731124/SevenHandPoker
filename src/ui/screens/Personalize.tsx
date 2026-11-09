@@ -9,7 +9,6 @@ import SpecialCard, { SpecialCardArt } from '../components/SpecialCard'
 import CardCarousel, { type CarouselSlide } from '../components/CardCarousel'
 import Badge from '../components/Badge'
 import CardBack from '../components/CardBack'
-import useMobileWebScale from '../hooks/useMobileWebScale'
 import { SPECIAL_CARD_LIST, LOADOUT_SIZE, type SpecialCardDef } from '../../game/specialCards'
 import { ACHIEVEMENTS, TIER_NAME_ZH, tierFor, type AchMetric } from '../../game/achievements'
 import { STICKERS, stickerSrc, ownsSticker } from '../../game/stickers'
@@ -43,7 +42,6 @@ export default function Personalize() {
   const saveAchievements = usePlatformStore((s) => s.saveAchievements)
   // 落點頁籤:聊天 CTA 若指定(loadout→cards / achvShow→achievements)就用它,否則預設戰績。
   const [tab, setTab] = useState<Tab>(() => (useAppStore.getState().personalizeTab as Tab) || 'stats')
-  const mw = useMobileWebScale()
 
   useEffect(() => {
     void usePlatformStore.getState().ensureAccount()
@@ -56,8 +54,8 @@ export default function Personalize() {
     <div className="pz-screen" onClick={() => go('menu')}>
       <motion.div
         className="panel panel--wide"
-        initial={{ opacity: 0, y: 16, scale: mw }}
-        animate={{ opacity: 1, y: 0, scale: mw }}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pz__topbar">
@@ -304,7 +302,7 @@ function StatBlock({ title, games, wins, streak }: { title: string; games: numbe
       {/* Title row: FIXED height so both blocks' titles + 場次 rows line up regardless
           of whether 連勝 is present. Title left; 連勝 (horizontal) pushed far right. */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, height: 30, marginBottom: 10 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--wood-800, #4a3418)', fontFamily: 'var(--font-display)' }}>{title}</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--wood-800, #4a3418)', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</div>
         {streak && (
           <div style={{ display: 'flex', gap: 16 }}>
             <MiniStat label="目前連勝" value={streak.cur} />
@@ -583,7 +581,7 @@ function AccountSettingsRows() {
             onCompositionStart={() => { composing.current = true }}
             onCompositionEnd={(e) => { composing.current = false; setName(clampDisplayName(e.currentTarget.value)) }}
             onKeyDown={(e) => e.key === 'Enter' && !composing.current && void save()}
-            style={{ width: 170, maxWidth: '40vw', padding: '4px 10px', borderRadius: 8, border: '2px solid var(--wood-600,#8a6a3e)', background: 'var(--parch-100,#fbf1d9)', color: 'var(--wood-800,#4a3418)', fontFamily: 'var(--font-display)', fontSize: 15, opacity: registered ? 1 : 0.55, cursor: registered ? 'text' : 'not-allowed' }}
+            style={{ width: 170, maxWidth: '40cqw', padding: '4px 10px', borderRadius: 8, border: '2px solid var(--wood-600,#8a6a3e)', background: 'var(--parch-100,#fbf1d9)', color: 'var(--wood-800,#4a3418)', fontFamily: 'var(--font-display)', fontSize: 15, opacity: registered ? 1 : 0.55, cursor: registered ? 'text' : 'not-allowed' }}
           />
           <button
             onClick={() => void save()}

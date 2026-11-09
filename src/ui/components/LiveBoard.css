@@ -5,13 +5,13 @@
   /* 右邊界對齊主畫面右上按鈕列(.acctbar-right)的手機瀏海手法:max(14px, env-right * 0.8)。
      之前 LiveBoard 用 max(10px, env-right) 全吃 1.0× → 比按鈕列更貼瀏海、更往中間,沒對齊。
      改 0.8× 後與右上按鈕齊,順帶少往中間 ~9px、和按鈕群更有餘裕。桌機另見 clamp(下方 media)。 */
-  right: max(14px, calc(env(safe-area-inset-right) * 0.8));
+  right: max(14px, calc(var(--sa-r) * 0.8));
   /* top 依真實可見高度(--vvh,同 .stage 座標系)自適應:網頁版(iOS/安卓)瀏覽器列吃掉高度時
      卡片自動上移,下緣才不撞貼底的在線人數;全螢幕(--vvh 滿)維持 106。夾在 62(清右上按鈕列
      下緣 ~55)~106 之間。252 = 卡片視覺高 ~197 + 在線人數區 ~46 + 間距;narrow(≤812)卡更矮更寬鬆。 */
-  top: clamp(62px, calc(var(--vvh, 100dvh) - 252px), 106px);
+  top: clamp(62px, calc(var(--vvh, 100cqh) - 252px), 106px);
   z-index: 6;
-  width: min(284px, 48vw); /* 略放寬讓名字容得下 6 個中文字(#1) */
+  width: min(284px, 48cqw); /* 略放寬讓名字容得下 6 個中文字(#1) */
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -23,9 +23,9 @@
   transform: scale(0.82);
   transform-origin: top right;
 }
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .liveboard {
-    right: clamp(24px, 4vw, 80px); /* = 在線人數/右上按鈕的桌機右邊界 */
+    right: clamp(24px, 4cqw, 80px); /* = 在線人數/右上按鈕的桌機右邊界 */
     top: 140px; /* 整體再往下一些些(#1) */
     /* 只有電腦版整體(含內容/編號/圓點)放大 20%;origin top-right → 右邊界不變、不超出規範(#1)。 */
     transform: scale(1.2);
@@ -326,7 +326,7 @@
 /* 窄機橫向(mini 812 / SE 667 …)與小視窗:base 的 0.82 對這些寬度仍偏擠,再多縮一階。
    只覆蓋 transform(origin 沿用 base 的 top right,右邊界不動);寬度不再另外收,全交給等比縮,
    避免「縮寬 + 縮 scale」疊加把卡片壓太小。桌機(≥1024)有自己的 scale 1.2,不受影響。 */
-@media (max-width: 812px) {
+@container app (max-width: 812px) {
   .liveboard {
     transform: scale(0.74);
   }

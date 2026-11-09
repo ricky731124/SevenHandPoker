@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import { useEffect } from 'react'
 import { isInAppBrowser, isLineInApp, isIOS, isAndroid, isStandalone } from '../../platform/pwa'
 import { sfx } from '../../audio/sfx'
@@ -92,7 +93,7 @@ export default function InAppBrowserGate() {
           改用 Chrome 開啟
         </button>
       </div>,
-      document.body,
+      portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
     )
   }
 
@@ -112,6 +113,6 @@ export default function InAppBrowserGate() {
         <br />② 選「使用外部瀏覽器開啟」
       </div>
     </div>,
-    document.body,
+    portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
   )
 }

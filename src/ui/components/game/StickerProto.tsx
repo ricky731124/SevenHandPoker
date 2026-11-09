@@ -74,8 +74,8 @@ export default function StickerProto() {
               // Follow the 貼圖 button's left edge (same formula) so the picker
               // clears the iPhone notch too — otherwise the leftmost stickers sit
               // under the cutout and can't be tapped. env() is 0 off-iPhone.
-              left: 'calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7)',
-              bottom: 'calc(clamp(76px, 0.24 * var(--stage-h, 100vh), 150px) + 46px)',
+              left: 'calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7)',
+              bottom: 'calc(clamp(76px, 0.24 * var(--stage-h, 100cqh), 150px) + 46px)',
               zIndex: 62,
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 50px)',
@@ -85,9 +85,9 @@ export default function StickerProto() {
               background: '#ffe9cf',
               border: '2px solid #d99a5a',
               boxShadow: '0 5px 14px rgba(0,0,0,.35)',
-              maxWidth: '90vw',
+              maxWidth: '90cqw',
               // 貼圖多 → 最多露 4 排(也不超出畫面上緣),其餘上下滑。
-              maxHeight: 'min(234px, calc(var(--stage-h, 100vh) - clamp(76px, 0.24 * var(--stage-h, 100vh), 150px) - 60px))',
+              maxHeight: 'min(234px, calc(var(--stage-h, 100cqh) - clamp(76px, 0.24 * var(--stage-h, 100cqh), 150px) - 60px))',
               overflowY: 'auto',
               overflowX: 'hidden',
               overscrollBehavior: 'contain',
@@ -115,12 +115,12 @@ export default function StickerProto() {
         {myShot && myDef && (
           <motion.div
             key={`me-${myShot.n}`}
-            style={{ position: 'absolute', bottom: 'clamp(30px,6vh,58px)', left: 'clamp(116px,19vw,160px)', zIndex: 250, pointerEvents: 'none', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.5))' }}
+            style={{ position: 'absolute', bottom: 'clamp(30px,6cqh,58px)', left: 'clamp(116px,19cqw,160px)', zIndex: 250, pointerEvents: 'none', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.5))' }}
             initial={{ opacity: 0, scale: 0.3, y: 20 }}
             animate={{ opacity: [0, 1, 1, 0], scale: [0.3, 1.15, 1, 1], y: [20, -10, -24, -64] }}
             transition={{ duration: FLOAT_MS, times: [0, 0.14, 0.72, 1] }}
           >
-            <StickerView def={myDef} imgW="clamp(120px,22vw,168px)" emojiPx="clamp(56px,11vw,84px)" />
+            <StickerView def={myDef} imgW="clamp(120px,22cqw,168px)" emojiPx="clamp(56px,11cqw,84px)" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -130,12 +130,12 @@ export default function StickerProto() {
         {incoming && foeDef && (
           <motion.div
             key={`foe-${incoming.n}`}
-            style={{ position: 'absolute', top: 'clamp(30px,6vh,58px)', right: 'clamp(96px,18vw,150px)', zIndex: 250, pointerEvents: 'none', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.5))' }}
+            style={{ position: 'absolute', top: 'clamp(30px,6cqh,58px)', right: 'clamp(96px,18cqw,150px)', zIndex: 250, pointerEvents: 'none', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,.5))' }}
             initial={{ opacity: 0, scale: 0.3, y: -20 }}
             animate={{ opacity: [0, 1, 1, 0], scale: [0.3, 1.15, 1, 1], y: [-20, 10, 24, 64] }}
             transition={{ duration: FLOAT_MS, times: [0, 0.14, 0.72, 1] }}
           >
-            <StickerView def={foeDef} imgW="clamp(120px,22vw,168px)" emojiPx="clamp(56px,11vw,84px)" />
+            <StickerView def={foeDef} imgW="clamp(120px,22cqw,168px)" emojiPx="clamp(56px,11cqw,84px)" />
           </motion.div>
         )}
       </AnimatePresence>

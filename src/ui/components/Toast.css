@@ -1,13 +1,13 @@
 .toast-anchor {
   position: fixed;
-  top: clamp(56px, 13vh, 104px); /* dropped down so nothing clips the top edge */
+  top: clamp(56px, 13cqh, 104px); /* dropped down so nothing clips the top edge */
   left: 50%;
   transform: translateX(-50%);
   z-index: 3000; /* above every modal/scrim */
   pointer-events: none;
 }
 .toast {
-  max-width: 86vw;
+  max-width: 86cqw;
   padding: 16px 34px;
   border: 1.5px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
@@ -23,7 +23,7 @@
   pointer-events: none;
   white-space: nowrap;
 }
-@media (max-width: 640px) {
+@container app (max-width: 640px) {
   .toast {
     padding: 13px 26px;
     font-size: 20px;

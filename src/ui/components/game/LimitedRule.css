@@ -47,7 +47,7 @@
   font-size: 15px;
   font-weight: 700;
 }
-@media (max-width: 560px) {
+@container app (max-width: 560px) {
   .limited-rule__split {
     grid-template-columns: 1fr;
     grid-template-areas: 'rules' 'ties' 'ok';
@@ -124,7 +124,9 @@
 .limited-badge {
   position: absolute;
   right: var(--sbtn-r-in);
-  top: calc(var(--sbtn-top-q) - var(--sbtn-gap-y));
+  /* 離對手名字太近時往下讓(最高只到名字下方 8px,--foe-bottom 由 Game.tsx 量);右四鈕不動。
+     安卓字型行高較高、或小台手機,原位置會壓到名字(§8.2)。 */
+  top: max(calc(var(--sbtn-top-q) - var(--sbtn-gap-y)), calc(var(--foe-bottom, 0px) + 8px));
   width: var(--sbtn);
   height: var(--sbtn);
   z-index: 46;

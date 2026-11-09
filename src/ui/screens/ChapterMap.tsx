@@ -31,6 +31,7 @@ import ChapterStageCard from '../components/game/ChapterStageCard'
 import { CHAPTER_THUMBS } from './chapterThumbs'
 import { sfx } from '../../audio/sfx'
 import './ChapterMap.css'
+import { canvasRect, toCanvas } from '../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 /**
  * 主線章節大地圖(2026-10-16):一章 7 關一張橫向長圖,左右捲。進場捲到玩家現在該打的那關
@@ -137,12 +138,12 @@ export default function ChapterMap() {
       if (e.pointerType !== 'mouse' || e.button !== 0) return
       down = true
       dragged.current = false
-      startX = e.clientX
+      startX = toCanvas(e.clientX, e.clientY).x
       startLeft = el.scrollLeft
     }
     const onMove = (e: PointerEvent) => {
       if (!down) return
-      const dx = e.clientX - startX
+      const dx = toCanvas(e.clientX, e.clientY).x - startX
       if (!dragged.current && Math.abs(dx) > 6) {
         dragged.current = true
         el.classList.add('is-dragging')
@@ -702,13 +703,13 @@ function MapScrollbar({
     const onThumbDown = (e: PointerEvent) => {
       e.stopPropagation()
       dragging = true
-      startX = e.clientX
+      startX = toCanvas(e.clientX, e.clientY).x
       startLeft = el.scrollLeft
       thumb.setPointerCapture(e.pointerId)
       thumb.classList.add('is-active')
     }
     const onThumbMove = (e: PointerEvent) => {
-      if (dragging) el.scrollLeft = Math.round(startLeft + (e.clientX - startX) * ratio())
+      if (dragging) el.scrollLeft = Math.round(startLeft + (toCanvas(e.clientX, e.clientY).x - startX) * ratio())
     }
     const onThumbUp = () => {
       dragging = false
@@ -716,8 +717,8 @@ function MapScrollbar({
     }
     const onTrackDown = (e: PointerEvent) => {
       if (e.target !== track) return
-      const r = track.getBoundingClientRect()
-      const x = e.clientX - r.left - thumb.clientWidth / 2
+      const r = canvasRect(track.getBoundingClientRect())
+      const x = toCanvas(e.clientX, e.clientY).x - r.left - thumb.clientWidth / 2
       el.scrollTo({ left: Math.round(x * ratio()), behavior: 'smooth' })
     }
     thumb.addEventListener('pointerdown', onThumbDown)

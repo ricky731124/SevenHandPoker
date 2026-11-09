@@ -32,7 +32,9 @@ export default function OpponentHand({
   const fit = n > 1 ? (maxWidth - cardW) / (n - 1) : ideal
   const overlap = Math.max(cardW * 0.34, Math.min(ideal, fit))
   const sel = new Set(selectedIdx)
-  const lift = Math.round(cardW * 0.42)
+  const lift = Math.round(cardW * 0.42) // 版面保留的高度(不動,其他位置才不會跟著移)
+  // 實際往下推的距離比保留的少一點:推 0.42 時剛好貼到上排格子,三星真機會壓到一點(2026-11-09)
+  const push = Math.round(cardW * 0.32)
   const skipEnter = useSkipEnterAnim() // 觀戰中途進場 → 不播飛入
   return (
     <div className="ohand" style={{ width: overlap * (n - 1) + cardW, height: cardW * 1.4 + lift }}>
@@ -45,7 +47,7 @@ export default function OpponentHand({
           data-idx={i}
           style={{ left: i * overlap, zIndex: sel.has(i) ? 200 + i : i }}
           initial={skipEnter ? false : { x: -260, y: -30, opacity: 0, rotate: -12 }}
-          animate={{ x: 0, y: sel.has(i) ? lift : 0, opacity: 1, rotate: 0 }}
+          animate={{ x: 0, y: sel.has(i) ? push : 0, opacity: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 26 }}
         >
           {cards ? <Card card={cards[i]} w={cardW} /> : <CardBack w={cardW} />}

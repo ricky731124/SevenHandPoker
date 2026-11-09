@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import { useToastStore } from '../../state/toastStore'
 import './Toast.css'
 
@@ -26,6 +27,6 @@ export default function Toast() {
         {message}
       </motion.div>
     </div>,
-    document.body,
+    portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
   )
 }

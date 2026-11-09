@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import { useAppStore } from '../../state/appStore'
 import { useGameStore, type SpectateInfo } from '../../state/gameStore'
 import { joinSpectate, type LiveMeta } from '../../net/spectate'
@@ -198,7 +199,7 @@ export default function SpectatorGame() {
           <div className="spectate__leave-wrap">
             <Button size="md" onClick={leave}>離開觀戰</Button>
           </div>,
-          document.body,
+          portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
         )}
 
       {/* 對局結束(自然分勝負 / 廣播端中離收攤)→ 唯讀結算 → 引導回主畫面。
@@ -216,7 +217,7 @@ export default function SpectatorGame() {
               <Button onClick={leave}>返回主畫面</Button>
             </div>
           </div>,
-          document.body,
+          portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
         )}
     </div>
   )

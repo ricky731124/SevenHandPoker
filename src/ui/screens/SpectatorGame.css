@@ -15,8 +15,8 @@
 /* 左上浮動 HUD */
 .spectate__hud {
   position: absolute;
-  top: clamp(8px, 2vh, 16px);
-  left: clamp(8px, 2vw, 16px);
+  top: clamp(8px, 2cqh, 16px);
+  left: clamp(8px, 2cqw, 16px);
   z-index: 55;
   display: flex;
   flex-direction: column;
@@ -70,8 +70,8 @@
    按鈕本體 = 木紋 Button(與送出鈕同一視覺)。 */
 .spectate__leave-wrap {
   position: fixed;
-  right: calc(clamp(8px, 1.6vw, 16px) + env(safe-area-inset-right));
-  bottom: calc(clamp(8px, 1.6vh, 16px) + env(safe-area-inset-bottom));
+  right: calc(clamp(8px, 1.6cqw, 16px) + var(--sa-r));
+  bottom: calc(clamp(8px, 1.6cqh, 16px) + var(--sa-b));
   z-index: 1100;
   /* 卡到手牌 → 等比縮小 ~20%,往右下角收(遠離置中的手牌,#2)。 */
   transform: scale(0.8);

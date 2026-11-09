@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAchievementStore } from '../../state/achievementStore'
 import { getAchievement, TIER_NAME_ZH, type AchTier } from '../../game/achievements'
@@ -60,7 +61,7 @@ export default function AchievementToast() {
           transition={{ type: 'spring', stiffness: 380, damping: 26 }}
           style={{
             position: 'fixed',
-            top: 'clamp(12px, 3vh, 28px)',
+            top: 'clamp(12px, 3cqh, 28px)',
             left: '50%',
             zIndex: 3500, // above the generic Toast (3000) & every modal — the reward/成就 toast is always topmost
             display: 'flex',
@@ -71,7 +72,7 @@ export default function AchievementToast() {
             background: 'var(--parch-100, #fbf1d9)',
             border: '3px solid var(--gold-3, #d79a24)',
             boxShadow: '0 8px 22px rgba(0,0,0,.4)',
-            maxWidth: '94vw',
+            maxWidth: '94cqw',
           }}
         >
           <RewardArtView notice={front} />
@@ -83,7 +84,7 @@ export default function AchievementToast() {
           </div>
         </motion.div>
       </AnimatePresence>,
-      document.body,
+      portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
     )
   }
 
@@ -101,7 +102,7 @@ export default function AchievementToast() {
           transition={{ type: 'spring', stiffness: 380, damping: 26 }}
           style={{
             position: 'fixed',
-            top: 'clamp(12px, 3vh, 28px)',
+            top: 'clamp(12px, 3cqh, 28px)',
             left: '50%',
             zIndex: 3500, // above the generic Toast (3000) & every modal — the reward/成就 toast is always topmost
             display: 'flex',
@@ -112,7 +113,7 @@ export default function AchievementToast() {
             background: 'var(--parch-100, #fbf1d9)',
             border: '3px solid var(--wood-700, #7d5a34)',
             boxShadow: '0 8px 22px rgba(0,0,0,.4)',
-            maxWidth: '94vw',
+            maxWidth: '94cqw',
           }}
         >
           <Badge icon={fam.icon} tier={front.tier as AchTier} size={68} />
@@ -128,7 +129,7 @@ export default function AchievementToast() {
         </motion.div>
       )}
     </AnimatePresence>,
-    document.body,
+    portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
   )
 }
 

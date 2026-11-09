@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import BackButton from './BackButton'
-import useMobileWebScale from '../hooks/useMobileWebScale'
+import { useRef } from 'react'
+import useFitHeight from '../hooks/useFitHeight'
 import './Modal.css'
 
 interface Props {
@@ -34,16 +36,13 @@ interface Props {
  * (no exit animation) so a throttled rAF can never leave a stuck overlay.
  */
 export default function Modal({ open, onClose, title, children, locked, width = 420, largeTitle, panelClass, scrimClass, onBack, scrimThrough, titleAction }: Props) {
-  // Mobile browser tab: shrink the whole panel (content + art + buttons) to a
-  // proportional "one-screen" version. framer owns `transform`, so the scale has
-  // to be the animate target here rather than CSS. 1 on standalone/desktop.
-  const mw = useMobileWebScale()
+  // 放不下就整塊等比縮(內容+圖+按鈕一起,§8.2);放得下 = 1。framer 擁有 transform,
+  // 所以縮放要當 animate 的目標,不能寫在 CSS。
+  const panelRef = useRef<HTMLDivElement>(null)
+  const mw = useFitHeight(panelRef, open)
   if (!open) return null
-  // Portal to <body> so a modal is never trapped inside a transformed ancestor
-  // (the game board is scaled with transform on mobile web — a fixed child of a
-  // transformed element is positioned relative to THAT element, not the viewport,
-  // which would shrink the scrim and float it off-centre). At body level the
-  // scrim covers the true visible viewport (see .modal__scrim / 100dvh).
+  // Portal 到畫布(#root)最外層:不會被困在牌桌之類的子元素裡,但仍在畫布裡 →
+  // 假橫向跟著轉、網頁版跟著縮(platform/canvas.ts)。遮罩蓋滿整塊畫布(.modal__scrim / 100cqh)。
   return createPortal(
     <motion.div
       className={`modal__scrim${scrimClass ? ` ${scrimClass}` : ''}`}
@@ -53,15 +52,16 @@ export default function Modal({ open, onClose, title, children, locked, width = 
       style={scrimThrough ? { pointerEvents: 'none' } : undefined}
     >
       <motion.div
+        ref={panelRef}
         className={`modal__panel${panelClass ? ` ${panelClass}` : ''}`}
-        style={{ maxWidth: width, ...(scrimThrough ? { pointerEvents: 'auto' } : null) }}
+        style={{ maxWidth: width, ['--fit' as string]: mw, ...(scrimThrough ? { pointerEvents: 'auto' } : null) }}
         initial={{ scale: 0.85 * mw, y: 20, opacity: 0 }}
         animate={{ scale: mw, y: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 340, damping: 28 }}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || onBack) && (
-          <div className="modal__titlebar">
+          <div className={`modal__titlebar${!onBack && !titleAction ? ' modal__titlebar--solo' : ''}`}>
             {onBack && <BackButton onClick={onBack} className="modal__back" />}
             {title && <h2 className={`modal__title${largeTitle ? ' modal__title--large' : ''}`}>{title}</h2>}
             {titleAction && <div className="modal__action">{titleAction}</div>}
@@ -70,6 +70,6 @@ export default function Modal({ open, onClose, title, children, locked, width = 
         <div className="modal__body">{children}</div>
       </motion.div>
     </motion.div>,
-    document.body,
+    portalRoot(),
   )
 }

@@ -80,13 +80,13 @@
 }
 
 .woodbtn--lg .woodbtn__label {
-  font-size: clamp(20px, 4.4vw, 27px);
+  font-size: clamp(20px, 4.4cqw, 27px);
 }
 .woodbtn--lg {
   padding: 13px 40px;
 }
 .woodbtn--md .woodbtn__label {
-  font-size: clamp(16px, 3.4vw, 21px);
+  font-size: clamp(16px, 3.4cqw, 21px);
 }
 .woodbtn--md {
   padding: 11px 26px;

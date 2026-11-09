@@ -353,6 +353,7 @@ export default function AccountButton() {
         onClose={gateAllowGuest ? undefined : () => setDialog(null)}
         title={gateAllowGuest ? (joinFlow ? '加入朋友的房間' : '歡迎來到 Seven Hand Poker') : '登入 / 註冊'}
         width={360}
+        panelClass="modal__panel--gate"
       >
         <p className="acct-note">
           {gateAllowGuest

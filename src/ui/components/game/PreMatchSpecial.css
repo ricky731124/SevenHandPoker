@@ -1,7 +1,7 @@
 .prematch {
   position: absolute;
   inset: 0;
-  height: var(--vvh, 100dvh); /* 實際可見高(見 platform/viewport.ts)。全螢幕 no-op */
+  height: var(--vvh, 100cqh); /* 實際可見高(見 platform/viewport.ts)。全螢幕 no-op */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,9 +13,9 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: min(96vw, 700px);
-  max-height: calc(var(--vvh, 100dvh) * 0.94);
-  padding: clamp(10px, 2vh, 20px) clamp(16px, 3vw, 30px);
+  width: min(96cqw, 700px);
+  max-height: calc(var(--vvh, 100cqh) * 0.94);
+  padding: clamp(10px, 2cqh, 20px) clamp(16px, 3cqw, 30px);
   border-radius: var(--r-lg, 18px);
   background: var(--parch-tex, linear-gradient(180deg, var(--parch-1), var(--parch-2)));
   border: 3px solid var(--parch-edge);
@@ -23,12 +23,12 @@
 }
 .prematch__title {
   font-family: var(--font-display);
-  font-size: clamp(24px, 5vw, 36px);
+  font-size: clamp(24px, 5cqw, 36px);
   font-weight: 900;
 }
 .prematch__sub {
   color: var(--parch-text);
-  font-size: clamp(12px, 2.2vw, 15px);
+  font-size: clamp(12px, 2.2cqw, 15px);
   font-weight: 700;
   text-align: center;
   opacity: 0.85;
@@ -55,9 +55,9 @@
   overflow-y: auto;
 }
 /* Compact on short landscape screens. */
-@media (max-height: 480px) {
+@container app (max-height: 480px) {
   .prematch__title {
-    font-size: clamp(20px, 4.4vw, 28px);
+    font-size: clamp(20px, 4.4cqw, 28px);
   }
 }
 

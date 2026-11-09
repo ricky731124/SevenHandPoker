@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../platform/canvas'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useToastStore } from '../../state/toastStore'
@@ -187,5 +188,5 @@ function ShareIcon() {
 }
 
 function portal(node: ReactNode) {
-  return createPortal(node, document.body)
+  return createPortal(node, portalRoot())
 }

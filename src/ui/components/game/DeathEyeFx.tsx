@@ -4,6 +4,7 @@ import { DEATH_EYE_FX_MS, useGameStore } from '../../../state/gameStore'
 import type { PlayerId } from '../../../game/state'
 import CardBack from '../CardBack'
 import './DeathEyeFx.css'
+import { canvasRect } from '../../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 const DUR = DEATH_EYE_FX_MS / 1000
 
@@ -35,10 +36,10 @@ export default function DeathEyeFx({ me, cardW }: { me: PlayerId; cardW: number 
     seenN.current = fx.n
     const root = anchor.current?.parentElement
     if (!root) return
-    const rr = root.getBoundingClientRect()
+    const rr = canvasRect(root.getBoundingClientRect())
     const k = root.offsetWidth ? rr.width / root.offsetWidth : 1
     const boxOf = (el: Element): Box => {
-      const r = el.getBoundingClientRect()
+      const r = canvasRect(el.getBoundingClientRect())
       return { x: (r.left - rr.left) / k, y: (r.top - rr.top) / k, w: r.width / k, h: r.height / k }
     }
     const band = root.querySelector('.game__band')

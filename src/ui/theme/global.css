@@ -32,9 +32,19 @@ body {
   -webkit-user-select: none;
 }
 
+/* 單一畫布(platform/canvas.ts):#root 的寬高、縮放、旋轉由 JS 設定;裡面一律用 cqw/cqh
+   (= 畫布寬高)和 @container app(...) 排版,所以假橫向、網頁版跟真橫向全螢幕長得一樣。
+   容器自帶 layout containment → 裡面 position:fixed 的東西也以畫布為準。 */
 #root {
   position: fixed;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  container-type: size;
+  container-name: app;
+  overflow: hidden;
 }
 
 /* Dark accent for text on parchment panels */
@@ -60,62 +70,11 @@ body {
   /* Centre against the ACTUAL visible area (measured; see platform/viewport.ts),
      not the layout viewport. In a mobile browser tab the address bar eats 10–15%
      of the height; without this, centred panels sit too low and their 返回/標題 列
-     hide under the chrome. Fullscreen/standalone & desktop → equals full → no-op.
-     The portrait fake-landscape block below resets this (rotated #root owns size). */
-  height: var(--vvh, 100dvh);
+     hide under the chrome. --vvh 是畫布座標(平常 = 畫布高;打字時 = 鍵盤上方那塊)。 */
+  height: var(--vvh, 100cqh);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/*
- * Force-landscape on portrait phones. Instead of a blocking "please rotate"
- * wall, we render the whole app sideways (rotated 90°) so the player naturally
- * turns the phone — and it works even when the OS rotation-lock is ON (turning
- * the phone then lines the content up upright). Installed Android PWAs are
- * locked to landscape by the manifest, so this media query never fires there;
- * on iOS (Apple ignores manifest orientation) and in any browser tab, it does.
- */
-@media (max-width: 900px) and (orientation: portrait) and (pointer: coarse) {
-  #root {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    /* dvh/dvw = the ACTUAL visible area, so the rotated stage doesn't overflow/jump
-       when the mobile browser's address bar shows or hides (vh/vw kept as fallback). */
-    width: 100vh;
-    width: 100dvh;
-    height: 100vw;
-    height: 100dvw;
-    transform-origin: center center;
-    transform: translate(-50%, -50%) rotate(90deg);
-    overflow: hidden;
-  }
-
-  /* In the rotated state the rotated #root owns sizing; let .stage simply fill it
-     (undo the base 100dvh, which would fight the 90° rotation). */
-  .stage {
-    height: 100%;
-  }
-
-  /* When the app is rendered rotated 90° (above), the VISIBLE stage is
-     100vh wide × 100vw tall. Popups/panels that size themselves with raw vh/vw
-     are measuring the UN-rotated viewport, so they overflow the stage (get
-     clipped) and never gain a scrollbar (主線 can't scroll). Re-express their
-     size against the rotated stage: stage height ⇒ vw, stage width ⇒ vh.
-     Scoped to this portrait-only query (with !important so import order can't
-     defeat it) → landscape/desktop CSS is completely untouched. */
-  .modal__panel {
-    max-height: 92vw !important;
-  }
-  .panel {
-    width: min(94vh, 680px) !important;
-    max-height: 92vw !important;
-  }
-  .panel--wide {
-    width: min(96vh, 900px) !important;
-    height: min(92vw, 680px) !important;
-  }
 }
 
 :focus-visible {

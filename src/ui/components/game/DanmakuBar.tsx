@@ -43,8 +43,8 @@ export default function DanmakuBar() {
             exit={{ opacity: 0, y: 8 }}
             style={{
               position: 'absolute',
-              left: 'calc(clamp(6px, 1.4vw, 20px) + env(safe-area-inset-left) * 0.7)',
-              bottom: 'calc(clamp(76px, 0.24 * var(--stage-h, 100vh), 150px) + 46px)',
+              left: 'calc(clamp(6px, 1.4cqw, 20px) + var(--sa-l) * 0.7)',
+              bottom: 'calc(clamp(76px, 0.24 * var(--stage-h, 100cqh), 150px) + 46px)',
               zIndex: 340, // 高於對手推出的牌(z 200+)→ 不被牌擋住(#1)
               display: 'flex',
               flexDirection: 'column',
@@ -54,8 +54,8 @@ export default function DanmakuBar() {
               background: '#ffe9cf',
               border: '2px solid #d99a5a',
               boxShadow: '0 5px 14px rgba(0,0,0,.35)',
-              maxWidth: 'min(78vw, 300px)',
-              maxHeight: '56vh',
+              maxWidth: 'min(78cqw, 300px)',
+              maxHeight: '56cqh',
               overflowY: 'auto',
             }}
           >

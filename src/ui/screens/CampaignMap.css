@@ -32,14 +32,14 @@
 
 .cmap__back {
   position: absolute;
-  top: clamp(10px, 2.6vh, 20px);
-  left: clamp(10px, 2.6vh, 20px);
+  top: clamp(10px, 2.6cqh, 20px);
+  left: clamp(10px, 2.6cqh, 20px);
   z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(42px, 7vh, 52px);
-  height: clamp(42px, 7vh, 52px);
+  width: clamp(42px, 7cqh, 52px);
+  height: clamp(42px, 7cqh, 52px);
   border-radius: 50%;
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
@@ -53,7 +53,7 @@
 
 .cmap__title {
   position: absolute;
-  top: clamp(10px, 2.6vh, 20px);
+  top: clamp(10px, 2.6cqh, 20px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
@@ -61,7 +61,7 @@
   border-radius: 999px;
   background: rgba(20, 14, 8, 0.62);
   color: #fff;
-  font-size: clamp(28px, 6vh, 44px);
+  font-size: clamp(28px, 6cqh, 44px);
   font-weight: 900;
   letter-spacing: 2px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -98,8 +98,8 @@
 /* big, obvious circular nodes */
 .cmap__node {
   position: relative;
-  width: clamp(80px, 17vh, 124px);
-  height: clamp(80px, 17vh, 124px);
+  width: clamp(80px, 17cqh, 124px);
+  height: clamp(80px, 17cqh, 124px);
   border-radius: 50%;
   border: 5px solid rgba(0, 0, 0, 0.4);
   cursor: pointer;
@@ -111,14 +111,14 @@
   transition: transform 0.12s ease;
 }
 .cmap__node-label {
-  font-size: clamp(26px, 5vh, 40px);
+  font-size: clamp(26px, 5cqh, 40px);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .cmap__node-mark {
   position: absolute;
   right: -5px;
   bottom: -5px;
-  font-size: clamp(15px, 2.4vh, 20px);
+  font-size: clamp(15px, 2.4cqh, 20px);
 }
 
 .cmap__node.is-open {
@@ -179,6 +179,6 @@
   gap: 4px;
   color: #fff;
   font-weight: 900;
-  font-size: clamp(16px, 2.6vh, 20px);
+  font-size: clamp(16px, 2.6cqh, 20px);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }

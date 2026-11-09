@@ -305,6 +305,7 @@ export async function writeChatMessage(msg: Omit<LobbyMsg, 'id' | 'ts'>): Promis
 
 /** 訂閱聊天（最新 60 則；顯示端再套 50 則 + 6 小時過濾）。 */
 export function subscribeChat(cb: (msgs: LobbyMsg[]) => void): () => void {
+  if (import.meta.env.DEV) devChatSubs.add(cb)
   const q = query(ref(getDb(), 'lobbyChat'), limitToLast(CHAT_FETCH_MAX))
   const unsub = onValue(q, (snap) => {
     const val = (snap.val() ?? {}) as Record<string, Omit<LobbyMsg, 'id'>>
@@ -313,7 +314,26 @@ export function subscribeChat(cb: (msgs: LobbyMsg[]) => void): () => void {
       .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
     cb(list)
   }, () => cb([]))
-  return unsub
+  return () => { devChatSubs.delete(cb); unsub() }
+}
+
+// ---- DEV:截圖工具用的假聊天(scripts/layout)。`__fakeChat([{name, text}|{name, stickerId}, ...])`
+//   直接餵給目前的聊天訂閱,不寫 DB;截圖瀏覽器連不到 Firebase,不這樣聊天室永遠是空的。 -----------
+const devChatSubs = new Set<(msgs: LobbyMsg[]) => void>()
+if (import.meta.env.DEV) {
+  ;(window as unknown as { __fakeChat: (msgs: Partial<LobbyMsg>[]) => void }).__fakeChat = (msgs) => {
+    const now = nowServer()
+    const list = msgs.map((m, i): LobbyMsg => ({
+      id: 'fake' + i,
+      ts: now - (msgs.length - i) * 60000,
+      kind: 'bot',
+      name: '人機',
+      avatarId: 'bird',
+      type: m.stickerId ? 'sticker' : 'text',
+      ...m,
+    }))
+    devChatSubs.forEach((cb) => cb(list))
+  }
 }
 
 /** 清掉超過 6 小時 / 超過 70 則的最舊訊息（host 寫入後順手做）。best-effort。 */

@@ -112,8 +112,9 @@ export default function LobbyChat() {
     const fit = () => {
       const panel = list.closest('.modal__panel') as HTMLElement | null
       if (!panel) return
-      const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw-scale')) || 1
-      const visH = vv?.height ?? window.innerHeight
+      const mw = parseFloat(getComputedStyle(panel).getPropertyValue('--fit')) || 1 // 彈窗放不下時的縮放(useFitHeight)
+      // 鍵盤上方看得到的高度(畫布座標,platform/viewport.ts 算好的 --vvh)
+      const visH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vvh')) || vv?.height || window.innerHeight
       const avail = (visH * 0.92) / mw                          // 彈窗最多可用的高度(未縮放前的 px)
       // 彈窗裡訊息區以外的部分(輸入列/內距/框線)。用 scrollHeight(內容全高)，offsetHeight 會被 max-height 夾住而算錯。
       const others = panel.scrollHeight - list.offsetHeight

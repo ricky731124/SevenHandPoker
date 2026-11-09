@@ -8,6 +8,7 @@ import Card from '../Card'
 import CardBack from '../CardBack'
 import { sfx } from '../../../audio/sfx'
 import './CardFx.css'
+import { canvasRect } from '../../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 /**
  * 舊特殊卡的演出(2026-10-27 使用者定):
@@ -68,15 +69,15 @@ export default function CardFx({ me, cardW }: { me: PlayerId; cardW: number }) {
   const root = () => anchor.current?.parentElement ?? null
   /** 元素在 .game 內「未縮放」座標的停放位置(跟 ExplodeFx 同一套:用排版位置,不吃進行中的 transform) */
   const boxOf = (r: HTMLElement, el: Element): Box => {
-    const rr = r.getBoundingClientRect()
+    const rr = canvasRect(r.getBoundingClientRect())
     const k = r.offsetWidth ? rr.width / r.offsetWidth : 1
     const h = el as HTMLElement
     const p = h.offsetParent as HTMLElement | null
     if (!p) {
-      const b = el.getBoundingClientRect()
+      const b = canvasRect(el.getBoundingClientRect())
       return { x: (b.left - rr.left) / k, y: (b.top - rr.top) / k, w: b.width / k, h: b.height / k }
     }
-    const pr = p.getBoundingClientRect()
+    const pr = canvasRect(p.getBoundingClientRect())
     const pk = p.offsetWidth ? pr.width / p.offsetWidth : k
     return {
       x: (pr.left - rr.left + (p.clientLeft + h.offsetLeft) * pk) / k,

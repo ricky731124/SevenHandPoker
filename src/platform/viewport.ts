@@ -5,9 +5,11 @@
  * Safari (fixed boxes can size to the LARGE viewport, ignoring the address bar),
  * which was clipping modal panels top & bottom on mobile web.
  *
- * CSS falls back to `100dvh` until the first measurement lands:
- *   height: var(--vvh, 100dvh);
+ * CSS falls back to `100cqh` until the first measurement lands:
+ *   height: var(--vvh, 100cqh);
  */
+import { initCanvas, getCanvas, canvasRect } from './canvas'
+
 /** 目前正在打字的欄位（null = 鍵盤沒開）。 */
 let editingEl: HTMLElement | null = null
 
@@ -25,8 +27,8 @@ function revealField(el: HTMLElement): void {
   for (let p = target.parentElement; p && p !== document.body; p = p.parentElement) {
     const oy = getComputedStyle(p).overflowY
     if ((oy !== 'auto' && oy !== 'scroll') || p.scrollHeight <= p.clientHeight + 1) continue
-    const pr = p.getBoundingClientRect()
-    const tr = target.getBoundingClientRect()
+    const pr = canvasRect(p.getBoundingClientRect()) // 換成畫布座標(假橫向轉過、網頁版縮過)
+    const tr = canvasRect(target.getBoundingClientRect())
     const scale = p.offsetHeight ? pr.height / p.offsetHeight : 1
     const delta = (tr.top + tr.height / 2 - (pr.top + pr.height / 2)) / (scale || 1)
     if (Math.abs(delta) > 2) p.scrollTop += delta
@@ -94,11 +96,17 @@ export function initViewportVars(): void {
     de.style.setProperty(name, value)
   }
 
+  const applyCanvas = initCanvas(() => !!editingEl)
   const apply = (): boolean => {
+    applyCanvas()
+    // 全部換成畫布座標(platform/canvas.ts):平常 = 畫布大小。
+    // 打字中(鍵盤開著)且畫布沒轉 → 只剩鍵盤上方那塊看得到 → 換算成畫布 px。
     // visualViewport.height can read 0 before first layout — fall back to
     // innerHeight (|| not ??, so a 0 falls through), and never write a 0.
-    const h = vv?.height || window.innerHeight
-    const w = vv?.width || window.innerWidth
+    const c = getCanvas()
+    const typing = !!editingEl && c.rot === 0
+    const h = typing ? (vv?.height || window.innerHeight) / c.s : c.h
+    const w = c.w
     if (h > 0) setVar('--vvh', `${h}px`)
     if (w > 0) setVar('--vvw', `${w}px`)
     // Where the visible area starts inside the layout viewport. Normally 0; when the
@@ -108,20 +116,7 @@ export function initViewportVars(): void {
     // otherwise you see the main menu's bottom-left behind the keyboard, not the input.
     // ONLY while typing: once the keyboard is gone the page may stay panned (iOS) and a
     // swipe would then drag the backdrop around → with no field focused it's pinned at 0.
-    setVar('--vvt', `${editingEl ? Math.max(0, vv?.offsetTop ?? 0) : 0}px`)
-    // Mobile browser tab (not standalone / desktop): scale every popup down to a
-    // "shrunk" version so panel + images + buttons fit the reduced visible area as
-    // one uniform unit (see .modal__panel / .cstages__panel — transform:scale).
-    // Standalone & desktop stay 1 (byte-for-byte unchanged). Mirrors useMobileWebScale.
-    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches
-    const standalone =
-      !!window.matchMedia?.('(display-mode: standalone)').matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true
-    const mobileWeb = coarse && !standalone
-    setVar('--mw-scale', mobileWeb ? '0.8' : '1')
-    // Popup iOS safe-area only applies at full size (fullscreen/desktop). On mobile
-    // web the popup is already shrunk 0.8, so it clears the notch on its own → 0.
-    setVar('--safe-mult', mobileWeb ? '0' : '1')
+    setVar('--vvt', `${typing ? Math.max(0, vv?.offsetTop ?? 0) / c.s : 0}px`)
     return h > 0 && w > 0
   }
 

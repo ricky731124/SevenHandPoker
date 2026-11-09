@@ -1,5 +1,5 @@
 /* Desktop: widen a bit more so 預設牌組(3 張) never wraps in its half-column. */
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .modal__panel--pic {
     max-width: 560px !important;
   }

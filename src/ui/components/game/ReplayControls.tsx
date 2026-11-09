@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { portalRoot } from '../../../platform/canvas'
 import { useGameStore } from '../../../state/gameStore'
 import { useAppStore } from '../../../state/appStore'
 import Button from '../Button'
 import { sfx } from '../../../audio/sfx'
 import './ReplayControls.css'
+import { canvasRect } from '../../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 /**
  * 賽事回放控制(§6.4)——Reels 風。
@@ -32,7 +34,7 @@ export default function ReplayControls() {
     const measure = () => {
       const t = document.querySelector('.game')
       if (t) {
-        const r = t.getBoundingClientRect()
+        const r = canvasRect(t.getBoundingClientRect())
         setRect({ left: r.left, top: r.top, width: r.width, height: r.height })
       }
     }
@@ -116,7 +118,7 @@ export default function ReplayControls() {
           >
             {controls}
           </div>,
-          document.body,
+          portalRoot(), // 掛在畫布裡,跟著轉、跟著縮(platform/canvas.ts)
         )}
     </>
   )

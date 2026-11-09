@@ -6,6 +6,7 @@ import type { Card as TCard } from '../../../game/cards'
 import Card from '../Card'
 import CardBack from '../CardBack'
 import './ExplodeFx.css'
+import { canvasRect } from '../../../platform/canvas' // 畫布座標(假橫向轉過、網頁版縮過也對得上)
 
 /** 動畫總長(ms):炸彈從頭像扔到那張牌 → 牌原地浮起抖兩下 → 爆開消失(使用者:放慢,讓人看得到炸彈)。 */
 const DURATION = EXPLODE_FX_MS
@@ -55,7 +56,7 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
   const measure = () => {
     const root = anchor.current?.parentElement
     if (!root) return
-    const rr = root.getBoundingClientRect()
+    const rr = canvasRect(root.getBoundingClientRect())
     const k = root.offsetWidth ? rr.width / root.offsetWidth : 1
     // 用「排版上的停放位置」(offsetParent 的框 + offsetLeft/Top),不吃 transform:
     // 發牌飛入、選牌浮起的動畫跑到一半量,拿到的也是牌最後停的位置(不用等動畫跑完再量)。
@@ -63,10 +64,10 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
       const h = el as HTMLElement
       const p = h.offsetParent
       if (!p) {
-        const r = el.getBoundingClientRect()
+        const r = canvasRect(el.getBoundingClientRect())
         return { x: (r.left - rr.left) / k, y: (r.top - rr.top) / k, w: r.width / k, h: r.height / k }
       }
-      const pr = p.getBoundingClientRect()
+      const pr = canvasRect(p.getBoundingClientRect())
       const ph = p as HTMLElement
       const pk = ph.offsetWidth ? pr.width / ph.offsetWidth : k
       const ox = (ph.clientLeft + h.offsetLeft) * pk // offsetLeft 從 padding 邊算,框是從 border 邊 → 補上邊框寬
@@ -110,12 +111,12 @@ export default function ExplodeFx({ me, cardW }: { me: PlayerId; cardW: number }
     seenN.current = fx.n
     const root = anchor.current?.parentElement
     if (!root) return
-    const rr = root.getBoundingClientRect()
+    const rr = canvasRect(root.getBoundingClientRect())
     const k = root.offsetWidth ? rr.width / root.offsetWidth : 1
     const center = (sel: string) => {
       const el = root.querySelector(sel)
       if (!el) return null
-      const r = el.getBoundingClientRect()
+      const r = canvasRect(el.getBoundingClientRect())
       return { x: (r.left - rr.left + r.width / 2) / k, y: (r.top - rr.top + r.height / 2) / k }
     }
     const targetIsMe = fx.target === me

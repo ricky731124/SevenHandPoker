@@ -12,14 +12,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: clamp(140px, 22vw, 220px);
+  max-width: clamp(140px, 22cqw, 220px);
   padding: 3px 11px 3px 8px;
   background: linear-gradient(180deg, var(--parch-1, #f7ead0), var(--parch-2, #ecd4a6));
   border: 2px solid var(--gold-3, #d79a24);
   border-radius: 999px;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
   font-family: var(--font-display);
-  font-size: clamp(14px, 1.9vw, 17px);
+  font-size: clamp(14px, 1.9cqw, 17px);
   font-weight: 700;
   line-height: 1.25;
   color: var(--wood-text, #5a2a0c);

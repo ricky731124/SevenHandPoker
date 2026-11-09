@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
+import { getCanvas, subscribeCanvas } from '../../platform/canvas'
 
 export interface BoardSizes {
   /** uniform playing-card width used everywhere on the table */
@@ -13,20 +14,21 @@ export interface BoardSizes {
   handMax: number
   /** narrowed width of the 7-slot band (frames closer together) */
   bandWidth: number
-  /** width of the board box; == viewport on phones, capped on desktop (centred) */
+  /** width of the board box; == canvas on phones, capped on desktop (centred) */
   stageW: number
-  /** height of the board box; == viewport on phones, capped on desktop (centred) */
+  /** height of the board box; == canvas on phones, capped on desktop (centred) */
   stageH: number
 }
 
 const clamp = (a: number, x: number, b: number) => Math.max(a, Math.min(x, b))
 
 /**
- * Bounded-fluid layout. Phones lay out against the real viewport, exactly as
- * before. Above WCAP the board's *width* is frozen so the 7 slots stop spreading
- * across a wide desktop (the "ocean gaps"); the board is then centred with felt
- * showing on both sides (see Game.css). WCAP sits above every phone-landscape
- * width, so for phones `ew === vw` and every value below is identical to before.
+ * Bounded-fluid layout. Phones lay out against the canvas (= the phone's full-screen
+ * landscape size, see platform/canvas.ts — fake-landscape / browser-tab shrink are
+ * handled by the canvas as a whole, so this never sees them). Above WCAP the board's
+ * *width* is frozen so the 7 slots stop spreading across a wide desktop (the "ocean
+ * gaps"); the board is then centred with felt showing on both sides (see Game.css).
+ * WCAP sits above every phone-landscape width, so for phones `ew === vw`.
  */
 const WCAP = 1000
 // Height cap: above this the board box stops growing and is centred vertically,
@@ -34,56 +36,12 @@ const WCAP = 1000
 // Sits above every phone-landscape height, so phones lay out at full height.
 const HCAP = 580
 
-/** True when the portrait "fake-landscape" trick is active (#root rotated 90°,
- *  see global.css). In that state the effective width/height are SWAPPED — laying
- *  out against the raw portrait dims is exactly what cut the left/right edges. */
-function isRotated(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    !!window.matchMedia &&
-    window.matchMedia('(max-width: 900px) and (orientation: portrait) and (pointer: coarse)').matches
-  )
-}
-
-function calc(): BoardSizes {
-  // Lay the board out against the FULL-SCREEN viewport, then useFitScale scales
-  // the whole board down to the actually-visible area. (visualViewport = the
-  // shrunken visible area, used by useFitScale as the scale target — never here.)
-  const de = typeof document === 'undefined' ? null : document.documentElement
-  let rawW = typeof window === 'undefined' ? 1024 : Math.max(window.innerWidth, de?.clientWidth || 0)
-  let rawH = typeof window === 'undefined' ? 600 : Math.max(window.innerHeight, de?.clientHeight || 0)
-  const rotated = isRotated()
-
-  // Mobile browser tab (real landscape): iOS Safari — and Android Chrome — shrink
-  // BOTH innerHeight AND clientHeight down to the address-bar-reduced VISIBLE
-  // height, leaving NO full-height signal at all. (Measured: an iPhone 15 Pro
-  // whose landscape screen is 393 CSS-px tall reports 310 for inner/client/visual
-  // alike in a browser tab — so the old max(inner,client) baseline == the visible
-  // height, and fit came out 310/310 = 1, i.e. no scaling.) The physical screen's
-  // SHORT edge IS the chrome-independent full landscape height (iOS keeps `screen`
-  // portrait-fixed, so screen.width = 393 = the landscape full height), so adopt
-  // it as the layout baseline; useFitScale then scales the whole board down to the
-  // actually-visible visualViewport height (310/393 ≈ 0.79). Standalone (no chrome)
-  // and desktop already report the true full height, so they are excluded and stay
-  // byte-for-byte as tuned (fit = 1). The rotated fake-landscape path is a
-  // different measurement regime (see isRotated / global.css) and is left as-is.
-  if (typeof window !== 'undefined' && typeof screen !== 'undefined' && !rotated) {
-    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches
-    const standalone =
-      !!window.matchMedia?.('(display-mode: standalone)').matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true
-    if (coarse && !standalone) {
-      rawW = Math.max(rawW, Math.max(screen.width, screen.height))
-      rawH = Math.max(rawH, Math.min(screen.width, screen.height))
-    }
-  }
-
-  const vw = rotated ? rawH : rawW // rotated 90° → swap so the board fills the real space
-  const vh = rotated ? rawW : rawH
-
+function calc(vw: number, vh: number): BoardSizes {
   // Effective width the board is laid out against (bounded on desktop only).
   const ew = Math.min(vw, WCAP)
-  const desktop = vw > WCAP
+  // 手機網頁版的畫布寬度會補滿(可能 > 1000),但高度只有手機那麼高 → 高度也要夠才算電腦,
+  // 不然牌放大到 66 會跟對決區、上方的牌擠在一起。
+  const desktop = vw > WCAP && vh > 480
 
   const avatar = Math.round(clamp(50, vh * 0.17, 108))
   // left clears the avatar (incl. its margin) + a little; right must also clear
@@ -99,7 +57,10 @@ function calc(): BoardSizes {
   // a touch larger (66) so the centred table doesn't look tiny. The cap only
   // rises above WCAP, so phones are unaffected. Also limited by height and by
   // "10 cards fit the hand without overlap".
-  const hCard = (handMax - 6 * 9) / 10
+  // 窄畫布(< 1.9:1,只有手機網頁直拿、iPhone SE 這類 16:9)牌之間只留 2px(原 6px),牌從 42 回到約 46,
+  // 上下才不會空太多;一般手機全螢幕(≥ 2:1)、電腦照舊。
+  const cardGap = !desktop && vw / vh < 1.9 ? 2 : 6
+  const hCard = (handMax - cardGap * 9) / 10
   const cardCap = desktop ? 66 : 54
   const card = Math.round(clamp(36, Math.min(vh * 0.15, ew * 0.078, hCard), cardCap))
 
@@ -117,18 +78,15 @@ function calc(): BoardSizes {
   }
 }
 
-/** Fluid, full-bleed board element sizes derived from the viewport. */
+// 畫布沒變就回同一個物件(useSyncExternalStore 要求快照穩定)
+let memo: { w: number; h: number; v: BoardSizes } | null = null
+function snapshot(): BoardSizes {
+  const { w, h } = getCanvas()
+  if (!memo || memo.w !== w || memo.h !== h) memo = { w, h, v: calc(w, h) }
+  return memo.v
+}
+
+/** Fluid, full-bleed board element sizes derived from the canvas. */
 export default function useBoardSizes(): BoardSizes {
-  const [sizes, setSizes] = useState<BoardSizes>(calc)
-  useEffect(() => {
-    const update = () => setSizes(calc())
-    update()
-    window.addEventListener('resize', update)
-    window.addEventListener('orientationchange', update)
-    return () => {
-      window.removeEventListener('resize', update)
-      window.removeEventListener('orientationchange', update)
-    }
-  }, [])
-  return sizes
+  return useSyncExternalStore(subscribeCanvas, snapshot)
 }

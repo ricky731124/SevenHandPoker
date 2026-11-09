@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../state/appStore'
 import { DEATH_EYE_FX_MS, EXPLODE_FX_MS, REFRESH_SELF_LOCKED, cardFxMs, useGameStore } from '../../state/gameStore'
@@ -44,7 +44,6 @@ import EndModal from '../components/game/EndModal'
 import CampaignEndModal from '../components/game/CampaignEndModal'
 import { useCampaignStore } from '../../state/campaignStore'
 import useBoardSizes from '../hooks/useBoardSizes'
-import useFitScale from '../hooks/useFitScale'
 import useSeats from '../hooks/useSeats'
 import { sfx } from '../../audio/sfx'
 import Lobby from './Lobby'
@@ -312,9 +311,20 @@ export function GameBoard() {
   const closeSpectate = useAppStore((s) => s.closeSpectate) // 觀戰:牌桌內「離開觀戰」鈕(#5)
   const inCampaign = useCampaignStore((s) => s.series !== null)
   const sz = useBoardSizes()
-  // Uniform scale so the whole board fits the ACTUALLY-visible area on mobile web
-  // (address bar steals height). 1 on fullscreen/standalone/desktop → no transform.
-  const fit = useFitScale(sz.stageW, sz.stageH)
+  // 對手頭像+名字的實際底部 → --foe-bottom(限定房方鈕、矮螢幕的「N 張」泡泡讓開名字用)。
+  // 量實際的:安卓字型行高比 iOS 高,用算的會差幾 px 就壓到名字(§8.2)。
+  const boardRef = useRef<HTMLDivElement>(null)
+  const foeRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const board = boardRef.current
+    const foeEl = foeRef.current
+    if (!board || !foeEl) return
+    const put = () => board.style.setProperty('--foe-bottom', `${foeEl.offsetTop + foeEl.offsetHeight}px`)
+    put()
+    const ro = new ResizeObserver(put)
+    ro.observe(foeEl)
+    return () => ro.disconnect()
+  }, [])
   const seats = useSeats()
   const lastPvpReward = usePlatformStore((s) => s.lastPvpReward)
   // Tap the opponent's avatar → their public info card (#5). Online foes only
@@ -568,14 +578,11 @@ export function GameBoard() {
 
   return (
     <div
+      ref={boardRef}
       className="game"
       style={{
         width: sz.stageW,
         height: sz.stageH,
-        // Scale the whole board to fit the visible viewport (mobile web). No
-        // transform at all when fit === 1, so fullscreen/desktop is untouched.
-        transform: fit < 1 ? `scale(${fit})` : undefined,
-        transformOrigin: 'center center',
         ['--reserve' as string]: `${sz.reserve}px`,
         ['--reserve-r' as string]: `${sz.rightReserve}px`,
         // stage box size, so vertical vh-based spacing can respect the capped
@@ -658,6 +665,7 @@ export function GameBoard() {
       {!spec && <SortButtons mode={g.sortMode} dir={g.sortDir} onToggleMode={g.toggleSortMode} onToggleDir={g.toggleSortDir} />}
 
       <div
+        ref={foeRef}
         className="game__foe-avatar"
         onClick={
           spec

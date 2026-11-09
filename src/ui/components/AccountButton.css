@@ -4,14 +4,14 @@
   /* Clear the iPhone landscape notch / home-indicator insets so the 每日任務 /
      登入 buttons never sit under the cutout. env() is 0 off-notch → no change.
      使用者:iOS 安全區左右吃 0.8× inset(比預設省一點,又不會太貼瀏海)。 */
-  top: max(12px, env(safe-area-inset-top));
-  left: max(12px, calc(env(safe-area-inset-left) * 0.8));
+  top: max(12px, var(--sa-t));
+  left: max(12px, calc(var(--sa-l) * 0.8));
   z-index: 20;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 13px; /* 上排(名字+公告) 與 每日任務鈕 之間 */
-  max-width: 60vw;
+  max-width: 60cqw;
 }
 /* Top row: identity/登入 + 公告 side by side, same gap as the right cluster (10px).
    flex-start so 公告 sits at the TOP (level with the right-cluster buttons at
@@ -24,8 +24,8 @@
 /* 登出 sits in the opposite corner from the identity pill */
 .acctbar-right {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
-  right: max(14px, calc(env(safe-area-inset-right) * 0.8)); /* 0.8× 瀏海(見 .acctbar) */
+  top: max(12px, var(--sa-t));
+  right: max(14px, calc(var(--sa-r) * 0.8)); /* 0.8× 瀏海(見 .acctbar) */
   z-index: 20;
   display: inline-flex;
   align-items: center;
@@ -36,14 +36,14 @@
    inward (proportional to width) instead of hugging the far edges — otherwise they
    sit miles from the centred board. 使用者 #8。Phones/mobile-web keep the tight
    12px + notch inset above. */
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .acctbar {
-    left: clamp(24px, 4vw, 80px);
-    top: clamp(18px, 2.6vw, 50px);
+    left: clamp(24px, 4cqw, 80px);
+    top: clamp(18px, 2.6cqw, 50px);
   }
   .acctbar-right {
-    right: clamp(24px, 4vw, 80px);
-    top: clamp(18px, 2.6vw, 50px);
+    right: clamp(24px, 4cqw, 80px);
+    top: clamp(18px, 2.6cqw, 50px);
   }
 }
 
@@ -51,16 +51,16 @@
    width stays auto (compact). Mirrors .menu__buttons .woodbtn sizing. */
 .acctbar .woodbtn,
 .acctbar-right .woodbtn {
-  padding-top: clamp(8px, 1.5vh, 12px);
-  padding-bottom: clamp(8px, 1.5vh, 12px);
+  padding-top: clamp(8px, 1.5cqh, 12px);
+  padding-bottom: clamp(8px, 1.5cqh, 12px);
   padding-left: 18px;
   padding-right: 18px;
 }
 .acctbar .woodbtn__label,
 .acctbar-right .woodbtn__label {
-  font-size: clamp(15px, 2.3vw, 22px);
+  font-size: clamp(15px, 2.3cqw, 22px);
 }
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .acctbar .woodbtn,
   .acctbar-right .woodbtn {
     padding-top: 15px;
@@ -78,7 +78,7 @@
   align-items: center;
   justify-content: center;
   min-width: 2.5em; /* barely wider than tall → a near-circle with a slight oval */
-  padding: clamp(8px, 1.5vh, 12px) 12px;
+  padding: clamp(8px, 1.5cqh, 12px) 12px;
   border-radius: 999px;
   border: 3px solid var(--wood-edge);
   background: var(--wood-tex);
@@ -87,7 +87,7 @@
   color: var(--wood-text);
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(16px, 2.4vw, 24px);
+  font-size: clamp(16px, 2.4cqw, 24px);
   line-height: 1;
   cursor: pointer;
   box-shadow:
@@ -98,7 +98,7 @@
 .acctbar-qbtn:active {
   transform: translateY(1px);
 }
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .acctbar-qbtn {
     padding-top: 15px;
     padding-bottom: 15px;
@@ -148,7 +148,7 @@
   color: var(--wood-text);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
   font-family: var(--font-display);
-  max-width: 40vw;
+  max-width: 40cqw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -250,7 +250,7 @@
 .modal__panel--auth .modal__body {
   gap: 10px;
 }
-@media (max-height: 480px) {
+@container app (max-height: 480px) {
   .modal__panel--auth .modal__body {
     gap: 7px;
   }
@@ -272,7 +272,7 @@
 .modal__panel--announce {
   overflow: hidden; /* panel 不出現第二條滾軸;內容固定塞得下 */
 }
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .modal__panel--announce {
     max-width: 700px !important; /* 桌機再寬一些(更新內容一列字多) */
   }
@@ -289,7 +289,7 @@
   font-family: var(--font-display);
   color: var(--parch-text);
   /* 固定高度(不隨內容變),超過就在此內層捲動 — 全彈窗唯一的捲動區 */
-  height: min(64vh, 500px);
+  height: min(64cqh, 500px);
   overflow-y: auto;
   /* 木色細滾軸,取代醜白預設(Firefox) */
   scrollbar-width: thin;

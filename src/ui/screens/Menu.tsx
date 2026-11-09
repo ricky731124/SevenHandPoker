@@ -89,6 +89,7 @@ export default function Menu() {
       <LobbyChat />
 
       {/* Full-bleed hero art (title baked in) */}
+      {heroOk && <img className="menu__hero-blur" src={`${import.meta.env.BASE_URL}title.webp`} alt="" aria-hidden />}
       {heroOk ? (
         <img
           className="menu__hero"

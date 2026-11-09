@@ -9,7 +9,7 @@
      visualViewport in JS (see platform/viewport.ts) because dvh on position:fixed
      is unreliable on iOS Safari (clips panels). Falls back to dvh pre-measure.
      On fullscreen/standalone & desktop this equals the full height → no-op. */
-  height: var(--vvh, 100dvh);
+  height: var(--vvh, 100cqh);
   z-index: 1000; /* above the hand/board */
   background: rgba(20, 4, 8, 0.66);
   backdrop-filter: blur(3px);
@@ -32,12 +32,10 @@
   border: 3px solid var(--parch-edge);
   border-radius: var(--r-lg);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.5);
-  padding: clamp(14px, 3vw, 22px);
-  transform-origin: center center; /* framer scales the panel by --mw-scale on mobile web */
-  /* real visible height (see .modal__scrim). Divided by --mw-scale so that AFTER the
-     mobile-web shrink the panel still fills ~0.92 of the visible height (more content
-     fits without scrolling). --mw-scale is 1 on standalone/desktop → unchanged. */
-  max-height: calc(var(--vvh, 100dvh) * 0.92 / var(--mw-scale, 1));
+  padding: clamp(14px, 3cqw, 22px);
+  transform-origin: center center; /* framer 依 --fit 縮放面板(放不下才縮,useFitHeight) */
+  /* 看得到的高度(見 .modal__scrim)× 0.92;除以 --fit → 放不下被縮小時,縮完剛好 = 0.92 可用高度(--fit 平常 = 1)。 */
+  max-height: calc(var(--vvh, 100cqh) * 0.92 / var(--fit, 1));
   overflow: auto;
   overscroll-behavior: contain; /* 彈窗內捲到底不會把手勢傳給背後頁面(遮罩不會被拖動) */
   color: var(--parch-text);
@@ -75,6 +73,15 @@
   grid-column: 2;
   margin: 0 !important;
 }
+/* 沒有返回鍵、也沒有右邊小鈕:標題用滿整列(左右不必各留 38px 空欄)。
+   電腦版標題 30px 時「Seven Hand Poker」「尋找對手中…」原本被擠到斷 2~3 行。 */
+.modal__titlebar--solo .modal__title {
+  grid-column: 1 / -1;
+}
+/* 觀戰/回放的對決彈窗右上角另外疊了「×」→ 照舊左右留欄,長名字才不會碰到它 */
+.modal__panel--showdown-spec .modal__titlebar--solo .modal__title {
+  grid-column: 2;
+}
 .modal__titlebar .modal__action {
   grid-column: 3;
   display: flex;
@@ -84,7 +91,7 @@
 .modal__title {
   /* game-modal titles: just a touch larger than body text (~+2px) */
   margin: 0 0 12px;
-  font-size: clamp(20px, 3.4vw, 24px);
+  font-size: clamp(20px, 3.4cqw, 24px);
   font-weight: 800;
   text-align: center;
   letter-spacing: 0.5px;
@@ -94,7 +101,7 @@
 }
 /* prominent title for the main-menu start dialog */
 .modal__title--large {
-  font-size: clamp(26px, 5.4vw, 34px);
+  font-size: clamp(26px, 5.4cqw, 34px);
   letter-spacing: 1px;
   margin-bottom: 16px;
 }
@@ -111,10 +118,10 @@
 }
 
 /* Mobile landscape (short screens): compact so everything (incl. buttons) fits */
-@media (max-height: 480px) {
+@container app (max-height: 480px) {
   .modal__panel {
     padding: 10px 14px;
-    max-height: calc(var(--vvh, 100dvh) * 0.95 / var(--mw-scale, 1));
+    max-height: calc(var(--vvh, 100cqh) * 0.95 / var(--fit, 1));
     border-width: 2px;
   }
   .modal__title {
@@ -138,7 +145,7 @@
 }
 
 /* Desktop: larger, more presence */
-@media (min-width: 1024px) {
+@container app (min-width: 1024px) and (min-height: 481px) {
   .modal__panel {
     padding: 28px 32px;
   }
@@ -151,5 +158,9 @@
      (!important beats Modal's inline max-width; scoped to this panel only.) */
   .modal__panel--showdown {
     max-width: 600px !important;
+  }
+  /* 歡迎/登入彈窗:電腦版標題 30px,360 寬放不下「歡迎來到 Seven Hand Poker」(原本斷 3 行)→ 加寬 */
+  .modal__panel--gate {
+    max-width: 500px !important;
   }
 }

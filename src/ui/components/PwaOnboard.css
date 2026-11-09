@@ -40,8 +40,8 @@
    obvious where to tap. */
 .iabgate__more-arrow {
   position: fixed;
-  top: max(8px, env(safe-area-inset-top));
-  right: max(10px, env(safe-area-inset-right));
+  top: max(8px, var(--sa-t));
+  right: max(10px, var(--sa-r));
   font-size: 16px;
   font-weight: 800;
   color: var(--gold-2);
@@ -86,7 +86,7 @@
 
 .a2hs--push {
   bottom: 20px;
-  width: min(92vw, 420px);
+  width: min(92cqw, 420px);
   border-radius: 14px;
   padding: 16px 18px;
   display: flex;
@@ -96,7 +96,7 @@
 }
 .a2hs--soft {
   top: 12px;
-  width: min(94vw, 460px);
+  width: min(94cqw, 460px);
   border-radius: 10px;
   padding: 10px 14px;
   display: flex;

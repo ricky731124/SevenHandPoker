@@ -7,15 +7,15 @@
   left: 0;
   right: 0;
   /* 實際可見高度(iOS 網址列),同彈窗 */
-  height: var(--vvh, 100dvh);
+  height: var(--vvh, 100cqh);
   overflow: hidden;
   background: #1d2a22;
   font-family: var(--font-display);
   user-select: none;
   -webkit-user-select: none;
   /* 左側章節按鈕寬(捲軸要閃開它) */
-  --tabs-w: clamp(103px, 19.8vh, 144px);
-  --edge: max(clamp(8px, 2.4vh, 18px), env(safe-area-inset-left));
+  --tabs-w: clamp(103px, 19.8cqh, 144px);
+  --edge: max(clamp(8px, 2.4cqh, 18px), var(--sa-l));
 }
 
 /* ---- 捲動區:原生捲軸藏起來(底下自己畫木色的) ---- */
@@ -91,15 +91,15 @@
 /* ---- 上方:返回 + 章名 ---- */
 .chmap__back {
   position: absolute;
-  top: clamp(8px, 2.4vh, 18px);
+  top: clamp(8px, 2.4cqh, 18px);
   left: var(--edge);
   z-index: 6;
-  width: clamp(40px, 7vh, 52px);
-  height: clamp(40px, 7vh, 52px);
+  width: clamp(40px, 7cqh, 52px);
+  height: clamp(40px, 7cqh, 52px);
 }
 .chmap__title {
   position: absolute;
-  top: clamp(8px, 2.4vh, 18px);
+  top: clamp(8px, 2.4cqh, 18px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
@@ -109,7 +109,7 @@
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
   box-shadow: 0 2px 0 var(--wood-edge), 0 4px 8px rgba(0, 0, 0, 0.35);
   color: var(--wood-text);
-  font-size: clamp(22px, 5.7vh, 39px);
+  font-size: clamp(22px, 5.7cqh, 39px);
   font-weight: 900;
   letter-spacing: 1px;
   white-space: nowrap;
@@ -125,7 +125,7 @@
   transform: translateY(-40%);
   display: flex;
   flex-direction: column;
-  gap: clamp(6px, 2.07vh, 14.4px);
+  gap: clamp(6px, 2.07cqh, 14.4px);
   width: var(--tabs-w);
 }
 .chmap__tab {
@@ -133,7 +133,7 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: clamp(4.5px, 1.26vh, 9px) 4.5px;
+  padding: clamp(4.5px, 1.26cqh, 9px) 4.5px;
   border-radius: var(--r-md);
   border: 2px solid var(--wood-edge);
   background: linear-gradient(180deg, var(--wood-1), var(--wood-2));
@@ -162,7 +162,7 @@
   opacity: 0.9;
 }
 .chmap__tab-no {
-  font-size: clamp(12.6px, 2.8vh, 18px);
+  font-size: clamp(12.6px, 2.8cqh, 18px);
   font-weight: 800;
 }
 .chmap__tab-lock {
@@ -170,12 +170,12 @@
   font-size: 0.9em;
 }
 .chmap__tab-name {
-  font-size: clamp(15.3px, 3.5vh, 22.5px);
+  font-size: clamp(15.3px, 3.5cqh, 22.5px);
   font-weight: 900;
   white-space: nowrap;
 }
 .chmap__tab-sub {
-  font-size: clamp(11px, 2.25vh, 14.4px);
+  font-size: clamp(11px, 2.25cqh, 14.4px);
   font-weight: 700;
   opacity: 0.85;
   white-space: nowrap;
@@ -185,10 +185,10 @@
 .chmap__bar {
   position: absolute;
   z-index: 5;
-  bottom: max(clamp(6px, 1.8vh, 14px), env(safe-area-inset-bottom));
+  bottom: max(clamp(6px, 1.8cqh, 14px), var(--sa-b));
   left: calc(var(--edge) + var(--tabs-w) + 14px);
-  right: max(18px, env(safe-area-inset-right));
-  height: clamp(10px, 2vh, 14px);
+  right: max(18px, var(--sa-r));
+  height: clamp(10px, 2cqh, 14px);
   border-radius: 999px;
   background: rgba(40, 22, 8, 0.5);
   border: 1px solid rgba(255, 230, 180, 0.25);
@@ -757,7 +757,7 @@
   position: absolute;
   left: 50%;
   top: 0;
-  font-size: clamp(16px, 4vh, 26px);
+  font-size: clamp(16px, 4cqh, 26px);
   pointer-events: none;
   animation: chtab-lockfly 0.8s ease-out both;
 }

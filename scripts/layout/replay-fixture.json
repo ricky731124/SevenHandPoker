@@ -1,0 +1,239 @@
+{
+ "endedAt": 1793500888432,
+ "firstPicker": "p1",
+ "matchType": "casual",
+ "mode": "fire",
+ "moves": [
+  {
+   "by": "p1",
+   "card": "peek",
+   "t": "special"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "C14",
+    "S14"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 3,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "card": "spades",
+   "t": "special",
+   "targetId": "C3"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "S6",
+    "S5",
+    "C3",
+    "S2",
+    "JOKER_p2"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 6,
+   "t": "place"
+  },
+  {
+   "by": "p1",
+   "card": "explode",
+   "rng": [
+    0.9374681497192523
+   ],
+   "t": "special"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "C9",
+    "S9"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 2,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "card": "refresh",
+   "rng": [
+    0.6612565298465596
+   ],
+   "t": "special"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "S12",
+    "C12"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 3,
+   "t": "place"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "C7",
+    "H7",
+    "S7",
+    "JOKER_p1"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 4,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "S8",
+    "D7",
+    "D6",
+    "D5",
+    "D4"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 4,
+   "t": "place"
+  },
+  {
+   "by": "p1",
+   "card": "deathEye",
+   "t": "special"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "BLANK_p1",
+    "H6",
+    "H5",
+    "C4",
+    "D9"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 6,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "card": "deathEye",
+   "t": "special"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "H10",
+    "S10",
+    "BLANK_p2"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 0,
+   "t": "place"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "S3",
+    "H3",
+    "D3",
+    "C11",
+    "S11"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 1,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "D14",
+    "S13",
+    "H12",
+    "H11",
+    "D10"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 1,
+   "t": "place"
+  },
+  {
+   "by": "p1",
+   "ids": [
+    "H13",
+    "D13",
+    "C13",
+    "H2",
+    "C2"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p2",
+   "slot": 5,
+   "t": "place"
+  },
+  {
+   "by": "p2",
+   "ids": [
+    "D8",
+    "C8",
+    "H8"
+   ],
+   "t": "pick"
+  },
+  {
+   "by": "p1",
+   "slot": 5,
+   "t": "place"
+  }
+ ],
+ "p1": {
+  "avatar": "woodpecker",
+  "name": "鼓山金城武",
+  "uid": "fixture_p1"
+ },
+ "p2": {
+  "avatar": "cat",
+  "isBot": true,
+  "name": "山石宮分",
+  "uid": "bot_01"
+ },
+ "seed": 2025132174,
+ "special": true,
+ "v": 1,
+ "winner": "p1",
+ "id": "fixture"
+}
