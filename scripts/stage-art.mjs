@@ -14,6 +14,10 @@
 // 選項:--heal-map x,y,w,h[,dy]  地圖若有浮水印,用下方紋理羽化補掉該矩形(dy 預設 = h+8)
 //       --map-crop x,y,w        先從原圖裁出這塊再縮放(高度自動 = w×800/1328,維持地圖比例)。
 //                               用途:主角壓在節點上時,裁掉一側讓主角移到節點之間(第 8 關:裁左邊)。
+//       --boss-zoom z,dy          頭像放大 z 倍(從中間裁;dy = 裁切框往下移幾 px,正值 = 少裁下巴多裁頭頂)。
+//                               第 7 關柴柴重畫:1.08,使用者要「頭像大一點點」。
+//       --boss-fit                頭像整張等比縮進 1150×912(左右補透明),不裁切。原圖是正方形、上下貼邊時用(第 10 關鹿角)。
+// 三張圖缺哪張就跳過哪張(只重做頭像/貼圖時不用放地圖)。
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -34,6 +38,9 @@ if (!N || !AVATAR || !STICKER) {
 }
 const heal = flagVal('--heal-map')
 const mapCrop = flagVal('--map-crop')
+const bossZoom = flagVal('--boss-zoom')
+const bossFit = argv.includes('--boss-fit')
+const has = (name) => fs.existsSync(path.join(SRC, name)) || (console.log(`(沒有 ${name},跳過)`), false)
 
 const SRC = path.resolve('_art_src', `stage${N}`)
 const PUB = path.resolve('public')
@@ -64,23 +71,34 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
     '-quality', String(quality), '-compression_level', '6', '-pix_fmt', alpha ? 'yuva420p' : 'yuv420p', out])
 }
 
+/** 從中間裁出 1/z 大小(維持比例),dy 讓裁切框上下移。之後 scaleTo cover 放大回原尺寸 = 主角變大。 */
+function cropZoom(im, z, dy) {
+  const w = Math.round(im.width / z)
+  const h = Math.round(im.height / z)
+  const x0 = Math.round((im.width - w) / 2)
+  const y0 = Math.max(0, Math.min(im.height - h, Math.round((im.height - h) / 2 + dy)))
+  const data = new Uint8Array(w * h * 4)
+  for (let y = 0; y < h; y++) data.set(im.data.subarray(((y0 + y) * im.width + x0) * 4, ((y0 + y) * im.width + x0 + w) * 4), y * w * 4)
+  return { data, width: w, height: h }
+}
+
 // ---- boss:去浮水印 → 去綠背 → 1150×912 → avatars webp -----------------------
-{
+if (has('boss.png')) {
   const im = load(path.join(SRC, 'boss.png'))
   const marks = removeCornerMark(im)
   // 從四邊+同色口袋 flood 去背(會連外圈淡綠光暈一起去掉;全圖 dechroma 會留一圈淡綠,第 8 關踩過)
   const keyed = keyFlood(im) + '%'
   bleed(im) // 透明像素補上鄰近顏色,縮圖時邊緣才不會滲綠
-  writePng(tmp, im)
+  writePng(tmp, bossZoom ? cropZoom(im, bossZoom[0], bossZoom[1] ?? 0) : im)
   const master = artDst(`avatars/${AVATAR}.png`)
-  scaleTo(tmp, master, 1150, 912, 'cover')
+  scaleTo(tmp, master, 1150, 912, bossFit ? 'fit' : 'cover')
   const av = dst(`avatars/${AVATAR}.webp`)
   webp(master, av, { maxSide: 512, quality: 82, alpha: true })
   console.log(`boss  ${im.width}x${im.height} 浮水印${marks.length}處 ${JSON.stringify(marks)} 去背${keyed} → ${kb(master)} / webp ${kb(av)}`)
 }
 
 // ---- map:檢查/補浮水印 → 1328×800 → webp ------------------------------------
-{
+if (has('map.png')) {
   let im = load(path.join(SRC, 'map.png'))
   if (heal) healFromBelow(im, heal[0], heal[1], heal[2], heal[3], heal[4] ?? heal[3] + 8)
   if (mapCrop) {
@@ -102,7 +120,7 @@ function webp(srcPng, out, { maxSide, quality, alpha }) {
 }
 
 // ---- sticker:去浮水印 → 去綠背+白邊 → 512×512 --------------------------------
-{
+if (has('sticker.png')) {
   const im = load(path.join(SRC, 'sticker.png'))
   const marks = removeCornerMark(im)
   const pct = keyFlood(im, { white: true })
