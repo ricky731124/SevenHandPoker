@@ -7,6 +7,8 @@ const ANDROID_UA =
   'Mozilla/5.0 (Linux; Android 13; SM-G988B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36'
 const S25_UA =
   'Mozilla/5.0 (Linux; Android 15; SM-S931B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36'
+const PIXEL_UA =
+  'Mozilla/5.0 (Linux; Android 16; Pixel 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
 
 export const DEVICES = [
   // iPhone 15 Pro
@@ -23,6 +25,12 @@ export const DEVICES = [
   { id: 's25-web', quick: true, os: 'android', mobile: true, standalone: false, ua: S25_UA, viewport: { width: 832, height: 312 }, screen: { width: 832, height: 384 } },
   // 三星(小)
   { id: 'and-small', os: 'android', mobile: true, standalone: true, ua: ANDROID_UA, viewport: { width: 800, height: 360 }, screen: { width: 800, height: 360 } },
+  // 安卓「安裝版」:上面狀態列、下面手勢列一直在,左邊鏡頭挖孔那條系統留黑 → 網頁拿到的比螢幕小。
+  // Pixel 10 照玩家截圖量:狀態列 24、手勢列 24、挖孔 61(2026-11-11);三星照同比例估。
+  { id: 'px10-app', os: 'android', mobile: true, standalone: true, ua: PIXEL_UA, viewport: { width: 854, height: 364 }, screen: { width: 915, height: 412 } },
+  { id: 'and-app', os: 'android', mobile: true, standalone: true, ua: ANDROID_UA, viewport: { width: 860, height: 364 }, screen: { width: 915, height: 412 } },
+  { id: 's25-app', os: 'android', mobile: true, standalone: true, ua: S25_UA, viewport: { width: 780, height: 336 }, screen: { width: 832, height: 384 } },
+  { id: 'small-app', os: 'android', mobile: true, standalone: true, ua: ANDROID_UA, viewport: { width: 750, height: 312 }, screen: { width: 800, height: 360 } },
   // 電腦
   { id: 'desk-1440', quick: true, os: 'desktop', mobile: false, viewport: { width: 1440, height: 900 } },
   { id: 'desk-1280', os: 'desktop', mobile: false, viewport: { width: 1280, height: 720 } },

@@ -15,6 +15,8 @@
  * 瀏海/動態島:由這裡統一換算成畫布座標寫到 --sa-l/--sa-r/--sa-t/--sa-b(扣掉縮小後留的黑邊),
  * 元件用 var(--sa-l) 取代 env(safe-area-inset-left)。
  */
+import { isAndroid, isStandalone } from './pwa'
+
 export interface CanvasState {
   /** 畫布(邏輯)寬高,css px */
   w: number
@@ -70,10 +72,16 @@ function compute(layout = false): CanvasState {
     return { w: lw, h: lh, s: 1, rot: 0, cx: lw / 2, cy: lh / 2 }
   }
   const w0 = Math.max(screen.width, screen.height)
-  const h = Math.min(screen.width, screen.height)
+  let h = Math.min(screen.width, screen.height)
   const rot = portrait ? 90 : 0
   const availW = rot ? ph : pw
   const availH = rot ? pw : ph
+  // 安卓安裝版(加到主畫面):狀態列、手勢列一直在,網頁拿到的高度比螢幕矮 → 照全螢幕排會整塊縮 ~88%。
+  // 只縮一半:排版高度取「實際可用」和「全螢幕」的中間(不低於 375 = iPhone SE 的高),多出來的高度用來排版。
+  // 只在安卓 + 安裝版 + 真的被系統列吃掉高度 + 沒轉 90° 時才動;iOS、電腦、網頁版、安卓全螢幕都不受影響。(2026-11-11 Pixel 10 回報)
+  if (rot === 0 && availH < h && isAndroid() && isStandalone()) {
+    h = Math.round(Math.min(h, Math.max(Math.min(h, 375), (availH + h) / 2)))
+  }
   // 高度對齊全螢幕(版面高度分段跟全螢幕一樣),寬度補滿看得到的範圍 → 網頁版兩側不留空邊。
   // 寬度最窄 16:9(iPhone SE 的比例,再窄沒測過)、最寬 2.8 倍高;超出範圍才會留一點邊。
   // 網頁版寬度可能超過 1024 → 電腦版排版一律寫 (min-width: 1024px) and (min-height: 481px),手機高度到不了 481。
