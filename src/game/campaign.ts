@@ -261,8 +261,8 @@ export const CAMPAIGN: CampaignStage[] = [
     id: 's9',
     index: 9,
     name: '合法的流氓',
-    bossAvatar: 'eagle', // 斜鷹梗(eagle.png)
-    bossName: '斜鷹梗',
+    bossAvatar: 'eagle', // 依粿(eagle.png)
+    bossName: '依粿',
     signatureCard: 'deathEye', // 死神之眼
     // 居高臨下的獵手:重囤牌、愛拼牌、看破高——先看光你場上的牌,打得過才出手,打不過就忍(會停損)。
     profile: {
@@ -273,6 +273,24 @@ export const CAMPAIGN: CampaignStage[] = [
       insight: 60,
     },
     subStages: subStages('s9', 9, 'deathEye', 'eagle'),
+    nodePositions: NODE_POS,
+  },
+  {
+    id: 's10',
+    index: 10,
+    name: '小鹿亂撞',
+    bossAvatar: 'deer', // 梅花鹿(deer.png)
+    bossName: '梅花鹿',
+    signatureCard: 'manyClubs', // 漫天梅花
+    // 心裡小鹿亂撞:三種打法都會、偏囤牌,詐唬拼牌看破都中等,鬼牌隨手就用——漫天梅花一口氣換 3 張湊同花。
+    profile: {
+      pickMain: { attack: 30, hoard: 40, balance: 30 },
+      bluff: 50,
+      draw: 50,
+      jokerTiming: 10,
+      insight: 50,
+    },
+    subStages: subStages('s10', 10, 'manyClubs', 'deer'),
     nodePositions: NODE_POS,
   },
 ]

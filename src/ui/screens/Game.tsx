@@ -466,7 +466,7 @@ export function GameBoard() {
         : `這回合已經用過了（剩 ${fireUsesLeft(engine, me)} 次・對手剩 ${fireUsesLeft(engine, otherPlayer(me))} 次）`
       : '本場特殊牌已使用完畢'
   const targetHint = targetingDef?.suit
-    ? `選 1~2 張手牌，變成 ${SUIT_SYMBOL[targetingDef.suit]}（已選 ${g.specialPicks.length} 張）`
+    ? `選 1~${targetingDef.suitMax ?? 2} 張手牌，變成 ${SUIT_SYMBOL[targetingDef.suit]}（已選 ${g.specialPicks.length} 張）`
     : '選一張手牌換掉'
 
   // ----- per-turn timer -----

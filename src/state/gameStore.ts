@@ -1795,16 +1795,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().applySpecialTargets([cardId]) // 偷天換日:點一張就生效
       return
     }
-    // 花色卡(2026-11-02 一次改 1~2 張):點選 / 再點取消,最多 2 張,按「確定」才生效
+    // 花色卡(2026-11-02 一次改 1~2 張;漫天梅花 1~3 張):點選 / 再點取消,最多 suitMax 張,按「確定」才生效
     if (specialPicks.includes(cardId)) {
       sfx.click()
       set({ specialPicks: specialPicks.filter((id) => id !== cardId) })
       return
     }
     if (!suitTargets(engine, me, def.suit).some((c) => c.id === cardId)) return
-    if (specialPicks.length >= SUIT_MAX_TARGETS) {
+    const max = def.suitMax ?? SUIT_MAX_TARGETS
+    if (specialPicks.length >= max) {
       sfx.error()
-      useToastStore.getState().show(`最多選 ${SUIT_MAX_TARGETS} 張`)
+      useToastStore.getState().show(`最多選 ${max} 張`)
       return
     }
     sfx.click()

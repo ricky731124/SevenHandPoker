@@ -11,7 +11,7 @@ import {
   type GameState,
   type PlayerId,
 } from './state'
-import { getSpecialCard, type SpecialCardId } from './specialCards'
+import { getSpecialCard, suitMaxOf, type SpecialCardId } from './specialCards'
 import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
 import { bossPick, bossPlace, suitVictims, type BossRuntime } from './bossAI'
 import { defaultLimitedBrain, limitedPick, limitedPlace } from './limitedAI'
@@ -115,7 +115,7 @@ export function aiChooseSpecial(
   for (const id of loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const victims = suitVictims(state, me, def.suit)
+    const victims = suitVictims(state, me, def.suit, undefined, suitMaxOf(id))
     if (!victims) continue
     const have = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
     if (!best || have > best.have) best = { card: id, targetIds: victims.map((c) => c.id), have }

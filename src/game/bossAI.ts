@@ -36,7 +36,7 @@ import {
   type GameState,
   type PlayerId,
 } from './state'
-import { getSpecialCard, type SpecialCardId } from './specialCards'
+import { getSpecialCard, suitMaxOf, type SpecialCardId } from './specialCards'
 import { candidatePiles, fallbackPile, pileStrength } from './aiCore'
 import { beatsEntry, blankBoardScores, hasPlaceTable, normalStrength, type PileEntry } from './limitedPlace'
 
@@ -1057,8 +1057,8 @@ export function bossChooseSpecial(
 
   // 死神之眼(使用者 2026-10-16 定案):看光對手已放在決鬥區、還沒對決的牌堆。每一手判斷:
   //  - 對手 ≥2 堆蓋牌 → 一定用;只有 1 堆且是 5 張 → 40%;boss 自己第 4 手起有 1 堆就用;0 堆 → 等下一手。
-  //  - 斜鷹梗 9-2(只帶這張):照上面。
-  //  - 斜鷹梗 9-3(卡池):照上面;這手沒用到死神之眼 → 12% 改用其他卡(往下走一般選卡),88% 這手不用卡。
+  //  - 依粿 9-2(只帶這張):照上面。
+  //  - 依粿 9-3(卡池):照上面;這手沒用到死神之眼 → 12% 改用其他卡(往下走一般選卡),88% 這手不用卡。
   //  - 其他 boss / 快速配對人機:同樣條件,但只小機率用。
   // 放在最前面:9-3 本尊等死神之眼時,不能被卡池裡的爆破/強迫更新搶先用掉。
   if (loadout.includes('deathEye')) {
@@ -1114,7 +1114,7 @@ export function bossChooseSpecial(
   for (const id of holdOff ? [] : loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const victims = suitVictims(state, me, def.suit, rng)
+    const victims = suitVictims(state, me, def.suit, rng, suitMaxOf(id))
     if (!victims) continue
     const suited = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
     if (!bloom || suited > bloom.suited) bloom = { card: id, targetIds: victims.map((c) => c.id), suited }
@@ -1148,12 +1148,13 @@ export function bossChooseSpecial(
  * 花色卡一定是拿來湊同花 / 同花順(SPEC 使用者 2026-08-16),不拆該留的對子——換沒成對的低散牌。
  *  - 握 3 張該花色 → 換 2 張沒成對的低散牌,湊成 5 張同花(沒有 2 張沒成對的散牌就不換)。
  *  - 握 4 張 → 換 1 張(第 5 張)。
+ *  - max ≥ 3(漫天梅花)且握 2 張 → 換 3 張。
  *  - 已是同花(≥5):只有「某張同花牌同時能跟別張湊對(雙用)、且有多餘散牌可換」時換 1 張,同花與對子兼得。
  * 落單的散牌不夠時(2026-11-03 起,有給 rng 才會):對子照強弱擲機率決定能不能拆(PAIR_BREAK:強一對多半不拆、
  * 中一對一半、弱一對多半可拆);要拆就同一對兩張一起換(QQ 都變方塊、KK 留著),不會兩對各拆一張。
  * 回傳 null = 這張卡現在沒用。
  */
-export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], rng?: Rng): Card[] | null {
+export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], rng?: Rng, max = 2): Card[] | null {
   const hand = state.hands[me]
   const rankCount = new Map<number, number>()
   for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
@@ -1175,6 +1176,8 @@ export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], 
     }
     return null
   }
+  // 漫天梅花(max 3,第 10 關):握 2 張就能換 3 張湊同花
+  if (suited.length === 2 && max >= 3) return pool(3)
   if (suited.length === 3) return pool(2) // 要換 2 張:落單的優先,不夠才用(一對)
   if (suited.length === 4) {
     if (!PICK_TUNE.fix1103) {

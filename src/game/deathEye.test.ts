@@ -98,10 +98,10 @@ describe('死神之眼 — 回放與連線同步', () => {
     g = applyDraw(g)
     g = applyDeathEye(g, 'p2')
     moves.push({ t: 'special', by: 'p2', card: 'deathEye' })
-    const frames = buildFrames({ seed, firstPicker: 'p1', moves, names: { p1: '甲', p2: '斜鷹梗' } })
+    const frames = buildFrames({ seed, firstPicker: 'p1', moves, names: { p1: '甲', p2: '依粿' } })
     const last = frames[frames.length - 1]
     expect(last.deathEye).toEqual({ target: 'p1', slots: [4] })
-    expect(last.caption).toBe('斜鷹梗 用了「死神之眼」，透視了目前決鬥區所有的牌')
+    expect(last.caption).toBe('依粿 用了「死神之眼」，透視了目前決鬥區所有的牌')
     expect(last.state.exposed).toEqual(g.exposed)
     expect(last.outdated).toBeUndefined()
   })
@@ -287,7 +287,7 @@ describe('第 9 關資料', () => {
   it('關卡名/角色名/招牌卡/參數照使用者填的表', () => {
     expect(s9.index).toBe(9)
     expect(s9.name).toBe('合法的流氓')
-    expect(s9.bossName).toBe('斜鷹梗')
+    expect(s9.bossName).toBe('依粿')
     expect(s9.bossAvatar).toBe('eagle')
     expect(s9.signatureCard).toBe('deathEye')
     expect(s9.profile).toEqual({ pickMain: { attack: 20, hoard: 80, balance: 0 }, bluff: 20, draw: 70, jokerTiming: 10, insight: 60 })

@@ -161,7 +161,7 @@ describe('火力全開電腦帶卡', () => {
   })
 
   it('每張卡都有標打法(新卡忘了標會在這裡抓到)', () => {
-    for (const id of ['swap', 'peek', 'spy', 'clubs', 'diamonds', 'hearts', 'spades', 'refresh', 'explode', 'deathEye'] as SpecialCardId[]) {
+    for (const id of ['swap', 'peek', 'spy', 'clubs', 'diamonds', 'hearts', 'spades', 'refresh', 'explode', 'deathEye', 'manyClubs'] as SpecialCardId[]) {
       expect(['attack', 'hoard', 'balance', 'neutral']).toContain(getSpecialCard(id)?.fireStyle)
     }
   })

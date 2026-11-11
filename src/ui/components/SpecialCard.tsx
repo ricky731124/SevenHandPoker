@@ -46,7 +46,8 @@ export function SpecialCardArt({ id, color, uid: uidBase }: { id: string; color:
       {id === 'refresh' && <RefreshArt color={color} />}
       {id === 'explode' && <ExplodeArt color={color} />}
       {id === 'deathEye' && <DeathEyeArt color={color} uid={uid} />}
-      {SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS]?.suit && (
+      {id === 'manyClubs' && <ManyClubsArt color={color} />}
+      {id !== 'manyClubs' && SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS]?.suit && (
         <SuitBloomArt suit={SPECIAL_CARDS[id as keyof typeof SPECIAL_CARDS].suit!} color={color} />
       )}
     </svg>
@@ -227,6 +228,67 @@ function SuitBloomArt({ suit, color }: { suit: Suit; color: string }) {
       <g fill="#fffbe6" stroke={color} strokeWidth="1">
         <path d="M80 27 l2 4.6 4.6 2 -4.6 2 -2 4.6 -2 -4.6 -4.6 -2 4.6 -2 z" />
         <path d="M20 35 l1.5 3.4 3.4 1.5 -3.4 1.5 -1.5 3.4 -1.5 -3.4 -3.4 -1.5 3.4 -1.5 z" />
+      </g>
+    </g>
+  )
+}
+
+/** 梅花(植物)一朵:五片粉紅花瓣 + 黃色花心。 */
+function Blossom({ x, y, r = 3, rot = 0 }: { x: number; y: number; r?: number; rot?: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot})`}>
+      {[0, 72, 144, 216, 288].map((a) => (
+        <circle
+          key={a}
+          cx={Math.cos((a * Math.PI) / 180) * r * 0.95}
+          cy={Math.sin((a * Math.PI) / 180) * r * 0.95}
+          r={r * 0.72}
+          fill="#f7a8c4"
+          stroke="#d9668f"
+          strokeWidth="0.5"
+        />
+      ))}
+      <circle r={r * 0.42} fill="#ffd84d" stroke="#e0a400" strokeWidth="0.4" />
+    </g>
+  )
+}
+
+/** 漫天梅花(第 10 關)— 一枝梅花橫過畫面,三個梅花花色(上中 / 左下 / 右下 = 一次換 3 張),
+ *  四周開滿梅花、花瓣漫天飄。跟踏雪尋梅(單一個梅花 + 葉子)一眼分得出來。 */
+function ManyClubsArt({ color }: { color: string }) {
+  const pip = (x: number, y: number, s: number) => (
+    <g transform={`translate(${x - 12 * s} ${y - 12.5 * s}) scale(${s})`} fill={color} stroke="#fffdf5" strokeWidth={1.2 / s}>
+      <SuitPip suit="C" />
+    </g>
+  )
+  return (
+    <g>
+      {/* 梅枝:從左下斜到右上,分兩叉 */}
+      <g fill="none" stroke="#5a3a24" strokeLinecap="round">
+        <path d="M6 104 Q30 84 46 62 Q60 42 92 20" strokeWidth="3.4" />
+        <path d="M46 62 Q36 46 18 38" strokeWidth="2.2" />
+        <path d="M66 40 Q74 52 90 56" strokeWidth="2" />
+      </g>
+      {/* 枝上的花 */}
+      <Blossom x={18} y={38} r={3.6} rot={10} />
+      <Blossom x={90} y={56} r={3.4} rot={30} />
+      <Blossom x={92} y={20} r={3.8} rot={-12} />
+      <Blossom x={34} y={50} r={2.6} rot={40} />
+      <Blossom x={60} y={46} r={2.8} />
+      <Blossom x={14} y={98} r={3} rot={20} />
+      {/* 三個梅花花色:上中、左下、右下 */}
+      {pip(50, 30, 1.55)}
+      {pip(27, 76, 1.45)}
+      {pip(73, 76, 1.45)}
+      {/* 漫天飄落的花瓣 */}
+      <g fill="#f7a8c4" stroke="#d9668f" strokeWidth="0.4">
+        <ellipse cx="10" cy="16" rx="2" ry="1.2" transform="rotate(-30 10 16)" />
+        <ellipse cx="74" cy="8" rx="1.8" ry="1.1" transform="rotate(25 74 8)" />
+        <ellipse cx="84" cy="96" rx="2" ry="1.2" transform="rotate(50 84 96)" />
+        <ellipse cx="50" cy="104" rx="1.8" ry="1.1" transform="rotate(-15 50 104)" />
+        <ellipse cx="40" cy="12" rx="1.6" ry="1" transform="rotate(60 40 12)" />
+        <ellipse cx="94" cy="78" rx="1.6" ry="1" transform="rotate(-40 94 78)" />
+        <ellipse cx="6" cy="64" rx="1.7" ry="1" transform="rotate(15 6 64)" />
       </g>
     </g>
   )

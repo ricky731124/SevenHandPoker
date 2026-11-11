@@ -12,7 +12,7 @@ import type { Card } from './cards'
 import { CATEGORY, evaluate } from './evaluate'
 import { bossPick, deathEyeTrigger, explodeTriggers, refreshTriggers, suitHoldOff, suitVictims, type BossRuntime, type PickMain } from './bossAI'
 import { shuffle } from './rng'
-import { FIRE_LOADOUT, FIRE_USES, SPECIAL_CARD_LIST, getSpecialCard, type SpecialCardId } from './specialCards'
+import { FIRE_LOADOUT, FIRE_USES, SPECIAL_CARD_LIST, getSpecialCard, suitMaxOf, type SpecialCardId } from './specialCards'
 import {
   applySpecial,
   canDeathEye,
@@ -158,7 +158,7 @@ export function fireChooseSpecial(
   for (const id of suitOk ? avail : []) {
     const suit = getSpecialCard(id)?.suit
     if (!suit) continue
-    const victims = suitVictims(state, me, suit, rng)
+    const victims = suitVictims(state, me, suit, rng, suitMaxOf(id))
     if (!victims) continue
     // 複製一份 runtime:bossPick 會就地記死神之眼停損
     const ok = suitPlayCheck(state, me, id, victims.map((c) => c.id), (after) => bossPick(after, me, { ...rt }, rng))

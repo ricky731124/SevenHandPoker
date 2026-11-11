@@ -57,6 +57,7 @@ const LABEL_BG: Partial<Record<SpecialCardId, string>> = {
   diamonds: '#2b6cb0',
   hearts: '#d0355a',
   spades: '#33384a',
+  manyClubs: '#3f7d3a',
 }
 
 export default function CardFx({ me, cardW }: { me: PlayerId; cardW: number }) {
@@ -171,6 +172,9 @@ export default function CardFx({ me, cardW }: { me: PlayerId; cardW: number }) {
           {/* 1~2 張同時播(使用者 2026-11-02) */}
           {run.items.map((it, i) => <SuitRun key={`${run.fx.n}-${i}`} it={it} cardW={cardW} dir={run.dir} />)}
           <SuitTheme key={`th-${run.fx.n}`} suit={def?.suit ?? 'C'} centers={run.items.map((it) => suitCenter(it, cardW, run.dir))} cardW={cardW} dir={run.dir} />
+          {run.fx.card === 'manyClubs' && (
+            <PlumRain key={`rain-${run.fx.n}`} centers={run.items.map((it) => suitCenter(it, cardW, run.dir))} cardW={cardW} />
+          )}
         </>
       )}
       {run?.fx.kind === 'swap' &&
@@ -300,6 +304,37 @@ function SuitTheme({ suit, centers, cardW, dir }: { suit: Suit; centers: Pt[]; c
           <DuckTheme key={k} cx={c.x} cy={c.y} cardW={cardW} k={k} />
         ),
       )}
+    </>
+  )
+}
+
+/** 漫天梅花(第 10 關):踏雪尋梅的雪之外,整片天空再灑一陣梅花瓣(橫跨所有被改的牌,斜斜飄落) */
+function PlumRain({ centers, cardW }: { centers: Pt[]; cardW: number }) {
+  if (!centers.length) return null
+  const h = cardW * 1.4
+  const xs = centers.map((c) => c.x)
+  const left = Math.min(...xs) - cardW * 2.2
+  const width = Math.max(...xs) - Math.min(...xs) + cardW * 4.4
+  const top = Math.min(...centers.map((c) => c.y)) - h * 1.9
+  return (
+    <>
+      {Array.from({ length: 26 }, (_, i) => {
+        const x0 = left + rnd(i, 11) * width
+        const drift = cardW * (0.4 + rnd(i, 12) * 0.9)
+        const s = 0.5 + rnd(i, 13) * 0.6
+        return (
+          <motion.span
+            key={`rain-${i}`}
+            className="card-fx__emoji"
+            style={{ left: x0, top, fontSize: cardW * 0.36 * s }}
+            initial={{ opacity: 0, x: 0, y: 0, rotate: 0 }}
+            animate={{ opacity: [0, 1, 1, 0], x: [0, drift * 0.15, drift * 0.8, drift], y: [0, h * 0.45, h * 2.4, h * 3], rotate: [0, 60, 320, 400] }}
+            transition={{ delay: rnd(i, 14) * 0.9, duration: 1.5, ease: 'linear', times: [0, 0.15, 0.8, 1] }}
+          >
+            🌸
+          </motion.span>
+        )
+      })}
     </>
   )
 }

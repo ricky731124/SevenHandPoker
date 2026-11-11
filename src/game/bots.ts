@@ -27,7 +27,7 @@ export const BOTS: BotPersona[] = [
   { id: 'bot_03', name: '海Chris爛',      avatarId: 'cat2',  loadout: ['diamonds', 'hearts', 'explode'], achievements: [{ id: 'games', tier: 1 }, { id: 'flush', tier: 2 }] },
   { id: 'bot_04', name: '無法顯示名稱',   avatarId: 'bear',  loadout: ['swap', 'spades', 'deathEye'], achievements: [{ id: 'wins', tier: 1 }] },
   { id: 'bot_05', name: '金色狂蜂',       avatarId: 'dog',   loadout: ['peek', 'spy', 'swap'],     achievements: [{ id: 'streak', tier: 2 }, { id: 'wins', tier: 2 }] },
-  { id: 'bot_06', name: '沒事call文哲',   avatarId: 'cat3',  loadout: ['clubs', 'diamonds'],       achievements: [{ id: 'games', tier: 2 }] },
+  { id: 'bot_06', name: '沒事call文哲',   avatarId: 'cat3',  loadout: ['manyClubs', 'diamonds'],   achievements: [{ id: 'games', tier: 2 }] },
   { id: 'bot_07', name: '常威打旺福',     avatarId: 'bird2', loadout: ['spades', 'swap', 'peek'],  achievements: [{ id: 'wins', tier: 1 }, { id: 'quads', tier: 1 }] },
   { id: 'bot_08', name: '你在大聲什麼啦', avatarId: 'cat',   loadout: ['hearts', 'spy', 'refresh'], achievements: [{ id: 'games', tier: 1 }] },
   { id: 'bot_09', name: '夢醒淑芬',       avatarId: 'cat3',  loadout: ['peek'],                    achievements: [{ id: 'streak', tier: 1 }, { id: 'games', tier: 1 }] },
@@ -40,7 +40,7 @@ export const BOTS: BotPersona[] = [
   { id: 'bot_16', name: '今天辛棄疾',     avatarId: 'bear',  loadout: ['explode', 'peek', 'spades'], achievements: [{ id: 'wins', tier: 2 }, { id: 'streak', tier: 1 }] },
   { id: 'bot_17', name: '宮森裘',         avatarId: 'cat2',  loadout: ['deathEye', 'spy', 'diamonds'], achievements: [{ id: 'games', tier: 2 }] },
   { id: 'bot_18', name: '不得不開除大衛', avatarId: 'dog',   loadout: ['swap', 'hearts', 'peek'],  achievements: [{ id: 'wins', tier: 1 }, { id: 'flush', tier: 1 }] },
-  { id: 'bot_19', name: 'Chill西郎',      avatarId: 'bird',  loadout: ['clubs', 'refresh'],        achievements: [{ id: 'games', tier: 1 }, { id: 'streak', tier: 2 }] },
+  { id: 'bot_19', name: 'Chill西郎',      avatarId: 'bird',  loadout: ['clubs', 'refresh', 'manyClubs'], achievements: [{ id: 'games', tier: 1 }, { id: 'streak', tier: 2 }] },
   { id: 'bot_20', name: '春燕要來了嗎',   avatarId: 'cat3',  loadout: ['peek', 'swap', 'spades'],  achievements: [{ id: 'fullHouse', tier: 1 }, { id: 'wins', tier: 2 }] },
 ]
 

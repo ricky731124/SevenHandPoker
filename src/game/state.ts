@@ -350,7 +350,7 @@ export function applySpecial(
   let next: GameState
   if (def?.suit) {
     const ids = opts.targetIds ?? (opts.targetId ? [opts.targetId] : [])
-    next = ids.length ? applySuit(state, player, ids, def.suit) : state
+    next = ids.length ? applySuit(state, player, ids, def.suit, def.suitMax ?? SUIT_MAX_TARGETS) : state
   } else if (card === 'swap') next = opts.targetId ? applySwap(state, player, opts.targetId, opts.rng) : state
   else if (card === 'refresh') next = applyRefresh(state, player, opts.rng, !!opts.self)
   else if (card === 'explode') next = applyExplode(state, player, opts.rng)
@@ -442,7 +442,7 @@ export function applySwap(
   }
 }
 
-/** 花色卡一次最多改幾張(使用者 2026-11-02:1~2 張,玩家自己選)。 */
+/** 花色卡一次最多改幾張(使用者 2026-11-02:1~2 張,玩家自己選)。漫天梅花例外 3 張(def.suitMax / suitMaxOf)。 */
 export const SUIT_MAX_TARGETS = 2
 
 /**
@@ -450,11 +450,18 @@ export const SUIT_MAX_TARGETS = 2
  * cards to `suit`, keeping rank and id. If that produces a card identical to
  * one already in play, the eventual showdown ties via the existing `'both'` path
  * (§2.3) — no new mechanism needed. The off-deck blank/joker can't be re-suited.
- * 任何一張不合法(不在手上 / 已是那個花色 / 重複 / 超過 2 張)→ 整個不生效。
+ * 任何一張不合法(不在手上 / 已是那個花色 / 重複 / 超過 max 張)→ 整個不生效。
+ * max:這張卡一次最多改幾張(踏雪尋梅等 2;漫天梅花 3)。
  */
-export function applySuit(state: GameState, player: PlayerId, cardIds: string | string[], suit: Suit): GameState {
+export function applySuit(
+  state: GameState,
+  player: PlayerId,
+  cardIds: string | string[],
+  suit: Suit,
+  max: number = SUIT_MAX_TARGETS,
+): GameState {
   const ids = typeof cardIds === 'string' ? [cardIds] : cardIds
-  if (ids.length === 0 || ids.length > SUIT_MAX_TARGETS || new Set(ids).size !== ids.length) return state
+  if (ids.length === 0 || ids.length > max || new Set(ids).size !== ids.length) return state
   const hand = state.hands[player]
   const nextHand = hand.slice()
   for (const cardId of ids) {

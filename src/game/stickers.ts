@@ -35,6 +35,7 @@ export const STICKERS: StickerDef[] = [
   { id: '8', name: '收手吧阿祖', free: false, price: 80 },
   { id: '9', name: '藝術就是爆炸', free: false, price: 80 },
   { id: '10', name: '躺贏啦', free: false, price: 80 },
+  { id: '11', name: '我不錄了', free: false, price: 80 },
 ]
 
 /** 付費貼圖的預設價格(鑽石);個別貼圖可用 StickerDef.price 覆寫。 */

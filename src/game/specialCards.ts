@@ -13,7 +13,18 @@
 
 import type { Suit } from './cards'
 
-export type SpecialCardId = 'swap' | 'peek' | 'spy' | 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'refresh' | 'explode' | 'deathEye'
+export type SpecialCardId =
+  | 'swap'
+  | 'peek'
+  | 'spy'
+  | 'clubs'
+  | 'diamonds'
+  | 'hearts'
+  | 'spades'
+  | 'refresh'
+  | 'explode'
+  | 'deathEye'
+  | 'manyClubs'
 
 /**
  * 這場能不能帶這張卡(戰前選卡畫面用)。共同卡池(雙方都有的卡才能帶)只套在「快速配對」配到的真人——
@@ -45,6 +56,8 @@ export interface SpecialCardDef {
   accent: string
   /** suit-bloom cards only: the suit the chosen card is re-suited to */
   suit?: Suit
+  /** 花色卡一次最多改幾張(沒寫 = SUIT_MAX_DEFAULT 2;漫天梅花 3)。用 suitMaxOf() 讀。 */
+  suitMax?: number
   /** 會動到對手的卡:用「被打的人」的角度寫的一句介紹。對手用了你還沒有的卡時跳出來,
    *  不然你不知道剛剛發生了什麼(朋友房不受共同卡池限制後常會遇到;主線 boss 也會先用你還沒拿到的招牌卡)。 */
   foeNote?: string
@@ -166,6 +179,18 @@ export const SPECIAL_CARDS: Record<SpecialCardId, SpecialCardDef> = {
     accent: '#b8860b',
     fireStyle: 'balance',
   },
+  manyClubs: {
+    id: 'manyClubs',
+    name: '漫天梅花',
+    short: '1~3 張牌變梅花',
+    desc: '選 1~3 張非梅花的手牌，將花色變為梅花（可能造成平手）。',
+    affectsFoe: false,
+    needsTarget: true,
+    accent: '#3f7d3a',
+    fireStyle: 'neutral', // 跟踏雪尋梅一樣中立(使用者 2026-11-11)
+    suit: 'C',
+    suitMax: 3,
+  },
 }
 
 export const SPECIAL_CARD_LIST: SpecialCardDef[] = Object.values(SPECIAL_CARDS)
@@ -203,6 +228,15 @@ export function firePoolSize(mine: number, foe?: number | null): number {
 /** 前 n 張卡(照解鎖順序;n 超過現有張數 = 全部)。 */
 export function firePool(n: number): SpecialCardId[] {
   return SPECIAL_CARD_LIST.slice(0, n).map((c) => c.id)
+}
+
+/** 花色卡預設一次最多改幾張(使用者 2026-11-02:1~2 張)。 */
+export const SUIT_MAX_DEFAULT = 2
+
+/** 這張花色卡一次最多改幾張(非花色卡回 0)。 */
+export function suitMaxOf(id: string | undefined | null): number {
+  const def = id ? getSpecialCard(id) : undefined
+  return def?.suit ? def.suitMax ?? SUIT_MAX_DEFAULT : 0
 }
 
 export function getSpecialCard(id: string): SpecialCardDef | undefined {
