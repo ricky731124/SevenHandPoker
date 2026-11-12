@@ -10,7 +10,7 @@
 
 import type { Card } from './cards'
 import { CATEGORY, evaluate } from './evaluate'
-import { bossPick, deathEyeTrigger, explodeTriggers, refreshTriggers, suitHoldOff, suitVictims, type BossRuntime, type PickMain } from './bossAI'
+import { bossPick, deathEyeTrigger, explodeTriggers, refreshTriggers, suitHoldOff, suitStraightFlushVictims, suitVictims, type BossRuntime, type PickMain } from './bossAI'
 import { shuffle } from './rng'
 import { FIRE_LOADOUT, FIRE_USES, SPECIAL_CARD_LIST, getSpecialCard, suitMaxOf, type SpecialCardId } from './specialCards'
 import {
@@ -155,10 +155,11 @@ export function fireChooseSpecial(
 
   // 1) 花色卡:只在「換完這手就出那個花色的同花」時用;手上已經有強牌就多半先不用(suitHoldOff)
   const suitOk = !avail.some((id) => getSpecialCard(id)?.suit) || !suitHoldOff(state, me, rng)
-  for (const id of suitOk ? avail : []) {
+  for (const id of avail) {
     const suit = getSpecialCard(id)?.suit
     if (!suit) continue
-    const victims = suitVictims(state, me, suit, rng, suitMaxOf(id))
+    // 手上有強牌先不用(suitOk = false)時,只有湊得出同花順才用(2026-11-12)
+    const victims = suitOk ? suitVictims(state, me, suit, rng, suitMaxOf(id)) : suitStraightFlushVictims(state, me, suit, suitMaxOf(id))
     if (!victims) continue
     // 複製一份 runtime:bossPick 會就地記死神之眼停損
     const ok = suitPlayCheck(state, me, id, victims.map((c) => c.id), (after) => bossPick(after, me, { ...rt }, rng))

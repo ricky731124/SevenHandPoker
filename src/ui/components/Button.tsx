@@ -11,6 +11,8 @@ interface Props {
   size?: 'lg' | 'md' | 'sm'
   full?: boolean
   icon?: ReactNode
+  /** 右上角紅點(有東西可領還沒領,例:每日簽到)。疊在按鈕框線上。 */
+  dot?: boolean
 }
 
 /** Wooden Q-style button (warm plank, dark border, chunky 3D base). */
@@ -22,6 +24,7 @@ export default function Button({
   size = 'md',
   full,
   icon,
+  dot,
 }: Props) {
   return (
     <motion.button
@@ -43,6 +46,7 @@ export default function Button({
     >
       {icon !== undefined && <span className="woodbtn__icon">{icon}</span>}
       <span className="woodbtn__label">{children}</span>
+      {dot && <span className="woodbtn__dot" aria-label="有獎勵可領" />}
     </motion.button>
   )
 }

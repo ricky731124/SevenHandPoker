@@ -1055,6 +1055,21 @@ export function bossChooseSpecial(
   type Cand = { card: SpecialCardId; targetId?: string; targetIds?: string[]; score: number }
   const cands: Cand[] = []
 
+  // 招牌是花色卡的 boss(3 北極熊 / 4 紅貴賓 / 5 波斯貓 / 6 貓頭鷹 / 10 梅花鹿;使用者 2026-11-12:要推廣,
+  // x-2 要 9 成以上、x-3 要 7 成以上用自己的卡):
+  //  - 每一手先看自己的花色卡「合理能用」嗎(先找同花順;再湊同花,可拆 10 以下的對子,不拆 J 以上的對子 / 三條)→ 能就用。
+  //  - x-2(只帶這張):不能用就這手不用(不硬用)。
+  //  - x-3(卡池):前 3 手只等自己的卡;第 4 手起還沒用 → 改用其他卡(往下走一般選卡,不含自己這張)。
+  // 放在最前面:不能被卡池裡的讓我看看 / 死神之眼 / 爆破 / 強迫更新搶先用掉。
+  const ownSuit = opts.signature && loadout.includes(opts.signature) ? getSpecialCard(opts.signature)?.suit : undefined
+  if (opts.signature && ownSuit) {
+    const v = suitVictims(state, me, ownSuit, rng, suitMaxOf(opts.signature), true)
+    if (v) return { card: opts.signature, targetIds: v.map((c) => c.id) }
+    if (loadout.length === 1 || state.placementsDone[me] < OWN_SUIT_WAIT) return null
+    const sig = opts.signature
+    loadout = loadout.filter((c) => c !== sig)
+  }
+
   // 死神之眼(使用者 2026-10-16 定案):看光對手已放在決鬥區、還沒對決的牌堆。每一手判斷:
   //  - 對手 ≥2 堆蓋牌 → 一定用;只有 1 堆且是 5 張 → 40%;boss 自己第 4 手起有 1 堆就用;0 堆 → 等下一手。
   //  - 依粿 9-2(只帶這張):照上面。
@@ -1108,13 +1123,12 @@ export function bossChooseSpecial(
   // suit-bloom → ONLY to complete/keep a real 5-card flush(規則在 suitVictims)。
   // 2026-11-02 花色卡一次改 1~2 張 → 握 3 張同花色就能換 2 張湊成同花(suitVictims)。
   let bloom: { card: SpecialCardId; targetIds: string[]; suited: number } | null = null
-  // 招牌就是花色卡的 boss(四花色關)照舊,其他人手上有強牌就多半先不用
-  const ownSuit = !!(opts.signature && getSpecialCard(opts.signature)?.suit)
-  const holdOff = !ownSuit && loadout.some((id) => getSpecialCard(id)?.suit) && suitHoldOff(state, me, rng)
-  for (const id of holdOff ? [] : loadout) {
+  // 手上有強牌就多半先不用(招牌花色卡在上面已經處理過);湊得出同花順的不受這條限制
+  const holdOff = loadout.some((id) => getSpecialCard(id)?.suit) && suitHoldOff(state, me, rng)
+  for (const id of loadout) {
     const def = getSpecialCard(id)
     if (!def?.suit) continue
-    const victims = suitVictims(state, me, def.suit, rng, suitMaxOf(id))
+    const victims = holdOff ? suitStraightFlushVictims(state, me, def.suit, suitMaxOf(id)) : suitVictims(state, me, def.suit, rng, suitMaxOf(id))
     if (!victims) continue
     const suited = hand.filter((c) => isTargetable(c) && c.suit === def.suit).length
     if (!bloom || suited > bloom.suited) bloom = { card: id, targetIds: victims.map((c) => c.id), suited }
@@ -1153,12 +1167,17 @@ export function bossChooseSpecial(
  * 落單的散牌不夠時(2026-11-03 起,有給 rng 才會):對子照強弱擲機率決定能不能拆(PAIR_BREAK:強一對多半不拆、
  * 中一對一半、弱一對多半可拆);要拆就同一對兩張一起換(QQ 都變方塊、KK 留著),不會兩對各拆一張。
  * 回傳 null = 這張卡現在沒用。
+ * 2026-11-12:最先找同花順(suitStraightFlushVictims);loose = 招牌花色卡的 boss 本尊(拆 10 以下對子不用擲骰)。
  */
-export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], rng?: Rng, max = 2): Card[] | null {
+export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], rng?: Rng, max = 2, loose = false): Card[] | null {
+  // 先找同花順(使用者 2026-11-12:能換成同花順就優先,不管拆不拆對子)
+  const sf = suitStraightFlushVictims(state, me, suit, max)
+  if (sf) return sf
   const hand = state.hands[me]
   const rankCount = new Map<number, number>()
   for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
   const suited = hand.filter((c) => isTargetable(c) && c.suit === suit)
+  const suitedRanks = new Set(suited.map((c) => c.rank))
   const others = suitTargets(state, me, suit) // targetable, not this suit
   const unpaired = (cards: Card[]) => cards.filter((c) => (rankCount.get(c.rank) ?? 0) === 1)
   const lowest = (cards: Card[], n: number): Card[] | null =>
@@ -1166,7 +1185,18 @@ export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], 
   // 落單的優先;不夠再用「擲到可以拆」的對子(由小到大、同一對排在一起)
   const pool = (n: number): Card[] | null => {
     const free = lowest(unpaired(others), unpaired(others).length) ?? []
-    if (free.length >= n || !rng || !PICK_TUNE.fix1103) return lowest(free, n)
+    if (free.length >= n) return lowest(free, n)
+    if (loose) {
+      // 招牌花色卡(LOOSE_PAIR_MAX):不夠就拆 10 以下的對子、每對只拿一張(同花要 5 張不同點數);
+      // J 以上的對子、三條不拆;同花色已經有那個點數的也不拿(會變成兩張一樣的牌)
+      const seen = new Set<number>()
+      const extra = others
+        .filter((c) => rankCount.get(c.rank) === 2 && c.rank <= LOOSE_PAIR_MAX && !suitedRanks.has(c.rank))
+        .sort((a, b) => a.rank - b.rank)
+        .filter((c) => (seen.has(c.rank) ? false : (seen.add(c.rank), true)))
+      return free.length + extra.length >= n ? [...free, ...extra].slice(0, n) : null
+    }
+    if (!rng || !PICK_TUNE.fix1103) return lowest(free, n)
     const pairRanks = [...new Set(others.filter((c) => rankCount.get(c.rank) === 2).map((c) => c.rank))].sort((a, b) => a - b)
     const ok = pairRanks.filter((r) => rng() < pairBreakChance(r))
     const need = n - free.length
@@ -1175,6 +1205,14 @@ export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], 
       if (cards.length >= need) return [...free, ...cards.slice(0, need)]
     }
     return null
+  }
+  // 招牌花色卡本尊(loose):鬼牌也算同花的一張(3 張 + 鬼 → 改 1 張就成同花;2 張 + 鬼 → 改 2 張)
+  if (loose && suited.length < 5) {
+    const need = 5 - suited.length - hand.filter(isJoker).length
+    if (need >= 1 && need <= max) {
+      const v = pool(need)
+      if (v) return v
+    }
   }
   // 漫天梅花(max 3,第 10 關):握 2 張就能換 3 張湊同花
   if (suited.length === 2 && max >= 3) return pool(3)
@@ -1187,6 +1225,43 @@ export function suitVictims(state: GameState, me: PlayerId, suit: Card['suit'], 
     return pool(1)
   }
   if (suited.length >= 5 && suited.some((s) => (rankCount.get(s.rank) ?? 0) >= 2)) return lowest(unpaired(others), 1)
+  return null
+}
+
+/** 招牌花色卡的 boss:x-3 前幾手只等自己的卡(第 OWN_SUIT_WAIT+1 手起才改用其他卡)。 */
+export const OWN_SUIT_WAIT = 3
+/** 招牌花色卡湊同花時最多拆到幾點的對子(J 以上不拆)。 */
+export const LOOSE_PAIR_MAX = 10
+
+/**
+ * 花色卡能不能「改 ≤max 張就湊出同花順」(鬼牌可以補洞)。回傳要改的牌(最高的同花順優先,同高度改最少張),
+ * 不行 / 已經有同花順(改 0 張)→ null。同花順比什麼都大 → 拆對子也划算。
+ */
+export function suitStraightFlushVictims(state: GameState, me: PlayerId, suit: Card['suit'], max: number): Card[] | null {
+  const hand = state.hands[me]
+  const jokers = hand.filter(isJoker).length
+  const suitedRanks = new Set<number>(hand.filter((c) => isTargetable(c) && c.suit === suit).map((c) => c.rank))
+  const others = suitTargets(state, me, suit)
+  const rankCount = new Map<number, number>()
+  for (const c of hand) if (isTargetable(c)) rankCount.set(c.rank, (rankCount.get(c.rank) ?? 0) + 1)
+  // 高到低:10-J-Q-K-A … 2-3-4-5-6、A-2-3-4-5
+  const windows: number[][] = []
+  for (let lo = 10; lo >= 2; lo--) windows.push([lo, lo + 1, lo + 2, lo + 3, lo + 4])
+  windows.push([14, 2, 3, 4, 5])
+  for (const w of windows) {
+    const change: Card[] = []
+    let holes = 0
+    for (const r of w) {
+      if (suitedRanks.has(r)) continue
+      // 那個點數挑一張來改:落單的優先(少拆對子)
+      const c = others.filter((x) => x.rank === r).sort((a, b) => (rankCount.get(a.rank) ?? 0) - (rankCount.get(b.rank) ?? 0))[0]
+      if (c) change.push(c)
+      else holes++
+    }
+    if (holes > jokers || change.length > max) continue
+    // 最高的那個窗口就用(同一個窗口的改法張數固定);已經有同花順(改 0 張)→ 不用改
+    return change.length ? change : null
+  }
   return null
 }
 

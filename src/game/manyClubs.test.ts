@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest'
 import { isStarterSpecial, type Card, type Rank, type Suit } from './cards'
 import { applyDraw, applyPick, applyPlace, applySpecial, createGame, resolveShowdown, type GameState, type PlayerId } from './state'
 import { buildFrames, suitMove, type Move } from './replay'
-import { bossChooseSpecial, bossPick, bossPlace, suitVictims } from './bossAI'
+import { bossChooseSpecial, bossPick, bossPlace, suitStraightFlushVictims, suitVictims } from './bossAI'
 import { aiChooseSpecial } from './ai'
 import { bossCardPool, getStage, rollBossRuntime } from './campaign'
-import { firePool, getSpecialCard, SPECIAL_CARD_LIST, SPECIAL_CARDS, suitMaxOf } from './specialCards'
+import { firePool, getSpecialCard, SPECIAL_CARD_LIST, SPECIAL_CARDS, suitMaxOf, type SpecialCardId } from './specialCards'
 import { CATEGORY, evaluate } from './evaluate'
 
 const card = (suit: Suit, rank: Rank): Card => ({ id: `${suit}${rank}`, suit, rank })
@@ -122,6 +122,57 @@ describe('漫天梅花:電腦怎麼用', () => {
 
   it('對戰電腦(基本 AI)帶漫天梅花也會用', () => {
     expect(aiChooseSpecial(withHand('p2', two), 'p2', ['manyClubs'])).toEqual({ card: 'manyClubs', targetIds: ['D3', 'H5', 'S7'] })
+  })
+})
+
+describe('花色卡 boss 本尊(2026-11-12:同花順優先、合理就用、x-3 先等自己的卡)', () => {
+  it('同花順優先:換完能湊同花順就挑那組(就算要拆對子)', () => {
+    // ♣9 ♣10 + ♥J ♦Q ♠K → 改 3 張 = ♣9~K 同花順;♥J 有一對也照拆
+    const g = withHand('p2', [card('C', 9), card('C', 10), card('H', 11), card('S', 11), card('D', 12), card('S', 13), card('D', 3)])
+    expect(suitVictims(g, 'p2', 'C', undefined, 3)?.map((c) => c.rank).sort((a, b) => a - b)).toEqual([11, 12, 13])
+    // 鬼牌補洞:♣9 ♣10 + ♦Q ♠K + 鬼 → 改 2 張就是同花順(踏雪尋梅也行)
+    const g2 = withHand('p2', [card('C', 9), card('C', 10), card('D', 12), card('S', 13), card('D', 3), JOKER])
+    expect(suitStraightFlushVictims(g2, 'p2', 'C', 2)?.map((c) => c.id).sort()).toEqual(['D12', 'S13'])
+    // 已經是同花順 → 不用改
+    const done = withHand('p2', [card('C', 5), card('C', 6), card('C', 7), card('C', 8), card('C', 9), card('D', 2)])
+    expect(suitStraightFlushVictims(done, 'p2', 'C', 3)).toBeNull()
+  })
+
+  it('同花順就算手上有強牌(本來會先不用)也照用', () => {
+    // 有 KK + 換 2 張就成 ♦10~A 同花順
+    const g = withHand('p2', [card('D', 10), card('D', 11), card('D', 12), card('S', 13), card('H', 13), card('C', 14), card('S', 3)])
+    const d = bossChooseSpecial(g, 'p2', ['diamonds'], undefined, { rng: () => 0.99 })
+    expect(d?.card).toBe('diamonds')
+  })
+
+  it('本尊寬鬆:不夠落單散牌就拆 10 以下的對子(每對拿一張),J 以上對子 / 三條不拆', () => {
+    // ♣ 3 張 + 77 + QQ:落單 0 → 拆 7 那對拿一張;只差 1 張不夠 → 再拆就到 Q,不拆 → 換不成
+    const g = withHand('p2', [card('C', 14), card('C', 9), card('C', 4), card('H', 7), card('S', 7), card('H', 12), card('S', 12), card('D', 2)])
+    expect(suitVictims(g, 'p2', 'C', undefined, 2, true)?.map((c) => c.rank).sort((a, b) => a - b)).toEqual([2, 7])
+    const strong = withHand('p2', [card('C', 14), card('C', 9), card('C', 4), card('H', 12), card('S', 12), card('H', 13), card('S', 13)])
+    expect(suitVictims(strong, 'p2', 'C', undefined, 2, true)).toBeNull()
+  })
+
+  it('本尊寬鬆:鬼牌算同花的一張(3 張 + 鬼 → 只改 1 張)', () => {
+    const g = withHand('p2', [card('C', 14), card('C', 9), card('C', 4), card('H', 6), card('S', 12), card('D', 13), JOKER])
+    expect(suitVictims(g, 'p2', 'C', undefined, 2, true)?.map((c) => c.id)).toEqual(['H6'])
+  })
+
+  it('x-2 只帶招牌卡:不合理就不用;x-3 前 3 手只等招牌卡,第 4 手起改用其他卡', () => {
+    const noFlush = withHand('p2', [card('C', 14), card('D', 9), card('H', 4), card('S', 7), card('D', 12), card('H', 13)])
+    expect(bossChooseSpecial(noFlush, 'p2', ['clubs'], undefined, { signature: 'clubs', rng: () => 0.5 })).toBeNull()
+    const pool: SpecialCardId[] = ['swap', 'peek', 'spy', 'clubs']
+    for (const k of [0, 1, 2]) {
+      const g = { ...noFlush, placementsDone: { p1: k, p2: k } }
+      expect(bossChooseSpecial(g, 'p2', pool, undefined, { signature: 'clubs', rng: () => 0.5 })).toBeNull()
+    }
+    const late = { ...noFlush, placementsDone: { p1: 3, p2: 3 } }
+    const d = bossChooseSpecial(late, 'p2', pool, undefined, { signature: 'clubs', rng: () => 0.5 })
+    expect(d).not.toBeNull()
+    expect(d!.card).not.toBe('clubs')
+    // 第 4 手起,自己的卡能用還是先用自己的
+    const ok = { ...withHand('p2', [card('C', 14), card('C', 9), card('C', 4), card('H', 6), card('S', 3), card('D', 13)]), placementsDone: { p1: 3, p2: 3 } }
+    expect(bossChooseSpecial(ok, 'p2', pool, undefined, { signature: 'clubs', rng: () => 0.5 })?.card).toBe('clubs')
   })
 })
 

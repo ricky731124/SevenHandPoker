@@ -43,6 +43,35 @@
   cursor: not-allowed;
 }
 
+/* 右上角紅點(2026-11-12:每日簽到還沒領)。圓心壓在框線上,白邊讓它跟木紋分開;輕輕呼吸提醒。 */
+.woodbtn__dot {
+  position: absolute;
+  top: -5px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e5322d;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  animation: woodbtn-dot 1.6s ease-in-out infinite;
+}
+@keyframes woodbtn-dot {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .woodbtn__dot {
+    animation: none;
+  }
+}
+
 /* Default: icon sits in-flow to the LEFT of the label with a small gap
    (used by narrow buttons like 商城 so it never overlaps the text). */
 .woodbtn__icon {

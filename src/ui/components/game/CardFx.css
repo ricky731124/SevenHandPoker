@@ -25,6 +25,12 @@
   line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
+/* 漫天梅花全螢幕花瓣:不加濾鏡(十幾片同時動,每片 drop-shadow 每格重畫會卡),只動 transform / opacity */
+.card-fx__petal {
+  position: absolute;
+  line-height: 1;
+  will-change: transform, opacity;
+}
 
 /* 卡名標籤:跟強迫更新 / 爆破同一種純色膠囊,底色 = 這張卡的主色(CardFx.tsx LABEL_BG,inline 設定)。
    2026-11-02 使用者:原本的木紋太像按鈕,不像說明。 */

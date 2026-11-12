@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useNetStore } from '../../state/netStore'
 import { usePlatformStore } from '../../state/platformStore'
-import { isUsernameTaken } from '../../platform/profile'
+import { isUsernameTaken, todayStr } from '../../platform/profile'
 import { validateUsername, validatePassword, validateDisplayName, clampDisplayName, DISPLAY_NAME_HINT } from '../../platform/auth'
 import { useToastStore } from '../../state/toastStore'
 import Button, { IconShop, IconCalendar, IconMegaphone, IconFilm } from './Button'
@@ -99,6 +99,10 @@ export default function AccountButton() {
   // the profile subscription (using username here caused the gate to flash for
   // already-logged-in users on a deep-link).
   const registered = !!uid && !isAnonymous
+  // 每日簽到還沒領 → 每日任務按鈕右上角紅點(2026-11-12 使用者:常忘了點)。其他三項打完自動發,不用提醒。
+  const daily = usePlatformStore((s) => s.profile?.daily)
+  const hasProfile = usePlatformStore((s) => !!s.profile)
+  const signinPending = registered && hasProfile && !(daily?.date === todayStr() && daily?.signin)
 
   const [dialog, setDialog] = useState<Dialog>(null)
   const [shopOpen, setShopOpen] = useState(false)
@@ -296,6 +300,7 @@ export default function AccountButton() {
           size="sm"
           variant="secondary"
           icon={<IconCalendar />}
+          dot={signinPending}
           onClick={() => {
             void claimDailySignin()
             setDailyOpen(true)

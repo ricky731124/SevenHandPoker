@@ -171,9 +171,16 @@ export default function CardFx({ me, cardW }: { me: PlayerId; cardW: number }) {
         <>
           {/* 1~2 張同時播(使用者 2026-11-02) */}
           {run.items.map((it, i) => <SuitRun key={`${run.fx.n}-${i}`} it={it} cardW={cardW} dir={run.dir} />)}
-          <SuitTheme key={`th-${run.fx.n}`} suit={def?.suit ?? 'C'} centers={run.items.map((it) => suitCenter(it, cardW, run.dir))} cardW={cardW} dir={run.dir} />
+          <SuitTheme
+            key={`th-${run.fx.n}`}
+            suit={def?.suit ?? 'C'}
+            centers={run.items.map((it) => suitCenter(it, cardW, run.dir))}
+            cardW={cardW}
+            dir={run.dir}
+            lite={run.fx.card === 'manyClubs'}
+          />
           {run.fx.card === 'manyClubs' && (
-            <PlumRain key={`rain-${run.fx.n}`} centers={run.items.map((it) => suitCenter(it, cardW, run.dir))} cardW={cardW} />
+            <PlumRain key={`rain-${run.fx.n}`} w={root()?.offsetWidth ?? 0} h={root()?.offsetHeight ?? 0} cardW={cardW} />
           )}
         </>
       )}
@@ -286,7 +293,7 @@ function Flip({ before, after, at, dur, delay }: { before: React.ReactNode; afte
 }
 
 /** 各花色的特效。centers = 每張被改的牌浮起後的牌心(1~2 張,同時播) */
-function SuitTheme({ suit, centers, cardW, dir }: { suit: Suit; centers: Pt[]; cardW: number; dir: number }) {
+function SuitTheme({ suit, centers, cardW, dir, lite = false }: { suit: Suit; centers: Pt[]; cardW: number; dir: number; lite?: boolean }) {
   useEffect(() => {
     const t = setTimeout(() => sfx.place(), SUIT_DUR * 0.6 * 1000)
     return () => clearTimeout(t)
@@ -297,7 +304,7 @@ function SuitTheme({ suit, centers, cardW, dir }: { suit: Suit; centers: Pt[]; c
     <>
       {centers.map((c, k) =>
         suit === 'C' ? (
-          <SnowTheme key={k} cx={c.x} cy={c.y} cardW={cardW} seed={k * 37} />
+          <SnowTheme key={k} cx={c.x} cy={c.y} cardW={cardW} seed={k * 37} lite={lite} />
         ) : suit === 'D' ? (
           <BeamTheme key={k} cx={c.x} cy={c.y} cardW={cardW} dir={dir} seed={k * 37} />
         ) : (
@@ -308,28 +315,30 @@ function SuitTheme({ suit, centers, cardW, dir }: { suit: Suit; centers: Pt[]; c
   )
 }
 
-/** 漫天梅花(第 10 關):踏雪尋梅的雪之外,整片天空再灑一陣梅花瓣(橫跨所有被改的牌,斜斜飄落) */
-function PlumRain({ centers, cardW }: { centers: Pt[]; cardW: number }) {
-  if (!centers.length) return null
-  const h = cardW * 1.4
-  const xs = centers.map((c) => c.x)
-  const left = Math.min(...xs) - cardW * 2.2
-  const width = Math.max(...xs) - Math.min(...xs) + cardW * 4.4
-  const top = Math.min(...centers.map((c) => c.y)) - h * 1.9
+/**
+ * 漫天梅花(第 10 關):整個牌桌從上到下飄一陣梅花瓣,總長跟花色卡演出一樣(SUIT_DUR)。
+ * 2026-11-12 使用者:原本 26 片擠在牌附近、播放時頓近 1 秒 → 改全螢幕、14 片。
+ * 效能:每片同一個字級(大小用 scale)、不加 drop-shadow(每片濾鏡每格重畫是卡頓主因),只動 transform / opacity。
+ */
+const RAIN_N = 14
+function PlumRain({ w, h, cardW }: { w: number; h: number; cardW: number }) {
+  if (!w || !h) return null
+  const fall = SUIT_DUR * 0.62 // 每片飄多久;錯開出發,最後一片剛好在演出結束前落完
   return (
     <>
-      {Array.from({ length: 26 }, (_, i) => {
-        const x0 = left + rnd(i, 11) * width
-        const drift = cardW * (0.4 + rnd(i, 12) * 0.9)
-        const s = 0.5 + rnd(i, 13) * 0.6
+      {Array.from({ length: RAIN_N }, (_, i) => {
+        // 均分橫向再抖一點,不會擠在一起
+        const x0 = ((i + 0.15 + rnd(i, 11) * 0.7) / RAIN_N) * w
+        const drift = cardW * (0.5 + rnd(i, 12) * 1.1)
+        const s = 0.7 + rnd(i, 13) * 0.6
         return (
           <motion.span
             key={`rain-${i}`}
-            className="card-fx__emoji"
-            style={{ left: x0, top, fontSize: cardW * 0.36 * s }}
-            initial={{ opacity: 0, x: 0, y: 0, rotate: 0 }}
-            animate={{ opacity: [0, 1, 1, 0], x: [0, drift * 0.15, drift * 0.8, drift], y: [0, h * 0.45, h * 2.4, h * 3], rotate: [0, 60, 320, 400] }}
-            transition={{ delay: rnd(i, 14) * 0.9, duration: 1.5, ease: 'linear', times: [0, 0.15, 0.8, 1] }}
+            className="card-fx__petal"
+            style={{ left: x0, top: -cardW * 0.6, fontSize: cardW * 0.34 }}
+            initial={{ opacity: 0, x: 0, y: 0, rotate: 0, scale: s }}
+            animate={{ opacity: [0, 1, 1, 0], x: [0, drift * 0.2, drift * 0.8, drift], y: [0, h * 0.2, h * 0.85, h + cardW], rotate: [0, 70, 300, 380], scale: s }}
+            transition={{ delay: rnd(i, 14) * (SUIT_DUR - fall), duration: fall, ease: 'linear', times: [0, 0.12, 0.82, 1] }}
           >
             🌸
           </motion.span>
@@ -340,11 +349,13 @@ function PlumRain({ centers, cardW }: { centers: Pt[]; cardW: number }) {
 }
 
 /** 踏雪尋梅:雪花從上面飄下來 + 梅花瓣繞著牌轉 */
-function SnowTheme({ cx, cy, cardW, seed }: { cx: number; cy: number; cardW: number; seed: number }) {
+function SnowTheme({ cx, cy, cardW, seed, lite = false }: { cx: number; cy: number; cardW: number; seed: number; lite?: boolean }) {
   const h = cardW * 1.4
+  // lite = 漫天梅花(最多 3 張 + 全螢幕花瓣):每張的雪 / 繞圈花瓣減量,總數不超過踏雪尋梅 2 張
+  const orbit = lite ? 4 : 6
   return (
     <>
-      {Array.from({ length: 14 }, (_, i) => {
+      {Array.from({ length: lite ? 6 : 14 }, (_, i) => {
         const x0 = cx + (rnd(i + seed, 1) - 0.5) * cardW * 2.6
         const drift = (rnd(i + seed, 2) - 0.5) * cardW * 0.8
         const s = 0.55 + rnd(i + seed, 3) * 0.6
@@ -361,8 +372,8 @@ function SnowTheme({ cx, cy, cardW, seed }: { cx: number; cy: number; cardW: num
           </motion.span>
         )
       })}
-      {Array.from({ length: 6 }, (_, i) => {
-        const a0 = (i / 6) * Math.PI * 2
+      {Array.from({ length: orbit }, (_, i) => {
+        const a0 = (i / orbit) * Math.PI * 2
         const R = cardW * 0.95
         const pts = [0, 1, 2, 3].map((k) => a0 + k * 0.9)
         return (

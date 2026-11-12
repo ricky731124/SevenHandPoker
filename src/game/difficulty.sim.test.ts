@@ -80,7 +80,10 @@ const pct = (x: number) => `${Math.round(x * 100)}`
 describe.skipIf(!process.env.SIM)('難度模擬(SIM=1 才跑)', () => {
   it(`每關三小關 × ${N} 場`, () => {
     const lines: string[] = [`| 關 | x-1 單局 | x-2 單局 | x-3 單局 | 玩家過關率 x-1(BO3)/x-2(BO3)/x-3(BO5) | boss 用卡(x-2 / x-3) |`, '|---|---|---|---|---|---|']
+    // SIM_STAGES=3,4,5,6,10 → 只跑這幾關(省時間)
+    const only = process.env.SIM_STAGES ? new Set(process.env.SIM_STAGES.split(',').map(Number)) : null
     CAMPAIGN.forEach((stage, si) => {
+      if (only && !only.has(stage.index)) return
       const ps: number[] = []
       const cardNotes: string[] = []
       for (let k = 0; k < 3; k++) {
